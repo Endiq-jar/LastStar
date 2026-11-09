@@ -202,14 +202,17 @@ jobs:
           set -e
           # Job logs live on storage we may not be able to read from outside,
           # so echo the interesting lines as annotations directly.
-          grep -nE "ERROR|FAILURE|What went wrong|Caused by|error:|not found|Exception|BUILD FAILED" /tmp/export.log \
-            | head -20 | while IFS= read -r line; do echo "::error title=Android export::$line"; done
-          tail -30 /tmp/export.log || true
+          # Print the full "configuration errors" block (Godot lists each
+          # problem on its own line right after the header).
+          grep -nA12 "due to configuration errors" /tmp/export.log || true
+          grep -nE "ERROR|FAILURE|What went wrong|Caused by|error:|Exception|BUILD FAILED" /tmp/export.log \
+            | head -20 | while IFS= read -r line; do echo "::warning title=Android export::$line"; done
+          tail -20 /tmp/export.log || true
           if [ -f "$OUT" ] && [ "$CODE" -eq 0 ]; then
             echo "gradle-export ok"
             exit 0
           fi
-          echo "::warning::Gradle-based Android export failed (exit $CODE)."
+          echo "::warning::Gradle-based Android export failed (exit $CODE) - trying the fallback."
           exit 1
 
       - name: Export APK (prebuilt template fallback)
@@ -228,8 +231,9 @@ jobs:
           /opt/godot/godot --headless --verbose --export-${MODE} "Android" "$OUT" > /tmp/export2.log 2>&1
           CODE=$?
           set -e
+          grep -nA12 "due to configuration errors" /tmp/export2.log || true
           grep -nE "ERROR|FAILURE|error:" /tmp/export2.log | head -20 | while IFS= read -r line; do echo "::error title=Android fallback::$line"; done
-          tail -30 /tmp/export2.log || true
+          tail -20 /tmp/export2.log || true
           test -f "$OUT" || { echo "::error::Fallback export produced no APK (exit $CODE)"; exit 1; }
           echo "::notice::Fallback (prebuilt template) export succeeded."
 
