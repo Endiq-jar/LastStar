@@ -77,17 +77,29 @@ jobs:
           # Any runtime error is a failure: null access, invalid call, missing
           # function... A game that crashes before it builds the player still
           # draws its HUD, which looks exactly like "black screen".
-          # Note: match the "ERROR:" prefix, not Godot's benign
-          # `Condition "..." is true.` debug lines.
-          ERR_PAT='^(ERROR|SCRIPT ERROR|USER ERROR):|Parse Error|Invalid call\.|Invalid access to property|Nonexistent function|Attempt to call function|Invalid get index|Cannot convert|Index p_|Out of bounds'
-          if grep -qE "$ERR_PAT" /tmp/boot.log; then
-            # Include the "at: ..." line Godot prints after each error, which
-            # names the engine/GDScript location that actually failed.
-            grep -nE -A2 "$ERR_PAT" /tmp/boot.log | head -30 | while IFS= read -r line; do
-              case "$line" in
-                --) ;;
-                *) echo "::error title=GDScript::$line" ;;
-              esac
+          #
+          # Godot prints each error as a message line followed by an
+          # "   at: site (file:line)" context line. We pair them up so the
+          # headless-only "dummy" renderer noise (no real meshes exist without
+          # a GPU) can be dropped by its site, while every real error - and its
+          # location - is reported. The render probe below covers real drawing.
+          awk '
+            /^(ERROR|SCRIPT ERROR|USER ERROR):|Parse Error:/ {
+              msg = $0; next
+            }
+            /^[[:space:]]+at: / {
+              if (msg != "") {
+                if ($0 !~ /dummy/) print FNR-1 ": " msg "\n" FNR ": " $0
+                msg = ""
+              }
+              next
+            }
+            { if (msg != "") { if (msg !~ /^ERROR: Parameter .m. is null\.$/) print FNR ": " msg; msg = "" } }
+          ' /tmp/boot.log > /tmp/errs.log
+
+          if [ -s /tmp/errs.log ]; then
+            head -30 /tmp/errs.log | while IFS= read -r line; do
+              echo "::error title=GDScript::$line"
             done
             echo "::error::Runtime errors detected while booting the world"
             exit 1
