@@ -233,8 +233,8 @@ jobs:
           # Print the full "configuration errors" block (Godot lists each
           # problem on its own line right after the header).
           # Annotate every reason line: Godot prints one per problem.
-          grep -A12 "due to configuration errors" /tmp/export.log | head -14 | while IFS= read -r line; do
-            echo "::error title=Godot config::${line//$'\n'/}"
+          awk '/due to configuration errors/{f=1;next} f&&/^[[:space:]]*$/{f=0} f' /tmp/export.log | head -12 | while IFS= read -r line; do
+            echo "::error title=Godot config::${line}"
           done
           grep -nE "ERROR|FAILURE|What went wrong|Caused by|error:|Exception|BUILD FAILED" /tmp/export.log \
             | head -20 | while IFS= read -r line; do echo "::warning title=Android export::$line"; done
@@ -262,8 +262,8 @@ jobs:
           /opt/godot/godot --headless --verbose --export-${MODE} "Android" "$OUT" > /tmp/export2.log 2>&1
           CODE=$?
           set -e
-          grep -A12 "due to configuration errors" /tmp/export2.log | head -14 | while IFS= read -r line; do
-            echo "::error title=Godot config (fallback)::${line//$'\n'/}"
+          awk '/due to configuration errors/{f=1;next} f&&/^[[:space:]]*$/{f=0} f' /tmp/export2.log | head -12 | while IFS= read -r line; do
+            echo "::error title=Godot config (fallback)::${line}"
           done
           grep -nE "ERROR|FAILURE|error:" /tmp/export2.log | head -20 | while IFS= read -r line; do echo "::error title=Android fallback::$line"; done
           tail -20 /tmp/export2.log || true
