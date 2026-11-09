@@ -232,8 +232,9 @@ jobs:
           # so echo the interesting lines as annotations directly.
           # Print the full "configuration errors" block (Godot lists each
           # problem on its own line right after the header).
+          # Annotate every reason line: Godot prints one per problem.
           grep -A12 "due to configuration errors" /tmp/export.log | head -14 | while IFS= read -r line; do
-            [ -n "$line" ] && echo "::error title=Godot config:: $line"
+            echo "::error title=Godot config::${line//$'\n'/}"
           done
           grep -nE "ERROR|FAILURE|What went wrong|Caused by|error:|Exception|BUILD FAILED" /tmp/export.log \
             | head -20 | while IFS= read -r line; do echo "::warning title=Android export::$line"; done
@@ -262,7 +263,7 @@ jobs:
           CODE=$?
           set -e
           grep -A12 "due to configuration errors" /tmp/export2.log | head -14 | while IFS= read -r line; do
-            [ -n "$line" ] && echo "::error title=Godot config (fallback):: $line"
+            echo "::error title=Godot config (fallback)::${line//$'\n'/}"
           done
           grep -nE "ERROR|FAILURE|error:" /tmp/export2.log | head -20 | while IFS= read -r line; do echo "::error title=Android fallback::$line"; done
           tail -20 /tmp/export2.log || true
