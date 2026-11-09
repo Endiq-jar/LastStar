@@ -61,7 +61,12 @@ jobs:
           test -d .godot
           /opt/godot/godot --headless --path . --quit-after 240 > /tmp/boot.log 2>&1 || true
           tail -40 /tmp/boot.log || true
-          if grep -E "SCRIPT ERROR|Parse Error" /tmp/boot.log; then
+          if grep -qE "SCRIPT ERROR|Parse Error" /tmp/boot.log; then
+            # Surface each offending line as an annotation so the failure is
+            # readable without downloading raw job logs.
+            grep -E "SCRIPT ERROR|Parse Error|res://.*\.gd:[0-9]+" /tmp/boot.log | head -8 | while IFS= read -r line; do
+              echo "::error title=GDScript::$line"
+            done
             echo "::error::GDScript errors detected while booting the world"
             exit 1
           fi

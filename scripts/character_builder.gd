@@ -64,12 +64,18 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	visual.name = "Visual"
 	host.add_child(visual)
 
-	var skin := _toon(data["skin"] as Color)
-	var hair := _toon(data["hair"] as Color, 0.5)
-	var hair_tip := _toon(data["hair_tip"] as Color, 0.6)
-	var outfit := _toon(data["outfit"] as Color)
-	var accent := _toon(data["outfit_accent"] as Color, 0.45)
-	var cape_mat := _toon(data["cape"] as Color, 0.7)
+	var skin_col: Color = data["skin"]
+	var skin := _toon(skin_col)
+	var hair_col: Color = data["hair"]
+	var hair := _toon(hair_col, 0.5)
+	var hair_tip_col: Color = data["hair_tip"]
+	var hair_tip := _toon(hair_tip_col, 0.6)
+	var outfit_col: Color = data["outfit"]
+	var outfit := _toon(outfit_col)
+	var accent_col: Color = data["outfit_accent"]
+	var accent := _toon(accent_col, 0.45)
+	var cape_col: Color = data["cape"]
+	var cape_mat := _toon(cape_col, 0.7)
 	var eye_col: Color = data["eye"]
 	var eye := _glow(eye_col, 1.4)
 	var element_col: Color = data["color"]
@@ -249,7 +255,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		wings.add_child(wing_pivot)
 		var wing := QuadMesh.new()
 		wing.size = Vector2(0.85, 0.52)
-		var wm := _toon(data["cape"] as Color, 0.9)
+		var wm := _toon(cape_col, 0.9)
 		wm.set_shader_parameter("emission_boost", 0.35)
 		wm.set_shader_parameter("emission_color", element_col)
 		var w := _add(wing_pivot, wing, wm, Vector3(0.46 * side, 0.16, 0.0))
