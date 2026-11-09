@@ -1,14 +1,16 @@
-[gd_scene load_steps=5 format=3 uid="uid://clstarworld001"]
+[gd_scene load_steps=6 format=3 uid="uid://clstarworld001"]
 
 [ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/terrain_generator.gd" id="2_terrain"]
 [ext_resource type="Script" path="res://scripts/vegetation_spawner.gd" id="3_veg"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="4_hud"]
+[ext_resource type="Environment" path="res://default_env.tres" id="5_env"]
 
 [node name="World" type="Node3D"]
 script = ExtResource("1_world")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = ExtResource("5_env")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.78, -0.42, 0.46, 0, 0.74, 0.67, -0.62, -0.52, 0.58, 0, 90, 0)

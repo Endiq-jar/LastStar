@@ -24,6 +24,8 @@ var _collectibles: Node3D
 var _day_time: float = 0.32
 var _day_speed: float = 0.0055
 var _time := 0.0
+## True once _ready() finished wiring the environment, sun and player.
+var _built := false
 
 
 func _ready() -> void:
@@ -46,37 +48,170 @@ func _ready() -> void:
 	_collectibles.name = "Collectibles"
 	add_child(_collectibles)
 
+	# Environment + player come first and are guaranteed: without a camera the
+	# 3D viewport renders nothing at all (black screen, while the CanvasLayer
+	# HUD still draws), so nothing optional may run before them.
 	_setup_environment()
+	_spawn_player()
+
+	# Everything else is scenery dressed on afterwards.
 	_build_lake()
 	_build_spawn_glade()
 	_scatter_landmarks()
 	_spawn_waypoints()
 	_spawn_sigils()
 	_spawn_enemies()
-	_spawn_player()
 	_spawn_clouds()
 	_add_audio()
 	Game.quest_changed.emit(Game.quest_text)
 	apply_quality()
 
+	# Never ship a black screen: if for any reason the player's camera did not
+	# come up current, park a fallback camera over the valley, then keep an eye
+	# on the framebuffer for the first seconds in case the view is still blank.
+	_built = true
+	_ensure_camera.call_deferred()
+	_watch_render()
+
+
+func _watch_render() -> void:
+	## Safety net. A camera can exist and still render nothing (wrong far plane,
+	## environment without a sky, driver refusing the scene). After the first
+	## frames we look at the actual pixels once; if the 3D layer came out black
+	## we repair the most likely causes so the player is never stuck staring at
+	## a black screen with a HUD floating on top of it.
+	for i in range(12):
+		await get_tree().process_frame
+	if DisplayServer.get_name() == "headless":
+		return
+	await RenderingServer.frame_post_draw
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		_ensure_camera()
+		return
+	var img := get_viewport().get_texture().get_image()
+	if img == null or img.is_empty():
+		return
+	# Sample the middle of the screen, avoiding the HUD corners.
+	var w := img.get_width()
+	var h := img.get_height()
+	var luma := 0.0
+	var samples := 0
+	for y in range(int(h * 0.35), int(h * 0.75), 12):
+		for x in range(int(w * 0.3), int(w * 0.7), 12):
+			luma += img.get_pixel(x, y).get_luminance()
+			samples += 1
+	if samples == 0:
+		return
+	luma /= float(samples)
+	if luma > 0.02:
+		return
+	push_warning("LastStar: viewport looks black (luma %.4f) - repairing render state" % luma)
+	repair_render()
+
+
+func repair_render() -> void:
+	## Rebuild the rendering state from scratch. Cheap enough to run once, and
+	## it fixes the whole class of "entity exists but nothing draws" problems.
+	var env_node := get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if env_node == null:
+		env_node = WorldEnvironment.new()
+		env_node.name = "WorldEnvironment"
+		add_child(env_node)
+	if env_node.environment == null:
+		env_node.environment = Environment.new()
+	_setup_environment()
+
+	# Make sure a camera is current. A fallback is only installed when the
+	# viewport genuinely has none, so the player's own camera is never replaced.
+	_ensure_camera()
+	var cam := get_viewport().get_camera_3d()
+	if cam:
+		cam.near = 0.05
+
+	# The sun must exist and point down, otherwise everything is a black
+	# silhouette lit only by ambient.
+	if sun:
+		sun.visible = true
+		sun.light_energy = maxf(sun.light_energy, 1.4)
+		sun.rotation_degrees = Vector3(-48.0, -38.0, 0.0)
+
+	# Bring the player's own camera back to a sane orbit distance.
+	var players := get_tree().get_nodes_in_group("player")
+	if players.size() > 0:
+		var p := players[0]
+		for child in p.get_children():
+			if child is SpringArm3D:
+				child.spring_length = 4.6
+				child.collision_mask = 1
+				child.margin = 0.25
+		p.global_position = Vector3(0.0, _height(0.0, 0.0) + 3.0, 6.0)
+	Game.toast.emit("Rendering repaired")
+
+
+func _ensure_camera() -> void:
+	if get_viewport().get_camera_3d() != null:
+		return
+	push_error("LastStar: no active camera after world build - installing fallback")
+	var cam := Camera3D.new()
+	cam.name = "FallbackCamera"
+	cam.fov = 70.0
+	cam.near = 0.08
+	cam.far = 900.0
+	cam.position = Vector3(0.0, _height(0.0, 0.0) + 9.0, 26.0)
+	cam.rotation_degrees = Vector3(-11.0, 0.0, 0.0)
+	cam.current = true
+	add_child(cam)
+
+
 
 func apply_quality() -> void:
 	## 0 Balanced · 1 Performance · 2 High. Lets the same APK scale from a
-	## budget phone to a flagship without shipping two builds.
+	## budget phone to a flagship without shipping two builds. Every tier
+	## restores what it changes, so cycling through them is lossless.
 	var tier := Game.quality_tier
+	var env := environment.environment as Environment
+	var veg := get_node_or_null("Vegetation")
+
+	# --- shadows -----------------------------------------------------------
 	if tier == 1:
 		sun.shadow_enabled = false
-		if has_node("Vegetation"):
-			get_node("Vegetation").visible = false
 		RenderingServer.directional_shadow_atlas_set_size(1024, true)
-	elif tier == 2:
+		sun.directional_shadow_max_distance = 140.0
+	else:
 		sun.shadow_enabled = true
-		sun.directional_shadow_max_distance = 260.0
-		var env := environment.environment as Environment
-		if env:
-			env.glow_intensity = 0.55
+		RenderingServer.directional_shadow_atlas_set_size(2048, true)
+		sun.directional_shadow_max_distance = 260.0 if tier == 2 else 190.0
+
+	# --- vegetation (always visible except on the lowest tier) -------------
+	if veg:
+		veg.visible = tier != 1
+
+	if env == null:
+		return
+	# --- glow / AO / AA -----------------------------------------------------
+	match tier:
+		1:
+			env.glow_intensity = 0.35
+			env.ssao_enabled = false
+			env.adjustment_saturation = 1.05
+			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), Viewport.MSAA_DISABLED)
+		2:
+			env.glow_intensity = 0.7
+			env.glow_hdr_threshold = 1.0
 			env.ssao_enabled = true
-			env.ssao_radius = 1.2
+			env.ssao_radius = 1.4
+			env.ssao_intensity = 1.6
+			env.adjustment_saturation = 1.24
+			env.adjustment_contrast = 1.08
+			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), Viewport.MSAA_4X)
+		_:
+			env.glow_intensity = 0.55
+			env.glow_hdr_threshold = 1.1
+			env.ssao_enabled = false
+			env.adjustment_saturation = 1.15
+			env.adjustment_contrast = 1.05
+			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), Viewport.MSAA_2X)
 
 
 func _setup_environment() -> void:
@@ -85,21 +220,27 @@ func _setup_environment() -> void:
 
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.20, 0.46, 0.86)
-	sky_mat.sky_horizon_color = Color(0.76, 0.90, 0.98)
-	sky_mat.sky_curve = 0.13
-	sky_mat.sky_energy_multiplier = 1.15
-	sky_mat.ground_bottom_color = Color(0.30, 0.42, 0.38)
-	sky_mat.ground_horizon_color = Color(0.78, 0.90, 0.96)
-	sky_mat.ground_curve = 0.08
-	sky_mat.sun_angle_max = 24.0
-	sky_mat.sun_curve = 0.12
+	sky_mat.sky_top_color = Color(0.16, 0.42, 0.88)
+	sky_mat.sky_horizon_color = Color(0.74, 0.89, 1.0)
+	sky_mat.sky_curve = 0.11
+	sky_mat.sky_energy_multiplier = 1.25
+	# The ground half of a procedural sky is only seen below the horizon, but a
+	# pitch-black or blown-out value there shows up in reflections and fog, so
+	# keep it a soft hazy green-blue.
+	sky_mat.ground_bottom_color = Color(0.30, 0.44, 0.40)
+	sky_mat.ground_horizon_color = Color(0.80, 0.91, 0.97)
+	sky_mat.ground_curve = 0.06
+	sky_mat.sun_angle_max = 26.0
+	sky_mat.sun_curve = 0.10
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 1.05
+	env.ambient_light_energy = 1.15
 	env.ambient_light_color = Color(0.78, 0.87, 1.0)
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	# Sky ambient alone can dip to near-black once the sun is low; this floor
+	# guarantees every surface always receives usable light.
+	env.ambient_light_sky_contribution = 0.85
 
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 1.02
@@ -107,18 +248,19 @@ func _setup_environment() -> void:
 
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.76, 0.88, 0.97)
-	env.fog_density = 0.0011
-	env.fog_aerial_perspective = 0.85
-	env.fog_sky_affect = 0.28
-	env.fog_depth_begin = 160.0
-	env.fog_depth_end = 780.0
-	env.fog_depth_curve = 0.68
+	env.fog_density = 0.0009
+	env.fog_aerial_perspective = 0.65
+	env.fog_sky_affect = 0.18
+	env.fog_depth_begin = 220.0
+	env.fog_depth_end = 900.0
+	env.fog_depth_curve = 0.75
 
 	env.glow_enabled = true
-	env.glow_intensity = 0.42
-	env.glow_strength = 0.9
-	env.glow_bloom = 0.08
-	env.glow_hdr_threshold = 1.0
+	env.glow_intensity = 0.55
+	env.glow_strength = 1.0
+	env.glow_bloom = 0.05
+	env.glow_hdr_threshold = 1.1
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 
 	env.adjustment_enabled = true
 	env.adjustment_brightness = 1.04
@@ -140,24 +282,34 @@ func _setup_environment() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
-	if Game.is_paused:
+	if Game.is_paused or not _built:
 		return
 	_day_time = fposmod(_day_time + delta * _day_speed, 1.0)
 	_update_time_of_day()
 
 
 func _update_time_of_day() -> void:
-	# 0.0 = dawn, 0.25 = noon, 0.5 = dusk, 0.75 = midnight.
+	# Golden-hour biased cycle. The sun stays above the horizon for most of the
+	# loop and never drops so low that the valley goes unlit: an open-world game
+	# that spends a third of its time pitch black reads as "the screen is broken".
 	var sun_angle: float = (_day_time - 0.25) * TAU
-	sun.rotation_degrees = Vector3(rad_to_deg(sun_angle) * 0.55 - 12.0, -38.0, 0.0)
-	var day := clampf(sin(_day_time * TAU - 0.5) * 0.5 + 0.5, 0.0, 1.0)
-	var dusk := pow(clampf(1.0 - absf(day - 0.42) / 0.42, 0.0, 1.0), 3.0)
-	sun.light_energy = 0.25 + day * 1.5
-	sun.light_color = Color(1.0, 0.92, 0.8).lerp(Color(1.0, 0.62, 0.42), clampf(dusk, 0.0, 1.0) * 0.7)
+	var elevation := sin(sun_angle) * 42.0 - 6.0
+	sun.rotation_degrees = Vector3(-clampf(elevation, -12.0, 72.0), -38.0, 0.0)
+
+	var day := clampf(sin(sun_angle) * 0.5 + 0.6, 0.0, 1.0)
+	var dusk := pow(clampf(1.0 - absf(day - 0.45) / 0.45, 0.0, 1.0), 2.0)
+
+	sun.light_energy = 0.85 + day * 0.95
+	sun.light_color = Color(1.0, 0.94, 0.84).lerp(Color(1.0, 0.68, 0.46), clampf(dusk, 0.0, 1.0) * 0.65)
+	sun.visible = true
+
 	var env := environment.environment as Environment
-	env.ambient_light_energy = 0.45 + day * 0.75
-	env.fog_light_color = Color(0.72, 0.84, 0.96).lerp(Color(1.0, 0.72, 0.55), clampf(dusk, 0.0, 1.0) * 0.6)
-	sun.visible = day > 0.03
+	if env == null:
+		return
+	# Ambient never falls below a usable floor either.
+	env.ambient_light_energy = 0.85 + day * 0.55
+	env.ambient_light_color = Color(0.62, 0.72, 0.95).lerp(Color(0.80, 0.88, 1.0), day)
+	env.fog_light_color = Color(0.70, 0.82, 0.96).lerp(Color(1.0, 0.76, 0.58), clampf(dusk, 0.0, 1.0) * 0.55)
 
 
 func _build_lake() -> void:

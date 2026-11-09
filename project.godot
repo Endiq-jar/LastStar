@@ -110,8 +110,14 @@ common/physics_ticks_per_second=45
 
 [rendering]
 
+; Mobile renderer everywhere: it is what the toon shaders and the Android
+; target are tuned for, and it runs on both phones and desktops. The plain key
+; is the base value (used by desktop/FX runs); ".mobile" covers Android.
 renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"
+; If a device cannot provide a usable Vulkan device for the Mobile renderer,
+; Godot reports it instead of silently drawing nothing on screen.
+rendering_device/fallback_to_vulkan=true
 textures/default_filters/anisotropic_filtering_level=2
 textures/vram_compression/import_etc2_astc=true
 textures/placeholder/placeholder_generate_mipmaps=true

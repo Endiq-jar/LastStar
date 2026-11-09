@@ -7,6 +7,7 @@ extends Node
 
 signal sigils_changed(collected: int, total: int)
 signal character_changed(index: int)
+signal quality_changed(tier: int)
 signal stats_changed()
 signal quest_changed(text: String)
 signal toast(text: String)
@@ -126,6 +127,7 @@ var touch_active: bool = false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	load_quality()
 	reset_run()
 
 
@@ -329,7 +331,23 @@ func quality_name() -> String:
 
 func cycle_quality() -> void:
 	quality_tier = (quality_tier + 1) % QUALITY_NAMES.size()
+	_save_quality()
+	quality_changed.emit(quality_tier)
 	toast.emit("Quality: %s" % quality_name())
+
+
+func _save_quality() -> void:
+	## Remember the choice: a phone that had to drop to Performance should not
+	## silently go back to the heaviest preset on the next launch.
+	var cfg := ConfigFile.new()
+	cfg.set_value("video", "quality_tier", quality_tier)
+	cfg.save("user://video.cfg")
+
+
+func load_quality() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load("user://video.cfg") == OK:
+		quality_tier = clampi(int(cfg.get_value("video", "quality_tier", 0)), 0, QUALITY_NAMES.size() - 1)
 
 
 func boot_direct() -> void:

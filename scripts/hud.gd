@@ -281,6 +281,9 @@ func _build() -> void:
 	_quality_btn = _round_button("Quality: Balanced", Vector2(300, 44))
 	_quality_btn.pressed.connect(_cycle_quality)
 	pv.add_child(_quality_btn)
+	var repair := _round_button("Repair view (if the world is black)", Vector2(300, 44))
+	repair.pressed.connect(_repair_view)
+	pv.add_child(repair)
 	var to_menu := _round_button("Return to the menu", Vector2(300, 44))
 	to_menu.pressed.connect(func(): Game.quit_to_menu())
 	pv.add_child(to_menu)
@@ -442,6 +445,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			_pause()
 		get_viewport().set_input_as_handled()
+
+
+func _repair_view() -> void:
+	## Escape hatch for a blank 3D view: rebuild the camera, environment and
+	## lights. Cheap, instant and safe to press at any time.
+	var world := get_tree().current_scene
+	if world and world.has_method("repair_render"):
+		world.call("repair_render")
+		Game.toast.emit("View rebuilt")
+	else:
+		Game.toast.emit("Nothing to repair here")
 
 
 func _cycle_quality() -> void:

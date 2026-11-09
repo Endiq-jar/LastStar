@@ -67,20 +67,77 @@ jobs:
       - name: Import project + boot main scene headlessly
         run: |
           set -uo pipefail
-          /opt/godot/godot --headless --editor --quit-after 400 > /tmp/import.log 2>&1 || { echo "::error::Project import failed"; tail -60 /tmp/import.log; exit 1; }
+          /opt/godot/godot --headless --editor --quit-after 400 > /tmp/import.log 2>&1 \
+            || { echo "::error::Project import failed"; tail -60 /tmp/import.log; exit 1; }
           test -d .godot
+
           /opt/godot/godot --headless --path . --quit-after 240 > /tmp/boot.log 2>&1 || true
           tail -40 /tmp/boot.log || true
-          if grep -qE "SCRIPT ERROR|Parse Error" /tmp/boot.log; then
-            # Surface each offending line as an annotation so the failure is
-            # readable without downloading raw job logs.
-            grep -E "SCRIPT ERROR|Parse Error|res://.*\.gd:[0-9]+" /tmp/boot.log | head -8 | while IFS= read -r line; do
+
+          # Any runtime error is a failure: null access, invalid call, missing
+          # function... A game that crashes before it builds the player still
+          # draws its HUD, which looks exactly like "black screen".
+          # Note: match the "ERROR:" prefix, not Godot's benign
+          # `Condition "..." is true.` debug lines.
+          ERR_PAT='^(ERROR|SCRIPT ERROR|USER ERROR):|Parse Error|Invalid call\.|Invalid access to property|Nonexistent function|Attempt to call function|Invalid get index|Cannot convert|Index p_|Out of bounds'
+          if grep -qE "$ERR_PAT" /tmp/boot.log; then
+            grep -nE "$ERR_PAT" /tmp/boot.log | head -12 | while IFS= read -r line; do
               echo "::error title=GDScript::$line"
             done
-            echo "::error::GDScript errors detected while booting the world"
+            echo "::error::Runtime errors detected while booting the world"
             exit 1
           fi
-          echo "World booted without GDScript errors."
+          echo "World booted cleanly."
+
+      - name: Render probe (real framebuffer screenshot)
+        run: |
+          set -uo pipefail
+          # Software GL so a real framebuffer can be captured on the runner.
+          sudo apt-get update -qq || true
+          if ! sudo apt-get install -y -qq xvfb libgl1 libglx-mesa0 libegl1; then
+            echo "::warning::could not install Xvfb/Mesa - skipping the pixel probe"
+            exit 0
+          fi
+          mkdir -p /tmp/probe
+
+          set +e
+          xvfb-run -a --server-args="-screen 0 1280x720x24" \
+            /opt/godot/godot --path . --rendering-driver opengl3 \
+            --resolution 1280x720 res://tests/render_probe.tscn -- --out=/tmp/probe \
+            > /tmp/probe.log 2>&1
+          CODE=$?
+          set -e
+
+          grep -E "^PROBE_" /tmp/probe.log | while IFS= read -r line; do
+            case "$line" in
+              PROBE_FAIL*) echo "::error title=render probe::$line" ;;
+              *) echo "::notice title=render probe::$line" ;;
+            esac
+          done
+
+          if ! grep -q "PROBE_BEGIN" /tmp/probe.log; then
+            # The engine itself could not start (no GL on this runner). That is
+            # an infrastructure limit, not a game bug - warn, do not fail.
+            echo "::warning::render probe could not start on this runner"
+            tail -20 /tmp/probe.log
+            exit 0
+          fi
+          if grep -q "PROBE_RESULT: FAIL" /tmp/probe.log; then
+            tail -40 /tmp/probe.log
+            echo "::error::Render probe FAILED - the 3D view is not drawing (see the render-probe artifact)"
+            exit 1
+          fi
+          echo "Render probe passed."
+
+      - name: Upload render screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-probe
+          path: |
+            /tmp/probe/*.png
+            /tmp/probe.log
+          if-no-files-found: ignore
 
   android:
     name: Android APK

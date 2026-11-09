@@ -55,8 +55,11 @@ func _ready() -> void:
 	collision_layer = 2
 	collision_mask = 1
 	_spawn_origin = global_position
-	_build_rig()
+	# Camera first: it is the one node the scene cannot do without. The rig and
+	# the rest of the wiring come after, so a problem dressing the character can
+	# never leave the player (and the viewport) without a camera.
 	_build_camera()
+	_build_rig()
 	Game.respawned.connect(_on_respawn)
 	Game.character_changed.connect(_on_character_changed)
 	Game.game_won.connect(_on_game_won)
@@ -88,24 +91,45 @@ func _build_camera() -> void:
 	_spring = SpringArm3D.new()
 	_spring.spring_length = CAM_DISTANCE
 	_spring.margin = 0.25
+	# Only the world layer. The player itself is on layer 2, so the arm can never
+	# collide with the character and jam the camera inside its own head.
 	_spring.collision_mask = 1
+	_spring.add_excluded_object(get_rid())
 	_spring.position = Vector3(CAM_SHOULDER, 0.15, 0)
 	_pivot.add_child(_spring)
 
 	_camera = Camera3D.new()
 	_camera.fov = 62.0
-	_camera.near = 0.08
+	_camera.near = 0.05
 	_camera.far = 900.0
 	_camera.current = true
 	_spring.add_child(_camera)
 
 
+func _update_camera_occlusion() -> void:
+	## When a wall or the terrain pushes the spring arm right up against the
+	## character, the camera ends up inside the model and the screen reads as a
+	## flat dark shape. Cull the character in that case so the world stays
+	## visible - the standard third-person fix.
+	var vis := _visual_node()
+	if vis == null or _spring == null:
+		return
+	var dist := _spring.get_hit_length()
+	vis.visible = dist > CAM_DISTANCE * 0.35
+
+
 func _visual_node() -> Node3D:
-	return rig.get("visual") as Node3D
+	if rig.is_empty():
+		return null
+	var n := rig.get("visual") as Node3D
+	return n if is_instance_valid(n) else null
 
 
 func _rig_part(key: String) -> Node3D:
-	return rig.get(key) as Node3D
+	if rig.is_empty():
+		return null
+	var n := rig.get(key) as Node3D
+	return n if is_instance_valid(n) else null
 
 
 func _apply_rig_colors() -> void:
@@ -173,6 +197,7 @@ func _physics_process(delta: float) -> void:
 	_yaw = lerp_angle(_yaw, _target_yaw, 1.0 - exp(-16.0 * delta))
 	_pitch = lerpf(_pitch, _target_pitch, 1.0 - exp(-16.0 * delta))
 	_pivot.rotation = Vector3(_pitch, _yaw, 0.0)
+	_update_camera_occlusion()
 
 	_attack_cd = maxf(0.0, _attack_cd - delta)
 	_skill_cd = maxf(0.0, _skill_cd - delta)
@@ -259,7 +284,8 @@ func _physics_process(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, move.z * speed, accel * delta * speed)
 		var target_face := atan2(-move.x, -move.z)
 		var vis := _visual_node()
-		vis.rotation.y = lerp_angle(vis.rotation.y, target_face, TURN_SPEED * delta)
+		if vis != null:
+			vis.rotation.y = lerp_angle(vis.rotation.y, target_face, TURN_SPEED * delta)
 	else:
 		var drag := 20.0 if on_floor else 1.4
 		velocity.x = move_toward(velocity.x, 0.0, drag * delta * speed)
@@ -288,11 +314,15 @@ func _update_animation(delta: float, speed: float, on_floor: bool, sprinting: bo
 	var torso := _rig_part("torso")
 	var wings := _rig_part("wings")
 
-	wings.visible = _gliding
+	if torso == null or arm_l == null or arm_r == null or leg_l == null or leg_r == null:
+		return
+	if wings != null:
+		wings.visible = _gliding
 
 	if _gliding:
 		var flap := sin(Time.get_ticks_msec() * 0.006) * 0.18
-		wings.rotation.x = -0.55 + flap
+		if wings != null:
+			wings.rotation.x = -0.55 + flap
 		arm_l.rotation.x = lerpf(arm_l.rotation.x, -1.9, 9.0 * delta)
 		arm_r.rotation.x = lerpf(arm_r.rotation.x, -1.9, 9.0 * delta)
 		arm_l.rotation.z = lerpf(arm_l.rotation.z, 0.55, 9.0 * delta)
@@ -326,12 +356,14 @@ func _update_animation(delta: float, speed: float, on_floor: bool, sprinting: bo
 		torso.position.y = lerpf(torso.position.y, breathe * 0.35, 5.0 * delta)
 		torso.rotation.x = lerpf(torso.rotation.x, 0.0, 6.0 * delta)
 		var head := _rig_part("head")
-		head.rotation.y = sin(_idle_time * 0.55) * 0.22
+		if head != null:
+			head.rotation.y = sin(_idle_time * 0.55) * 0.22
 		return
 
 	_idle_time = 0.0
 	var head := _rig_part("head")
-	head.rotation.y = lerpf(head.rotation.y, 0.0, 8.0 * delta)
+	if head != null:
+		head.rotation.y = lerpf(head.rotation.y, 0.0, 8.0 * delta)
 	var rate := 10.5 if sprinting else 7.4
 	_anim_phase += delta * rate * clampf(speed / WALK_SPEED, 0.55, 1.6)
 	var amp := 0.85 if sprinting else 0.6
@@ -355,7 +387,7 @@ func _do_attack() -> void:
 
 	var data: Dictionary = Game.character()
 	var power: float = float(data["attack"]) * (1.25 if _attack_combo == 2 else 1.0)
-	var forward: Vector3 = -_visual_node().global_transform.basis.z
+	var forward := get_forward()
 	var hit_center: Vector3 = global_position + forward * 1.45 + Vector3(0, 0.95, 0)
 
 	FX.slash(get_parent(), hit_center, forward, Game.character()["color"], _attack_combo)
@@ -383,7 +415,7 @@ func _do_skill() -> void:
 	var data: Dictionary = Game.character()
 	_skill_cd = float(data["skill_cd"])
 	_attack_cd = maxf(_attack_cd, 0.3)
-	var forward: Vector3 = -_visual_node().global_transform.basis.z
+	var forward := get_forward()
 	var pos: Vector3 = global_position + forward * 2.0 + Vector3(0, 0.8, 0)
 
 	FX.element_burst(get_parent(), pos, Game.character()["color"], int(data["element_id"]))
@@ -446,7 +478,12 @@ func get_camera_yaw() -> float:
 
 
 func get_forward() -> Vector3:
-	return -_visual_node().global_transform.basis.z
+	## Facing direction, robust to a rig that failed to build: fall back to the
+	## camera yaw so combat and FX never read a null node.
+	var vis := _visual_node()
+	if vis != null:
+		return -vis.global_transform.basis.z
+	return Vector3(-sin(_yaw), 0.0, -cos(_yaw))
 
 
 func skill_ready_ratio() -> float:
