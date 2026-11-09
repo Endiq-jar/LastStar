@@ -36,6 +36,9 @@ func _ready() -> void:
 	])
 
 	# --- boot the real game scene -----------------------------------------
+	# Add it to the scene ROOT (not to this probe node): a child added under a
+	# node that has not notified READY yet never gets its own _ready() called,
+	# because Node::_set_tree() only propagates READY when the parent is ready.
 	var packed := load(WORLD) as PackedScene
 	if packed == null:
 		_log("FAIL", "could not load %s" % WORLD)
@@ -109,16 +112,16 @@ func _ready() -> void:
 	elif stats["nonblack"] < 0.15:
 		_log("FAIL", "almost nothing rendered (non-black pixels %.1f%%)" % (stats["nonblack"] * 100.0))
 	if stats["colours"] < 12:
-		_log("FAIL", "image is flat - only %d distinct colours" % stats["colours"])
+		# A clear sky-only view is legitimately low-variety; call it out loudly
+		# but let the luminance/coverage checks decide pass or fail.
+		_log("WARN", "image is flat - only %d distinct colours" % stats["colours"])
 
 	# Orbit the camera a quarter turn and capture again: catches a camera that
 	# exists but is stuck inside geometry or pointed at the void.
 	if cam:
-		var pivot := cam.get_parent()
-		for i in range(3):
-			if pivot and pivot.get_parent():
-				pivot = pivot.get_parent()
-		cam.global_position += Vector3(14.0, 9.0, 14.0)
+		# Nudge the camera only: rotating the player's pivot would also move the
+		# SpringArm's collision cast and can put the camera inside a hill.
+		cam.global_position += Vector3(0.0, 6.0, 0.0)
 		await get_tree().create_timer(0.35).timeout
 		await RenderingServer.frame_post_draw
 		var img2 := get_viewport().get_texture().get_image()

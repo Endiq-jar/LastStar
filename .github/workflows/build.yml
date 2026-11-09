@@ -128,6 +128,7 @@ jobs:
           grep -E "^PROBE_" /tmp/probe.log | while IFS= read -r line; do
             case "$line" in
               PROBE_FAIL*) echo "::error title=render probe::$line" ;;
+              PROBE_WARN*) echo "::warning title=render probe::$line" ;;
               *) echo "::notice title=render probe::$line" ;;
             esac
           done
