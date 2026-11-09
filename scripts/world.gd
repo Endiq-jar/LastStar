@@ -195,7 +195,7 @@ func apply_quality() -> void:
 			env.glow_intensity = 0.35
 			env.ssao_enabled = false
 			env.adjustment_saturation = 1.05
-			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), Viewport.MSAA_DISABLED)
+			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), RenderingServer.VIEWPORT_MSAA_DISABLED)
 		2:
 			env.glow_intensity = 0.7
 			env.glow_hdr_threshold = 1.0
@@ -204,14 +204,14 @@ func apply_quality() -> void:
 			env.ssao_intensity = 1.6
 			env.adjustment_saturation = 1.24
 			env.adjustment_contrast = 1.08
-			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), Viewport.MSAA_4X)
+			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), RenderingServer.VIEWPORT_MSAA_4X)
 		_:
 			env.glow_intensity = 0.55
 			env.glow_hdr_threshold = 1.1
 			env.ssao_enabled = false
 			env.adjustment_saturation = 1.15
 			env.adjustment_contrast = 1.05
-			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), Viewport.MSAA_2X)
+			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), RenderingServer.VIEWPORT_MSAA_2X)
 
 
 func _setup_environment() -> void:
