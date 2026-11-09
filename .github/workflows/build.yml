@@ -240,91 +240,55 @@ jobs:
           cat "$HOME/.config/godot/editor_settings-4.3.tres" 2>/dev/null | while IFS= read -r l; do echo "::notice title=settings::$l"; done
           exit 0
 
-      - name: Export APK (gradle build)
-        id: gradle
-        continue-on-error: true
+      - name: Export APK
+        id: export
         run: |
           set -uo pipefail
           mkdir -p build/android
           OUT="build/android/${EXPORT_NAME}.apk"
           MODE="debug"
           [ "${{ steps.signing.outputs.release }}" = "true" ] && MODE="release"
-          echo "Exporting $MODE APK (gradle)"
+          echo "Exporting a $MODE APK"
+
           set +e
-          /opt/godot/godot --headless --verbose --install-android-build-template \
-            --export-${MODE} "Android" "$OUT" > /tmp/export.log 2>&1
+          /opt/godot/godot --headless --verbose --export-${MODE} "Android" "$OUT" > /tmp/export.log 2>&1
           CODE=$?
           set -e
-          # Job logs live on storage we may not be able to read from outside,
-          # so echo the interesting lines as annotations directly.
-          # Print the full "configuration errors" block (Godot lists each
-          # problem on its own line right after the header).
-          # Annotate every reason line: Godot prints one per problem.
-          awk '/due to configuration errors/{f=1;next} /Project export for preset|^---/{f=0} f' /tmp/export.log | head -20 | while IFS= read -r line; do
-            echo "::error title=Godot config::${line}"
-          done
-          # Also annotate the raw export.log so the reason is always readable.
-          # The reason lines follow the header; annotate that window + the tail.
-          IDX=$(grep -n "due to configuration errors" /tmp/export.log | cut -d: -f1 | head -1)
-          if [ -n "$IDX" ]; then
+
+          # Surface the interesting parts of the log as annotations (job logs are
+          # not always reachable, annotations and the issue mirror are).
+          IDX=$(grep -n "due to configuration errors" /tmp/export.log | cut -d: -f1 | head -1 || true)
+          if [ -n "${IDX:-}" ]; then
             sed -n "${IDX},$((IDX+16))p" /tmp/export.log | while IFS= read -r line; do
-              echo "::error title=reason::${line}"
+              echo "::error title=Godot config::${line}"
             done
           fi
-          tail -25 /tmp/export.log | while IFS= read -r line; do
-            echo "::error title=export.log::${line}"
-          done
-          grep -nE "ERROR|FAILURE|What went wrong|Caused by|error:|Exception|BUILD FAILED" /tmp/export.log \
-            | head -20 | while IFS= read -r line; do echo "::warning title=Android export::$line"; done
-          tail -20 /tmp/export.log || true
-          if [ -f "$OUT" ] && [ "$CODE" -eq 0 ]; then
-            echo "gradle-export ok"
+          grep -nE "BUILD FAILED|What went wrong|Could not|FAILURE:" /tmp/export.log | head -12 \
+            | while IFS= read -r line; do echo "::error title=gradle::${line}"; done || true
+          tail -15 /tmp/export.log | while IFS= read -r line; do echo "::warning title=log::${line}"; done || true
+
+          echo "godot exit code: $CODE"
+          if [ -f "$OUT" ]; then
+            SIZE=$(stat -c %s "$OUT")
+            echo "::notice title=APK::$(du -h "$OUT" | cut -f1) (${SIZE} bytes)"
+            if [ "$SIZE" -lt 1000000 ]; then
+              echo "::error::APK is suspiciously small (${SIZE} bytes)"
+              exit 1
+            fi
+            # Godot 4.3 sometimes returns non-zero after a successful export, so
+            # trust the artifact rather than the exit code.
+            echo "export produced a valid APK (godot exit $CODE)"
             exit 0
           fi
-          echo "::warning::Gradle-based Android export failed (exit $CODE) - trying the fallback."
+          echo "::error::Export failed with no APK (godot exit $CODE)"
           exit 1
-
-      - name: Export APK (prebuilt template fallback)
-        if: steps.gradle.outcome == 'failure'
-        run: |
-          set -euo pipefail
-          # Gradle needs a full SDK/NDK toolchain. If that path is unhappy on
-          # the runner we still ship an APK by exporting into the prebuilt
-          # android_debug.apk template that comes with export_templates.tpz.
-          sed -i 's|^gradle_build/use_gradle_build=true|gradle_build/use_gradle_build=false|' export_presets.cfg
-          grep -n "use_gradle_build" export_presets.cfg
-          OUT="build/android/${EXPORT_NAME}.apk"
-          MODE="debug"
-          [ "${{ steps.signing.outputs.release }}" = "true" ] && MODE="release"
-          set +e
-          /opt/godot/godot --headless --verbose --export-${MODE} "Android" "$OUT" > /tmp/export2.log 2>&1
-          CODE=$?
-          set -e
-          awk '/due to configuration errors/{f=1;next} /Project export for preset|^---/{f=0} f' /tmp/export2.log | head -20 | while IFS= read -r line; do
-            echo "::error title=Godot config (fallback)::${line}"
-          done
-          IDX2=$(grep -n "due to configuration errors" /tmp/export2.log | cut -d: -f1 | head -1)
-          if [ -n "$IDX2" ]; then
-            sed -n "${IDX2},$((IDX2+16))p" /tmp/export2.log | while IFS= read -r line; do
-              echo "::error title=reason (fallback)::${line}"
-            done
-          fi
-          tail -25 /tmp/export2.log | while IFS= read -r line; do
-            echo "::error title=export2.log::${line}"
-          done
-          grep -nE "ERROR|FAILURE|error:" /tmp/export2.log | head -20 | while IFS= read -r line; do echo "::error title=Android fallback::$line"; done
-          tail -20 /tmp/export2.log || true
-          test -f "$OUT" || { echo "::error::Fallback export produced no APK (exit $CODE)"; exit 1; }
-          echo "::notice::Fallback (prebuilt template) export succeeded."
 
       - name: Upload export diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-export-log
-          path: |
-            /tmp/export.log
-            /tmp/export2.log
+          path: /tmp/export.log
           if-no-files-found: ignore
 
       - name: Publish export diagnostics as an issue comment
@@ -339,14 +303,14 @@ jobs:
             echo
             echo "| step | outcome |"
             echo "|---|---|"
-            echo "| gradle export | ${{ steps.gradle.outcome }} |"
+            echo "| export | ${{ steps.export.outcome }} |"
             echo
             echo '```'
             echo "=== export.log (tail 120) ==="
             tail -120 /tmp/export.log 2>/dev/null || echo "(missing)"
             echo
-            echo "=== export2.log (tail 60) ==="
-            tail -60 /tmp/export2.log 2>/dev/null || echo "(missing)"
+
+            
             echo
             echo "=== APK ==="
             ls -l build/android 2>/dev/null || echo "(none)"
