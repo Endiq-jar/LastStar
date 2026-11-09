@@ -237,7 +237,14 @@ jobs:
             echo "::error title=Godot config::${line}"
           done
           # Also annotate the raw export.log so the reason is always readable.
-          tail -60 /tmp/export.log | while IFS= read -r line; do
+          # The reason lines follow the header; annotate that window + the tail.
+          IDX=$(grep -n "due to configuration errors" /tmp/export.log | cut -d: -f1 | head -1)
+          if [ -n "$IDX" ]; then
+            sed -n "${IDX},$((IDX+16))p" /tmp/export.log | while IFS= read -r line; do
+              echo "::error title=reason::${line}"
+            done
+          fi
+          tail -25 /tmp/export.log | while IFS= read -r line; do
             echo "::error title=export.log::${line}"
           done
           grep -nE "ERROR|FAILURE|What went wrong|Caused by|error:|Exception|BUILD FAILED" /tmp/export.log \
@@ -269,7 +276,13 @@ jobs:
           awk '/due to configuration errors/{f=1;next} /Project export for preset|^---/{f=0} f' /tmp/export2.log | head -20 | while IFS= read -r line; do
             echo "::error title=Godot config (fallback)::${line}"
           done
-          tail -60 /tmp/export2.log | while IFS= read -r line; do
+          IDX2=$(grep -n "due to configuration errors" /tmp/export2.log | cut -d: -f1 | head -1)
+          if [ -n "$IDX2" ]; then
+            sed -n "${IDX2},$((IDX2+16))p" /tmp/export2.log | while IFS= read -r line; do
+              echo "::error title=reason (fallback)::${line}"
+            done
+          fi
+          tail -25 /tmp/export2.log | while IFS= read -r line; do
             echo "::error title=export2.log::${line}"
           done
           grep -nE "ERROR|FAILURE|error:" /tmp/export2.log | head -20 | while IFS= read -r line; do echo "::error title=Android fallback::$line"; done
