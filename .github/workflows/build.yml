@@ -213,6 +213,22 @@ jobs:
           echo "::notice title=Build tools::$(ls ${ANDROID_SDK_ROOT}/build-tools 2>/dev/null | tr '\n' ' ')"
           echo "::notice title=Templates::$(ls /opt/godot-templates 2>/dev/null | grep -c . ) files; android=$(ls /opt/godot-templates 2>/dev/null | grep -ci android)"
 
+      - name: Reproduce Android export validation
+        run: |
+          set -uo pipefail
+          SDK="${ANDROID_SDK_ROOT}"
+          JAVA="${JAVA_HOME:-/usr/lib/jvm/temurin-17-jdk-amd64}"
+          fail=0
+          for check in "$SDK/platform-tools/adb" "$JAVA/bin/java" \
+                       "$SDK/build-tools/34.0.0/apksigner" "$HOME/debug.keystore" \
+                       "/opt/godot-templates/android_debug.apk" "/opt/godot-templates/android_release.apk"; do
+            if [ -e "$check" ]; then echo "::notice title=OK::$check"; else echo "::error title=MISSING::$check"; fail=1; fi
+          done
+          ls "$SDK/ndk" 2>/dev/null || echo "::warning title=NDK::ndk folder missing"
+          [ -d "$HOME/.config/godot" ] && ls "$HOME/.config/godot" | head
+          cat "$HOME/.config/godot/editor_settings-4.3.tres" 2>/dev/null | while IFS= read -r l; do echo "::notice title=settings::$l"; done
+          exit 0
+
       - name: Export APK (gradle build)
         id: gradle
         continue-on-error: true
