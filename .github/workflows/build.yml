@@ -326,6 +326,47 @@ jobs:
             /tmp/export2.log
           if-no-files-found: ignore
 
+      - name: Publish export diagnostics as an issue comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          BODY=/tmp/diag.md
+          {
+            echo "### Android export diagnostics"
+            echo
+            echo "| step | outcome |"
+            echo "|---|---|"
+            echo "| gradle export | ${{ steps.gradle.outcome }} |"
+            echo
+            echo '```'
+            echo "=== export.log (tail 120) ==="
+            tail -120 /tmp/export.log 2>/dev/null || echo "(missing)"
+            echo
+            echo "=== export2.log (tail 60) ==="
+            tail -60 /tmp/export2.log 2>/dev/null || echo "(missing)"
+            echo
+            echo "=== APK ==="
+            ls -l build/android 2>/dev/null || echo "(none)"
+            echo '```'
+            echo
+            echo "_run ${{ github.run_id }} attempt ${{ github.run_attempt }}, commit ${GITHUB_SHA::7}_"
+          } > "$BODY"
+          if [ -z "${GH_REPORT_ISSUE:-}" ]; then
+            NUM=$(gh issue list --state open --search "CI diagnostics in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+            if [ -z "$NUM" ]; then
+              NUM=$(gh issue create --title "CI diagnostics (auto)" --body "Automated log mirror for the Android build. Safe to ignore." 2>/dev/null | grep -oE 'issues/[0-9]+' | grep -oE '[0-9]+' || true)
+            fi
+          else
+            NUM="$GH_REPORT_ISSUE"
+          fi
+          if [ -n "${NUM:-}" ]; then
+            gh issue comment "$NUM" --body-file "$BODY" || echo "::warning::could not comment on issue $NUM"
+          else
+            echo "::warning::no diagnostics issue available"
+          fi
+
       - name: Confirm APK exists
         run: |
           set -euo pipefail
