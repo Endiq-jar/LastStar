@@ -48,8 +48,14 @@ func _ready() -> void:
 	get_tree().root.add_child(world)
 
 	# Let _ready() chains, vegetation (one frame await) and tweens settle.
-	for i in range(30):
+	for i in range(45):
 		await get_tree().process_frame
+
+	# Diagnostic breadcrumbs: these survive the CI annotation cap, so they are
+	# the fastest way to explain a failed probe.
+	_log("INFO", "world is_node_ready=%s children=%d [%s]" % [
+		str(world.is_node_ready()), world.get_child_count(),
+		", ".join(world.get_children().map(func(c): return c.name))])
 	await get_tree().create_timer(0.6).timeout
 	for i in range(15):
 		await get_tree().process_frame

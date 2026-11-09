@@ -141,7 +141,16 @@ jobs:
             exit 0
           fi
           if grep -q "PROBE_RESULT: FAIL" /tmp/probe.log; then
-            tail -40 /tmp/probe.log
+            # The game's own errors during the probe run are the useful part:
+            # they say which script died before it could create the camera.
+            awk '
+              /^(ERROR|SCRIPT ERROR|USER ERROR):|Parse Error:/ { msg = $0; next }
+              /^[[:space:]]+at: / { if (msg != "") { print msg "  <" $0 ">"; msg = "" } next }
+              { if (msg != "") { print msg; msg = "" } }
+            ' /tmp/probe.log | grep -v "dummy/" | head -15 | while IFS= read -r line; do
+              echo "::error title=in-game::$line"
+            done
+            tail -25 /tmp/probe.log
             echo "::error::Render probe FAILED - the 3D view is not drawing (see the render-probe artifact)"
             exit 1
           fi
