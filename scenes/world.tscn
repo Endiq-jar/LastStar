@@ -1,0 +1,29 @@
+[gd_scene load_steps=5 format=3 uid="uid://clstarworld001"]
+
+[ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
+[ext_resource type="Script" path="res://scripts/terrain_generator.gd" id="2_terrain"]
+[ext_resource type="Script" path="res://scripts/vegetation_spawner.gd" id="3_veg"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="4_hud"]
+
+[node name="World" type="Node3D"]
+script = ExtResource("1_world")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.78, -0.42, 0.46, 0, 0.74, 0.67, -0.62, -0.52, 0.58, 0, 90, 0)
+light_color = Color(1, 0.95, 0.84, 1)
+light_energy = 1.55
+light_angular_distance = 0.4
+shadow_enabled = true
+directional_shadow_mode = 1
+directional_shadow_max_distance = 190.0
+
+[node name="Terrain" type="Node3D" parent="."]
+script = ExtResource("2_terrain")
+
+[node name="Vegetation" type="Node3D" parent="."]
+script = ExtResource("3_veg")
+terrain_path = NodePath("../Terrain")
+
+[node name="HUD" parent="." instance=ExtResource("4_hud")]
