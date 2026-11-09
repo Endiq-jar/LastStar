@@ -36,3 +36,6 @@ Thumbs.db
 *.jks
 *_token*
 !.github/workflows/*.yml
+
+# Android build template installed by `godot --install-android-build-template`
+/android/

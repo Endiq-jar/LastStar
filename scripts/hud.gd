@@ -448,8 +448,8 @@ func _cycle_quality() -> void:
 	Game.cycle_quality()
 	_update_quality_label()
 	var world := get_tree().current_scene
-	if world and world.has_method("_apply_quality"):
-		world.call("_apply_quality")
+	if world and world.has_method("apply_quality"):
+		world.call("apply_quality")
 
 
 func _update_quality_label() -> void:

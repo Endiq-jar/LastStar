@@ -1,18 +1,20 @@
 name: Build LastStar
 
-# Builds an installable Android APK on every push, plus Linux/Windows desktop
-# zips. Artifacts are attached to every run; `v*` tags also publish a GitHub
-# Release with everything attached.
+# Native Godot 4.3 pipeline (no web wrapper, no Capacitor):
+#   * verify   – imports the project and boots the main scene headlessly
+#   * android  – exports a real APK with the official export templates and the
+#                Android SDK/NDK, then publishes it to the rolling `latest-apk`
+#                release so there is always one stable download URL
+#   * desktop  – Linux + Windows builds
+#   * release  – attaches everything to `v*` tag releases
 #
-# Optional Android release signing (add as repository secrets):
-#   ANDROID_KEYSTORE_BASE64    base64 -w 0 release.keystore
-#   ANDROID_KEYSTORE_USER      key alias
-#   ANDROID_KEYSTORE_PASSWORD  keystore + key password
-# With no secrets the workflow still succeeds: it produces a signed DEBUG APK.
+# Optional Android release signing secrets:
+#   ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_USER / ANDROID_KEYSTORE_PASSWORD
+# Without them a signed *debug* APK is produced (installs on any phone).
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -22,109 +24,152 @@ permissions:
 
 env:
   GODOT_VERSION: "4.3"
-  GODOT_TEMPLATES_DIR: "4.3.stable"
+  GODOT_VERSION_DIR: "4.3.stable"
+  GODOT_RELEASE: "4.3-stable"
   EXPORT_NAME: "LastStar"
 
 jobs:
   verify:
-    name: Headless boot test
+    name: Import + headless boot
     runs-on: ubuntu-22.04
-    container:
-      image: barichello/godot-ci:4.3
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure templates + editor settings
+      - name: Cache Godot editor
+        uses: actions/cache@v4
+        with:
+          path: /opt/godot
+          key: godot-editor-${{ env.GODOT_RELEASE }}-linux
+
+      - name: Install Godot editor
         run: |
           set -euo pipefail
-          mkdir -p "$HOME/.local/share/godot/export_templates"
-          if [ -d "/root/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}" ]; then
-            mv "/root/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}" \
-               "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}"
+          if [ ! -x /opt/godot/godot ]; then
+            curl -L --retry 3 -o /tmp/godot.zip \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+            mkdir -p /opt/godot
+            unzip -q -o /tmp/godot.zip -d /opt/godot
+            mv /opt/godot/Godot_v${GODOT_RELEASE}_linux.x86_64 /opt/godot/godot
+            chmod +x /opt/godot/godot
           fi
-          mkdir -p "$HOME/.config/godot"
-          if [ -d /root/.config/godot ]; then
-            cp -rn /root/.config/godot/. "$HOME/.config/godot/" || true
-          fi
+          /opt/godot/godot --version
 
-      - name: Boot the world headlessly for 5 seconds
+      - name: Import project + boot main scene headlessly
         run: |
-          set -euo pipefail
-          # Imports every resource, then instantiates the main scene. Runtime
-          # script errors are grepped below, so this catches broken GDScript,
-          # bad shader params and missing resources before we export.
-          set +e
-          timeout 300 godot --headless --verbose --path . --quit-after 300 > /tmp/boot.log 2>&1
-          CODE=$?
-          set -e
+          set -uo pipefail
+          /opt/godot/godot --headless --editor --quit-after 400 > /tmp/import.log 2>&1 || { echo "::error::Project import failed"; tail -60 /tmp/import.log; exit 1; }
+          test -d .godot
+          /opt/godot/godot --headless --path . --quit-after 240 > /tmp/boot.log 2>&1 || true
           tail -40 /tmp/boot.log || true
-          test -d .godot || { echo "::error::Project import failed."; exit 1; }
           if grep -E "SCRIPT ERROR|Parse Error" /tmp/boot.log; then
-            echo "::error::GDScript runtime/parse errors detected during headless boot."
+            echo "::error::GDScript errors detected while booting the world"
             exit 1
           fi
-          echo "Boot exited with $CODE (0 = clean quit; timers on headless often exit 124)."
+          echo "World booted without GDScript errors."
 
   android:
     name: Android APK
-    needs: [verify]
     runs-on: ubuntu-22.04
-    container:
-      image: barichello/godot-ci:4.3
+    timeout-minutes: 60
+    needs: [verify]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Check export templates
-        id: templates
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Godot editor + export templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/godot
+            /opt/godot-templates
+          key: godot-${GODOT_RELEASE}-linux-android
+
+      - name: Install Godot 4.3 + Android export templates
         run: |
           set -euo pipefail
-          DEST="$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}"
-          mkdir -p "$HOME/.local/share/godot/export_templates"
-          if [ -d "$DEST" ] && [ -f "$DEST/android_debug.apk" ]; then
-            echo "Using the templates bundled in the godot-ci image."
-          elif [ -d "/root/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}" ]; then
-            mv "/root/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}" "$DEST"
-            echo "Moved templates from /root."
-          else
-            echo "::warning::No export templates found in the image - downloading official 4.3 templates."
-            curl -L --retry 3 --retry-delay 5 -o /tmp/templates.tpz \
-              "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz"
+          if [ ! -x /opt/godot/godot ]; then
+            curl -L --retry 3 -o /tmp/godot.zip \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+            mkdir -p /opt/godot && unzip -q -o /tmp/godot.zip -d /opt/godot
+            mv /opt/godot/Godot_v${GODOT_RELEASE}_linux.x86_64 /opt/godot/godot
+            chmod +x /opt/godot/godot
+          fi
+          if [ ! -f /opt/godot-templates/android_source.zip ]; then
+            curl -L --retry 3 -o /tmp/templates.tpz \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+            rm -rf /tmp/tpl && mkdir -p /tmp/tpl
             unzip -q /tmp/templates.tpz -d /tmp/tpl
-            mkdir -p "$DEST"
-            mv /tmp/tpl/templates/* "$DEST/"
+            mkdir -p /opt/godot-templates
+            cp -r /tmp/tpl/templates/. /opt/godot-templates/
           fi
-          mkdir -p "$HOME/.config/godot"
-          if [ -d /root/.config/godot ]; then
-            cp -rn /root/.config/godot/. "$HOME/.config/godot/" || true
-          fi
-          ls "$DEST" | head -5
+          ls /opt/godot-templates | head -8
+          /opt/godot/godot --version
 
-      - name: Detect Android signing secrets
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK" -name sdkmanager -type f | head -n1)"
+          fi
+          echo "Using $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-34" "build-tools;34.0.0" \
+            "cmake;3.22.1" "ndk;23.2.8568313" | tail -5
+
+      - name: Configure Godot editor settings (SDK, JDK, debug keystore)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          ln -sfn /opt/godot-templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION_DIR}"
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+            -keystore "$HOME/debug.keystore" -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" -validity 9999
+          mkdir -p "$HOME/.config/godot"
+          SETTINGS="$HOME/.config/godot/editor_settings-4.3.tres"
+          {
+            echo '[gd_resource type="EditorSettings" format=3]'
+            echo '[resource]'
+            echo "export/android/android_sdk_path = \"${ANDROID_SDK_ROOT}\""
+            echo "export/android/java_sdk_path = \"${JAVA_HOME}\""
+            echo "export/android/debug_keystore = \"$HOME/debug.keystore\""
+            echo 'export/android/debug_keystore_user = "androiddebugkey"'
+            echo 'export/android/debug_keystore_pass = "android"'
+            echo 'export/android/shutdown_adb_on_exit = true'
+          } > "$SETTINGS"
+          cat "$SETTINGS"
+
+      - name: Detect release keystore
         id: signing
         env:
           KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          set -euo pipefail
           if [ -n "${KEY_B64:-}" ]; then
             echo "release=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Release keystore detected - building a signed RELEASE APK."
+            echo "::notice::Release keystore found - building a signed release APK."
           else
             echo "release=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No ANDROID_KEYSTORE_BASE64 secret - building a signed DEBUG APK (installable)."
+            echo "::notice::No ANDROID_KEYSTORE_BASE64 secret - building a signed debug APK."
           fi
 
-      - name: Prepare keystore
+      - name: Prepare release keystore
         if: steps.signing.outputs.release == 'true'
         env:
           KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
-          echo "$KEY_B64" | base64 -d > /tmp/laststar.keystore
-          chmod 600 /tmp/laststar.keystore
+          echo "$KEY_B64" | base64 -d > "$HOME/laststar.keystore"
+          chmod 600 "$HOME/laststar.keystore"
           {
-            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=/tmp/laststar.keystore"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$HOME/laststar.keystore"
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=${{ secrets.ANDROID_KEYSTORE_USER }}"
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
           } >> "$GITHUB_ENV"
@@ -132,89 +177,111 @@ jobs:
       - name: Import project
         run: |
           set -euo pipefail
-          timeout 1200 godot --headless --editor --quit-after 600 || true
-          test -d .godot || { echo "::error::Project import failed - .godot was not created."; exit 1; }
+          /opt/godot/godot --headless --editor --quit-after 400
+          test -d .godot
 
       - name: Export APK
         run: |
           set -euo pipefail
           mkdir -p build/android
           OUT="build/android/${EXPORT_NAME}.apk"
-          TEMPLATES="$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}"
-          if [ ! -f "$TEMPLATES/android_source.zip" ]; then
-            echo "::warning::android_source.zip missing from templates - fetching it from the official release."
-            curl -L --retry 3 -o /tmp/templates.tpz \
-              "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz"
-            unzip -q -o /tmp/templates.tpz -d /tmp/tpl2
-            cp /tmp/tpl2/templates/android_source.zip "$TEMPLATES/" || true
-          fi
-          ARGS="--headless --verbose --install-android-build-template"
-          if [ "${{ steps.signing.outputs.release }}" = "true" ]; then
-            godot $ARGS --export-release "Android" "$OUT"
-          else
-            godot $ARGS --export-debug "Android" "$OUT"
-          fi
-          test -f "$OUT" || { echo "::error::No APK produced."; exit 1; }
+          MODE="debug"
+          [ "${{ steps.signing.outputs.release }}" = "true" ] && MODE="release"
+          echo "Exporting $MODE APK"
+          /opt/godot/godot --headless --verbose --install-android-build-template \
+            --export-${MODE} "Android" "$OUT"
+          test -f "$OUT" || { echo "::error::No APK produced"; exit 1; }
           ls -lh build/android
 
-      - name: Upload APK
+      - name: Verify APK
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT}"
+          "$SDK/build-tools/34.0.0/aapt2" dump badging build/android/${EXPORT_NAME}.apk \
+            | grep -E "^(package|application-label|sdkVersion|targetSdkVersion|native-code)" || true
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: LastStar-android
           path: build/android/LastStar.apk
           if-no-files-found: error
 
+      - name: Publish to rolling `latest-apk` release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="latest-apk"
+          NOTES="**LastStar — latest native Android build** (commit \`${GITHUB_SHA::7}\`, $(date -u +%H:%M UTC)).
+
+          Built with **Godot 4.3** and exported as a native APK (arm64-v8a) — this is a
+          real game app, not a web page in a shell.
+
+          **Install:** download \`LastStar.apk\` on your Android phone (Android 7.0+),
+          allow "install unknown apps" for your file manager, open it and play.
+
+          Landscape · offline · touch joystick + buttons, or keyboard/mouse on desktop."
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --title "LastStar — latest Android build" --notes "$NOTES"
+          fi
+          for asset in $(gh release view "$TAG" --json assets --jq '.assets[].name'); do
+            gh release delete-asset "$TAG" "$asset" --yes || true
+          done
+          gh release upload "$TAG" "build/android/${EXPORT_NAME}.apk" --clobber
+          gh release edit "$TAG" --notes "$NOTES"
+
   desktop:
     name: Linux + Windows
     runs-on: ubuntu-22.04
-    container:
-      image: barichello/godot-ci:4.3
+    timeout-minutes: 45
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Check export templates
+      - name: Cache Godot editor + export templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/godot
+            /opt/godot-templates
+          key: godot-${GODOT_RELEASE}-linux-desktop
+
+      - name: Install Godot 4.3 + export templates
         run: |
           set -euo pipefail
-          DEST="$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}"
-          mkdir -p "$HOME/.local/share/godot/export_templates"
-          if [ -d "$DEST" ] && [ -f "$DEST/linux_release.x86_64" ]; then
-            echo "Using the templates bundled in the godot-ci image."
-          elif [ -d "/root/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}" ]; then
-            mv "/root/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}" "$DEST"
-          else
-            echo "::warning::No export templates found in the image - downloading official 4.3 templates."
-            curl -L --retry 3 --retry-delay 5 -o /tmp/templates.tpz \
-              "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz"
+          if [ ! -x /opt/godot/godot ]; then
+            curl -L --retry 3 -o /tmp/godot.zip \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+            mkdir -p /opt/godot && unzip -q -o /tmp/godot.zip -d /opt/godot
+            mv /opt/godot/Godot_v${GODOT_RELEASE}_linux.x86_64 /opt/godot/godot
+            chmod +x /opt/godot/godot
+          fi
+          if [ ! -f /opt/godot-templates/linux_release.x86_64 ]; then
+            curl -L --retry 3 -o /tmp/templates.tpz \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+            rm -rf /tmp/tpl && mkdir -p /tmp/tpl
             unzip -q /tmp/templates.tpz -d /tmp/tpl
-            mkdir -p "$DEST"
-            mv /tmp/tpl/templates/* "$DEST/"
+            mkdir -p /opt/godot-templates
+            cp -r /tmp/tpl/templates/. /opt/godot-templates/
           fi
-          mkdir -p "$HOME/.config/godot"
-          if [ -d /root/.config/godot ]; then
-            cp -rn /root/.config/godot/. "$HOME/.config/godot/" || true
-          fi
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          ln -sfn /opt/godot-templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION_DIR}"
 
       - name: Import project
         run: |
           set -euo pipefail
-          timeout 1200 godot --headless --editor --quit-after 600 || true
-          test -d .godot || { echo "::error::Project import failed - .godot was not created."; exit 1; }
+          /opt/godot/godot --headless --editor --quit-after 400
+          test -d .godot
 
-      - name: Export Linux
+      - name: Export Linux + Windows
         run: |
           set -euo pipefail
-          mkdir -p build/linux
-          godot --headless --verbose --export-release "Linux" "build/linux/${EXPORT_NAME}.x86_64"
+          mkdir -p build/linux build/windows
+          /opt/godot/godot --headless --verbose --export-release "Linux" "build/linux/${EXPORT_NAME}.x86_64"
+          /opt/godot/godot --headless --verbose --export-release "Windows Desktop" "build/windows/${EXPORT_NAME}.exe"
           chmod +x build/linux/${EXPORT_NAME}.x86_64
-          ls -lh build/linux
-
-      - name: Export Windows
-        run: |
-          set -euo pipefail
-          mkdir -p build/windows
-          godot --headless --verbose --export-release "Windows Desktop" "build/windows/${EXPORT_NAME}.exe"
-          ls -lh build/windows
+          ls -lh build/linux build/windows
 
       - name: Upload desktop builds
         uses: actions/upload-artifact@v4
@@ -226,13 +293,12 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Publish release
+    name: Tagged release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [android, desktop]
     runs-on: ubuntu-latest
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: dist
 
@@ -241,10 +307,10 @@ jobs:
         with:
           name: "LastStar ${{ github.ref_name }}"
           body: |
-            Automated build of **LastStar** — an open-world, cel-shaded action-RPG
-            inspired by Genshin Impact, built with Godot 4.3.
+            **LastStar** — an open-world, cel-shaded action-RPG inspired by
+            Genshin Impact, built with Godot 4.3.
 
-            * `LastStar.apk` — Android (arm64-v8a). Install directly on a phone.
+            * `LastStar.apk` — native Android build (arm64-v8a).
             * `linux/` — Linux x86_64 desktop build.
             * `windows/` — Windows x86_64 desktop build.
           files: |

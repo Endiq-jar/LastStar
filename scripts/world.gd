@@ -57,10 +57,10 @@ func _ready() -> void:
 	_spawn_clouds()
 	_add_audio()
 	Game.quest_changed.emit(Game.quest_text)
-	_apply_quality()
+	apply_quality()
 
 
-func _apply_quality() -> void:
+func apply_quality() -> void:
 	## 0 Balanced · 1 Performance · 2 High. Lets the same APK scale from a
 	## budget phone to a flagship without shipping two builds.
 	var tier := Game.quality_tier
@@ -425,7 +425,7 @@ func _spawn_player() -> void:
 	var player := CharacterBody3D.new()
 	player.name = "Player"
 	player.set_script(PlayerScript)
-	var spawn := Vector3(0, _height(0, 0) + 2.0, 6.0)
+	var spawn := Vector3(0, _height(0, 0) + 4.0, 6.0)
 	player.position = spawn
 	add_child(player)
 

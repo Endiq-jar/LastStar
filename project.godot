@@ -106,6 +106,7 @@ toggle_quality={
 [physics]
 
 3d/default_gravity=20.0
+common/physics_ticks_per_second=45
 
 [rendering]
 
