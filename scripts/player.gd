@@ -100,11 +100,20 @@ func _build_camera() -> void:
 	_spring.add_child(_camera)
 
 
+func _visual_node() -> Node3D:
+	return rig.get("visual") as Node3D
+
+
+func _rig_part(key: String) -> Node3D:
+	return rig.get(key) as Node3D
+
+
 func _apply_rig_colors() -> void:
 	# Character switched: rebuild the visual completely so hair/outfit/weapon
 	# match the new party member.
-	if rig.has("visual") and is_instance_valid(rig["visual"]):
-		rig["visual"].queue_free()
+	var old := _visual_node()
+	if old and is_instance_valid(old):
+		old.queue_free()
 	var data: Dictionary = Game.character()
 	rig = CharacterBuilder.build(self, data)
 	element_id = int(data["element_id"])
@@ -249,7 +258,8 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, move.x * speed, accel * delta * speed)
 		velocity.z = move_toward(velocity.z, move.z * speed, accel * delta * speed)
 		var target_face := atan2(-move.x, -move.z)
-		rig["visual"].rotation.y = lerp_angle(rig["visual"].rotation.y, target_face, TURN_SPEED * delta)
+		var vis := _visual_node()
+		vis.rotation.y = lerp_angle(vis.rotation.y, target_face, TURN_SPEED * delta)
 	else:
 		var drag := 20.0 if on_floor else 1.4
 		velocity.x = move_toward(velocity.x, 0.0, drag * delta * speed)
@@ -271,12 +281,12 @@ func _physics_process(delta: float) -> void:
 
 
 func _update_animation(delta: float, speed: float, on_floor: bool, sprinting: bool) -> void:
-	var arm_l: Node3D = rig["arm_l"]
-	var arm_r: Node3D = rig["arm_r"]
-	var leg_l: Node3D = rig["leg_l"]
-	var leg_r: Node3D = rig["leg_r"]
-	var torso: Node3D = rig["torso"]
-	var wings: Node3D = rig["wings"]
+	var arm_l := _rig_part("arm_l")
+	var arm_r := _rig_part("arm_r")
+	var leg_l := _rig_part("leg_l")
+	var leg_r := _rig_part("leg_r")
+	var torso := _rig_part("torso")
+	var wings := _rig_part("wings")
 
 	wings.visible = _gliding
 
@@ -315,11 +325,13 @@ func _update_animation(delta: float, speed: float, on_floor: bool, sprinting: bo
 		leg_r.rotation.x = lerpf(leg_r.rotation.x, 0.0, 9.0 * delta)
 		torso.position.y = lerpf(torso.position.y, breathe * 0.35, 5.0 * delta)
 		torso.rotation.x = lerpf(torso.rotation.x, 0.0, 6.0 * delta)
-		rig["head"].rotation.y = sin(_idle_time * 0.55) * 0.22
+		var head := _rig_part("head")
+		head.rotation.y = sin(_idle_time * 0.55) * 0.22
 		return
 
 	_idle_time = 0.0
-	rig["head"].rotation.y = lerpf(rig["head"].rotation.y, 0.0, 8.0 * delta)
+	var head := _rig_part("head")
+	head.rotation.y = lerpf(head.rotation.y, 0.0, 8.0 * delta)
 	var rate := 10.5 if sprinting else 7.4
 	_anim_phase += delta * rate * clampf(speed / WALK_SPEED, 0.55, 1.6)
 	var amp := 0.85 if sprinting else 0.6
@@ -342,13 +354,13 @@ func _do_attack() -> void:
 	_combo_reset = 1.1
 
 	var data: Dictionary = Game.character()
-	var power := float(data["attack"]) * (1.25 if _attack_combo == 2 else 1.0)
-	var forward := -rig["visual"].global_transform.basis.z
-	var hit_center := global_position + forward * 1.45 + Vector3(0, 0.95, 0)
+	var power: float = float(data["attack"]) * (1.25 if _attack_combo == 2 else 1.0)
+	var forward: Vector3 = -_visual_node().global_transform.basis.z
+	var hit_center: Vector3 = global_position + forward * 1.45 + Vector3(0, 0.95, 0)
 
 	FX.slash(get_parent(), hit_center, forward, Game.character()["color"], _attack_combo)
 
-	var arm: Node3D = rig["arm_r"]
+	var arm := _rig_part("arm_r")
 	arm.rotation.x = -2.3
 	var tw := create_tween()
 	tw.tween_property(arm, "rotation:x", 0.4, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -371,8 +383,8 @@ func _do_skill() -> void:
 	var data: Dictionary = Game.character()
 	_skill_cd = float(data["skill_cd"])
 	_attack_cd = maxf(_attack_cd, 0.3)
-	var forward := -rig["visual"].global_transform.basis.z
-	var pos := global_position + forward * 2.0 + Vector3(0, 0.8, 0)
+	var forward: Vector3 = -_visual_node().global_transform.basis.z
+	var pos: Vector3 = global_position + forward * 2.0 + Vector3(0, 0.8, 0)
 
 	FX.element_burst(get_parent(), pos, Game.character()["color"], int(data["element_id"]))
 	Game.add_energy(12.0)
@@ -386,7 +398,7 @@ func _do_skill() -> void:
 		if d < 5.2 and enemy.has_method("take_hit"):
 			enemy.take_hit(float(data["attack"]) * 2.4, element_id, forward)
 
-	var r: Node3D = rig["arm_l"]
+	var r := _rig_part("arm_l")
 	r.rotation.x = -2.6
 	var tw := create_tween()
 	tw.tween_property(r, "rotation:x", 0.2, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -394,7 +406,7 @@ func _do_skill() -> void:
 
 func _do_burst() -> void:
 	var data: Dictionary = Game.character()
-	var cost := float(data["burst_cost"])
+	var cost: float = float(data["burst_cost"])
 	if not Game.spend_energy(cost) or Game.is_paused:
 		return
 	var pos := global_position + Vector3(0, 1.0, 0)
@@ -434,11 +446,11 @@ func get_camera_yaw() -> float:
 
 
 func get_forward() -> Vector3:
-	return -rig["visual"].global_transform.basis.z
+	return -_visual_node().global_transform.basis.z
 
 
 func skill_ready_ratio() -> float:
-	var cd := float(Game.character()["skill_cd"])
+	var cd: float = float(Game.character()["skill_cd"])
 	return 1.0 - clampf(_skill_cd / maxf(cd, 0.01), 0.0, 1.0)
 
 
