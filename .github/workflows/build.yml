@@ -21,7 +21,6 @@ on:
 
 permissions:
   contents: write
-  issues: write
 
 env:
   GODOT_VERSION: "4.3"
@@ -196,49 +195,37 @@ jobs:
           /opt/godot/godot --headless --editor --quit-after 400
           test -d .godot
 
-      - name: Environment diagnostics
-        run: |
-          set -uo pipefail
-          echo "::group::toolchain"
-          java -version 2>&1 | head -2
-          echo "JAVA_HOME=${JAVA_HOME:-unset}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
-          echo "::endgroup::"
-          echo "::group::android sdk"
-          ls "${ANDROID_SDK_ROOT}" 2>/dev/null || true
-          ls "${ANDROID_SDK_ROOT}/platform-tools/adb" 2>/dev/null || echo "NO ADB"
-          ls "${ANDROID_SDK_ROOT}/build-tools" 2>/dev/null || echo "NO BUILD TOOLS"
-          ls "${ANDROID_SDK_ROOT}/ndk" 2>/dev/null || echo "NO NDK"
-          echo "::endgroup::"
-          echo "::group::godot templates"
-          ls /opt/godot-templates | grep -iE "android|linux|version" || echo "NO ANDROID TEMPLATES"
-          echo "::endgroup::"
-          echo "::group::editor settings"
-          cat "$HOME/.config/godot/editor_settings-4.3.tres" 2>/dev/null || echo "NO SETTINGS FILE"
-          echo "::endgroup::"
-          echo "::group::preset"
-          sed -n '/\[preset.0/,/permissions/p' export_presets.cfg
-          echo "::endgroup::"
-          # Annotate key facts so they're readable without raw logs.
-          echo "::notice title=Java::$(java -version 2>&1 | head -1)"
-          echo "::notice title=Build tools::$(ls ${ANDROID_SDK_ROOT}/build-tools 2>/dev/null | tr '\n' ' ')"
-          echo "::notice title=Templates::$(ls /opt/godot-templates 2>/dev/null | grep -c . ) files; android=$(ls /opt/godot-templates 2>/dev/null | grep -ci android)"
-
-      - name: Reproduce Android export validation
+      - name: Sanity check the Android toolchain
         run: |
           set -uo pipefail
           SDK="${ANDROID_SDK_ROOT}"
           JAVA="${JAVA_HOME:-/usr/lib/jvm/temurin-17-jdk-amd64}"
-          fail=0
+          echo "::group::toolchain"
+          java -version 2>&1 | head -2
+          echo "JAVA_HOME=$JAVA"
+          echo "ANDROID_SDK_ROOT=$SDK"
+          echo "::endgroup::"
+          echo "::group::godot templates"
+          ls /opt/godot-templates | grep -iE "android|version"
+          echo "::endgroup::"
+          echo "::group::editor settings"
+          cat "$HOME/.config/godot/editor_settings-4.3.tres"
+          echo "::endgroup::"
+
+          # Everything Godot's has_valid_export_configuration() insists on.
           for check in "$SDK/platform-tools/adb" "$JAVA/bin/java" \
                        "$SDK/build-tools/34.0.0/apksigner" "$HOME/debug.keystore" \
                        "/opt/godot-templates/android_debug.apk" "/opt/godot-templates/android_release.apk"; do
-            if [ -e "$check" ]; then echo "::notice title=OK::$check"; else echo "::error title=MISSING::$check"; fail=1; fi
+            if [ -e "$check" ]; then
+              echo "::notice title=OK::$check"
+            else
+              echo "::error title=MISSING::$check"
+              exit 1
+            fi
           done
-          ls "$SDK/ndk" 2>/dev/null || echo "::warning title=NDK::ndk folder missing"
-          [ -d "$HOME/.config/godot" ] && ls "$HOME/.config/godot" | head
-          cat "$HOME/.config/godot/editor_settings-4.3.tres" 2>/dev/null | while IFS= read -r l; do echo "::notice title=settings::$l"; done
-          exit 0
+          grep -q "import_etc2_astc=true" project.godot \
+            || { echo "::error::project.godot must enable import_etc2_astc"; exit 1; }
+          echo "::notice::Android toolchain is complete."
 
       - name: Export APK
         id: export
@@ -255,8 +242,8 @@ jobs:
           CODE=$?
           set -e
 
-          # Surface the interesting parts of the log as annotations (job logs are
-          # not always reachable, annotations and the issue mirror are).
+          # Godot aborts export when the preset or the editor settings are
+          # incomplete; print the reasons it lists after that header.
           IDX=$(grep -n "due to configuration errors" /tmp/export.log | cut -d: -f1 | head -1 || true)
           if [ -n "${IDX:-}" ]; then
             sed -n "${IDX},$((IDX+16))p" /tmp/export.log | while IFS= read -r line; do
@@ -265,21 +252,20 @@ jobs:
           fi
           grep -nE "BUILD FAILED|What went wrong|Could not|FAILURE:" /tmp/export.log | head -12 \
             | while IFS= read -r line; do echo "::error title=gradle::${line}"; done || true
-          tail -15 /tmp/export.log | while IFS= read -r line; do echo "::warning title=log::${line}"; done || true
 
           echo "godot exit code: $CODE"
           if [ -f "$OUT" ]; then
             SIZE=$(stat -c %s "$OUT")
-            echo "::notice title=APK::$(du -h "$OUT" | cut -f1) (${SIZE} bytes)"
             if [ "$SIZE" -lt 1000000 ]; then
               echo "::error::APK is suspiciously small (${SIZE} bytes)"
               exit 1
             fi
-            # Godot 4.3 sometimes returns non-zero after a successful export, so
+            # Godot 4.3 can return non-zero after a fully successful export, so
             # trust the artifact rather than the exit code.
-            echo "export produced a valid APK (godot exit $CODE)"
+            echo "::notice title=APK::$(du -h "$OUT" | cut -f1) (${SIZE} bytes), godot exit $CODE"
             exit 0
           fi
+          tail -40 /tmp/export.log
           echo "::error::Export failed with no APK (godot exit $CODE)"
           exit 1
 
@@ -290,47 +276,6 @@ jobs:
           name: android-export-log
           path: /tmp/export.log
           if-no-files-found: ignore
-
-      - name: Publish export diagnostics as an issue comment
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -uo pipefail
-          BODY=/tmp/diag.md
-          {
-            echo "### Android export diagnostics"
-            echo
-            echo "| step | outcome |"
-            echo "|---|---|"
-            echo "| export | ${{ steps.export.outcome }} |"
-            echo
-            echo '```'
-            echo "=== export.log (tail 120) ==="
-            tail -120 /tmp/export.log 2>/dev/null || echo "(missing)"
-            echo
-
-            
-            echo
-            echo "=== APK ==="
-            ls -l build/android 2>/dev/null || echo "(none)"
-            echo '```'
-            echo
-            echo "_run ${{ github.run_id }} attempt ${{ github.run_attempt }}, commit ${GITHUB_SHA::7}_"
-          } > "$BODY"
-          if [ -z "${GH_REPORT_ISSUE:-}" ]; then
-            NUM=$(gh issue list --state open --search "CI diagnostics in:title" --json number --jq '.[0].number' 2>/dev/null || true)
-            if [ -z "$NUM" ]; then
-              NUM=$(gh issue create --title "CI diagnostics (auto)" --body "Automated log mirror for the Android build. Safe to ignore." 2>/dev/null | grep -oE 'issues/[0-9]+' | grep -oE '[0-9]+' || true)
-            fi
-          else
-            NUM="$GH_REPORT_ISSUE"
-          fi
-          if [ -n "${NUM:-}" ]; then
-            gh issue comment "$NUM" --body-file "$BODY" || echo "::warning::could not comment on issue $NUM"
-          else
-            echo "::warning::no diagnostics issue available"
-          fi
 
       - name: Confirm APK exists
         run: |

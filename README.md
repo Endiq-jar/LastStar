@@ -52,14 +52,24 @@ produces an installable APK on every push.
 
 ## 📱 Install the app (Android)
 
-Every push to `main` builds a fresh APK in the **Actions** tab:
+**One-click download — always the newest build:**
 
-1. Open **Actions → Build LastStar → latest run**.
-2. Download the **`LastStar-android`** artifact.
-3. On your phone, allow "install unknown apps" for your file manager and open `LastStar.apk`.
+## ⬇️ [**Download LastStar.apk**](https://github.com/Endiq-jar/LastStar/releases/download/latest-apk/LastStar.apk)
 
-Tagged builds (`git tag v1.0.0 && git push --tags`) additionally publish a **GitHub Release**
-with the APK, a Linux build and a Windows build attached.
+Every push to the repository builds a fresh APK and re-uploads it to the rolling
+[`latest-apk`](https://github.com/Endiq-jar/LastStar/releases/tag/latest-apk) release, so that
+URL never goes stale. To install:
+
+1. Open the link above on an Android phone (Android 7.0 or newer).
+2. Allow "install unknown apps" for your browser / file manager when prompted.
+3. Open `LastStar.apk` and install, then launch **LastStar**. It runs fully offline.
+
+You can also grab the **`LastStar-android`** artifact from the **Actions** tab, or
+tagged builds (`git tag v1.0.0 && git push --tags`) publish a **GitHub Release** with the
+APK, a Linux build and a Windows build attached.
+
+**Requirements:** arm64-v8a device, Android 7.0+ (API 24), ~25 MB download. Renderer: Mobile
+(Vulkan), landscape, touch joystick + action buttons.
 
 ### Release signing (optional)
 
