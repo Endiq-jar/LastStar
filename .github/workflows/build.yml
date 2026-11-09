@@ -185,16 +185,58 @@ jobs:
           /opt/godot/godot --headless --editor --quit-after 400
           test -d .godot
 
-      - name: Export APK
+      - name: Export APK (gradle build)
+        id: gradle
+        continue-on-error: true
         run: |
-          set -euo pipefail
+          set -uo pipefail
           mkdir -p build/android
           OUT="build/android/${EXPORT_NAME}.apk"
           MODE="debug"
           [ "${{ steps.signing.outputs.release }}" = "true" ] && MODE="release"
-          echo "Exporting $MODE APK"
+          echo "Exporting $MODE APK (gradle)"
+          set +e
           /opt/godot/godot --headless --verbose --install-android-build-template \
-            --export-${MODE} "Android" "$OUT"
+            --export-${MODE} "Android" "$OUT" > /tmp/export.log 2>&1
+          CODE=$?
+          set -e
+          # Job logs live on storage we may not be able to read from outside,
+          # so echo the interesting lines as annotations directly.
+          grep -nE "ERROR|FAILURE|What went wrong|Caused by|error:|not found|Exception|BUILD FAILED" /tmp/export.log \
+            | head -20 | while IFS= read -r line; do echo "::error title=Android export::$line"; done
+          tail -30 /tmp/export.log || true
+          if [ -f "$OUT" ] && [ "$CODE" -eq 0 ]; then
+            echo "gradle-export ok"
+            exit 0
+          fi
+          echo "::warning::Gradle-based Android export failed (exit $CODE)."
+          exit 1
+
+      - name: Export APK (prebuilt template fallback)
+        if: steps.gradle.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          # Gradle needs a full SDK/NDK toolchain. If that path is unhappy on
+          # the runner we still ship an APK by exporting into the prebuilt
+          # android_debug.apk template that comes with export_templates.tpz.
+          sed -i 's|^gradle_build/use_gradle_build=true|gradle_build/use_gradle_build=false|' export_presets.cfg
+          grep -n "use_gradle_build" export_presets.cfg
+          OUT="build/android/${EXPORT_NAME}.apk"
+          MODE="debug"
+          [ "${{ steps.signing.outputs.release }}" = "true" ] && MODE="release"
+          set +e
+          /opt/godot/godot --headless --verbose --export-${MODE} "Android" "$OUT" > /tmp/export2.log 2>&1
+          CODE=$?
+          set -e
+          grep -nE "ERROR|FAILURE|error:" /tmp/export2.log | head -20 | while IFS= read -r line; do echo "::error title=Android fallback::$line"; done
+          tail -30 /tmp/export2.log || true
+          test -f "$OUT" || { echo "::error::Fallback export produced no APK (exit $CODE)"; exit 1; }
+          echo "::notice::Fallback (prebuilt template) export succeeded."
+
+      - name: Confirm APK exists
+        run: |
+          set -euo pipefail
+          OUT="build/android/${EXPORT_NAME}.apk"
           test -f "$OUT" || { echo "::error::No APK produced"; exit 1; }
           ls -lh build/android
 
