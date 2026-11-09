@@ -185,6 +185,34 @@ jobs:
           /opt/godot/godot --headless --editor --quit-after 400
           test -d .godot
 
+      - name: Environment diagnostics
+        run: |
+          set -uo pipefail
+          echo "::group::toolchain"
+          java -version 2>&1 | head -2
+          echo "JAVA_HOME=${JAVA_HOME:-unset}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+          echo "::endgroup::"
+          echo "::group::android sdk"
+          ls "${ANDROID_SDK_ROOT}" 2>/dev/null || true
+          ls "${ANDROID_SDK_ROOT}/platform-tools/adb" 2>/dev/null || echo "NO ADB"
+          ls "${ANDROID_SDK_ROOT}/build-tools" 2>/dev/null || echo "NO BUILD TOOLS"
+          ls "${ANDROID_SDK_ROOT}/ndk" 2>/dev/null || echo "NO NDK"
+          echo "::endgroup::"
+          echo "::group::godot templates"
+          ls /opt/godot-templates | grep -iE "android|linux|version" || echo "NO ANDROID TEMPLATES"
+          echo "::endgroup::"
+          echo "::group::editor settings"
+          cat "$HOME/.config/godot/editor_settings-4.3.tres" 2>/dev/null || echo "NO SETTINGS FILE"
+          echo "::endgroup::"
+          echo "::group::preset"
+          sed -n '/\[preset.0/,/permissions/p' export_presets.cfg
+          echo "::endgroup::"
+          # Annotate key facts so they're readable without raw logs.
+          echo "::notice title=Java::$(java -version 2>&1 | head -1)"
+          echo "::notice title=Build tools::$(ls ${ANDROID_SDK_ROOT}/build-tools 2>/dev/null | tr '\n' ' ')"
+          echo "::notice title=Templates::$(ls /opt/godot-templates 2>/dev/null | grep -c . ) files; android=$(ls /opt/godot-templates 2>/dev/null | grep -ci android)"
+
       - name: Export APK (gradle build)
         id: gradle
         continue-on-error: true
@@ -204,7 +232,9 @@ jobs:
           # so echo the interesting lines as annotations directly.
           # Print the full "configuration errors" block (Godot lists each
           # problem on its own line right after the header).
-          grep -nA12 "due to configuration errors" /tmp/export.log || true
+          grep -A12 "due to configuration errors" /tmp/export.log | head -14 | while IFS= read -r line; do
+            [ -n "$line" ] && echo "::error title=Godot config:: $line"
+          done
           grep -nE "ERROR|FAILURE|What went wrong|Caused by|error:|Exception|BUILD FAILED" /tmp/export.log \
             | head -20 | while IFS= read -r line; do echo "::warning title=Android export::$line"; done
           tail -20 /tmp/export.log || true
@@ -231,7 +261,9 @@ jobs:
           /opt/godot/godot --headless --verbose --export-${MODE} "Android" "$OUT" > /tmp/export2.log 2>&1
           CODE=$?
           set -e
-          grep -nA12 "due to configuration errors" /tmp/export2.log || true
+          grep -A12 "due to configuration errors" /tmp/export2.log | head -14 | while IFS= read -r line; do
+            [ -n "$line" ] && echo "::error title=Godot config (fallback):: $line"
+          done
           grep -nE "ERROR|FAILURE|error:" /tmp/export2.log | head -20 | while IFS= read -r line; do echo "::error title=Android fallback::$line"; done
           tail -20 /tmp/export2.log || true
           test -f "$OUT" || { echo "::error::Fallback export produced no APK (exit $CODE)"; exit 1; }
