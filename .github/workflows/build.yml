@@ -97,28 +97,29 @@ jobs:
 
       - name: Wire up the image toolchain
         run: |
-          set -uo pipefail
-          echo "user=$(id -un) home=$HOME"
+          set +e
           mkdir -p "$HOME/.local/share/godot/export_templates" "$HOME/.config/godot"
-          if [ -d "/root/.local/share/godot/export_templates/4.3.stable" ] \
-             && [ "$HOME/.local/share/godot/export_templates/4.3.stable" != "/root/.local/share/godot/export_templates/4.3.stable" ]; then
-            cp -a "/root/.local/share/godot/export_templates/4.3.stable" "$HOME/.local/share/godot/export_templates/" || true
-          fi
-          if [ -f /root/.config/godot/editor_settings-4.3.tres ] \
-             && [ ! -s "$HOME/.config/godot/editor_settings-4.3.tres" ]; then
-            cp -a /root/.config/godot/editor_settings-4.3.tres "$HOME/.config/godot/" || true
-          fi
-          echo "--- templates ---"
-          ls "$HOME/.local/share/godot/export_templates/4.3.stable" 2>/dev/null | grep -i android || echo "::error::android templates missing"
-          echo "--- editor settings ---"
-          cat "$HOME/.config/godot/editor_settings-4.3.tres" 2>/dev/null || echo "::error::editor settings missing"
-          echo "--- env ---"
-          echo "ANDROID_HOME=${ANDROID_HOME:-unset} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset} JAVA_HOME=${JAVA_HOME:-unset}"
-          echo "--- versions ---"
-          godot --version || true
-          java -version 2>&1 | head -1 || true
-          ls "${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}/build-tools" 2>/dev/null || true
-          ls "${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}/platforms" 2>/dev/null || true
+          # godot-ci keeps templates and editor settings under /root; the job runs
+          # as a different user, so copy them into $HOME where Godot looks.
+          cp -a /root/.local/share/godot/export_templates/4.3.stable \
+                "$HOME/.local/share/godot/export_templates/" >> /tmp/wire.log 2>&1
+          cp -a /root/.config/godot/editor_settings-4.3.tres \
+                "$HOME/.config/godot/" >> /tmp/wire.log 2>&1
+          {
+            echo "user=$(id -un) HOME=$HOME PWD=$PWD"
+            echo "--templates--"; ls "$HOME/.local/share/godot/export_templates/4.3.stable" 2>&1 | head -20
+            echo "--settings--";  cat "$HOME/.config/godot/editor_settings-4.3.tres" 2>&1 | head -40
+            echo "--env--";       echo "ANDROID_HOME=${ANDROID_HOME:-unset} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset} JAVA_HOME=${JAVA_HOME:-unset}"
+            echo "--godot--";     godot --version 2>&1 | head -3
+            echo "--java--";      java -version 2>&1 | head -2
+            echo "--sdk--";       ls "${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}" 2>&1 | head -20
+            echo "--build-tools--"; ls "${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}/build-tools" 2>&1 | head
+          } >> /tmp/wire.log 2>&1
+          tail -70 /tmp/wire.log | while IFS= read -r line; do
+            echo "::warning title=wire::${line}"
+          done
+          test -s "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk" \
+            || { echo "::error::android_debug.apk export template not found"; exit 1; }
 
       - name: Detect release keystore
         id: signing
