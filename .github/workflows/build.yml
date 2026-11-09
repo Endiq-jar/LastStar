@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 env:
   GODOT_VERSION: "4.3"
