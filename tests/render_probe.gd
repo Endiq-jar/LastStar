@@ -140,11 +140,13 @@ func _run() -> void:
 	# Direct physics query, independent of the player: if this misses too, the
 	# problem is the space/raycast, not the player script.
 	if tbody != null:
-		var sp := world.get_world_3d().direct_space_state
-		if sp:
+		# Explicit types: direct_space_state/intersect_ray resolve lazily and
+		# `:=` cannot infer them (a parse error that only shows at runtime).
+		var sp: PhysicsDirectSpaceState3D = world.get_world_3d().direct_space_state
+		if sp != null:
 			var q := PhysicsRayQueryParameters3D.create(
 				Vector3(0.0, 200.0, 6.0), Vector3(0.0, -200.0, 6.0), 0xFFFFFFFF)
-			var h := sp.intersect_ray(q)
+			var h: Dictionary = sp.intersect_ray(q)
 			_log("INFO" if not h.is_empty() else "FAIL",
 				"probe raycast from y=200 hit=%s" % (
 					str(h.get("position")) if not h.is_empty() else "NOTHING"))

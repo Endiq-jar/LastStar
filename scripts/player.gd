@@ -164,7 +164,9 @@ func _snap_to_ground(at: Vector3) -> void:
 	if not is_inside_tree() or get_world_3d() == null:
 		return
 	velocity = Vector3.ZERO
-	var space := get_world_3d().direct_space_state
+	# Explicit type: direct_space_state resolves lazily, so `:=` fails to infer
+	# it - a runtime parse error that would break ground snapping entirely.
+	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
 	if space != null:
 		var from := Vector3(at.x, at.y + 120.0, at.z)
 		var to := Vector3(at.x, at.y - 120.0, at.z)
