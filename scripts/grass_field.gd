@@ -155,6 +155,7 @@ func _build_chunk(key: Vector2i) -> void:
 	elif dist <= 3.0:
 		count = BLADES_MID
 
+	print("GRASS_TIER key=%s center=%s dist=%.2f count=%d" % [key, center, dist, count])
 	var rng := RandomNumberGenerator.new()
 	# Deterministic per chunk: the meadow looks the same every time you return.
 	rng.seed = hash(Vector2i(key.x * 73856093, key.y * 19349663))
