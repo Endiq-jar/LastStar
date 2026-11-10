@@ -117,36 +117,30 @@ jobs:
           fi
           echo "World booted cleanly."
 
-      - name: Compile every script (including test scenes)
+      - name: Compile check scene (every script, autoloads live)
         # Booting the world headlessly only compiles the scripts the world
-        # reaches. A type error in tests/render_probe.gd therefore used to sail
-        # through this job and only fail in the probe step, as a wall of
-        # "Parse Error" lines with no PROBE_RESULT - a full CI cycle for a
-        # one-line mistake. tools/compile_check.gd loads and instantiates every
-        # script in scripts/ and tests/, which forces the engine to compile it.
+        # reaches. A compile error in tests/render_probe.gd therefore used to
+        # pass this job and only fail in the probe step, which then reported
+        # "no PROBE_RESULT" - the symptom, not the cause. That cost a full CI
+        # cycle for one bad property name.
+        #
+        # The check scene loads and instantiates every script in scripts/ and
+        # tests/ from inside the running game, so autoloads (`Game`) exist and
+        # the engine's own "Parse Error" / "SCRIPT ERROR" output is the verdict.
         run: |
           set -uo pipefail
-          # `timeout` is not optional here. A SceneTree script that fails to
-          # reach quit() - for instance because a loaded script hangs in
-          # _init() - leaves the editor running forever, and this step has no
-          # other bound: the job would sit until the six-hour limit.
-          timeout -k 10 180 /opt/godot/godot --headless --path . \
-            --script res://tools/compile_check.gd > /tmp/compile.log 2>&1 \
-            || echo "::warning::compile check exited early (rc=$?), see log"
-          tail -5 /tmp/compile.log || true
-          grep -E "COMPILE_(FAIL|ERROR)|COMPILED:" /tmp/compile.log || true
-          # The engine's own diagnostics are the authority: a GDScript that
-          # fails to compile prints "Parse Error" or "SCRIPT ERROR" while being
-          # loaded, whether or not load() also returns null for it.
-          if grep -qE "COMPILE_FAIL|COMPILE_ERROR|Parse Error|SCRIPT ERROR" /tmp/compile.log; then
-            grep -E "COMPILE_FAIL|COMPILE_ERROR|Parse Error|SCRIPT ERROR" /tmp/compile.log | head -20 \
+          timeout -k 10 240 /opt/godot/godot --headless --path . \
+            res://tests/compile_check.tscn > /tmp/compile.log 2>&1 || true
+          grep -E "^COMPILE_" /tmp/compile.log | tail -40 || true
+          if grep -qE "^COMPILE_FAIL|^SCRIPT ERROR: Parse Error|^SCRIPT ERROR: Compile Error" /tmp/compile.log; then
+            grep -E "^COMPILE_FAIL|^SCRIPT ERROR: (Parse|Compile) Error" /tmp/compile.log | head -20 \
               | while IFS= read -r line; do echo "::error title=Compile::$line"; done
             echo "::error::one or more scripts failed to compile"
             exit 1
           fi
-          grep -qE "COMPILED: [0-9]+ scripts, 0 failed|COMPILED: 0 errors" /tmp/compile.log \
-            || { echo "::error::compile check did not report a result"; tail -20 /tmp/compile.log; exit 1; }
-          grep -E "COMPILED:" /tmp/compile.log
+          grep -qE "^COMPILE_OK: [0-9]+ scripts" /tmp/compile.log \
+            || { echo "::error::compile check did not report a result"; tail -25 /tmp/compile.log; exit 1; }
+          grep -E "^COMPILE_OK:" /tmp/compile.log
 
       - name: Structural probe (headless, no GPU required)
         # The terrain winding bug produced a mesh with vertices, a collision
