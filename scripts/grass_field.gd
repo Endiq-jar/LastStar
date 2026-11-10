@@ -191,6 +191,7 @@ func _build_chunk(key: Vector2i) -> void:
 		multimesh.set_instance_transform(i, made[i])
 
 	var mmi := MultiMeshInstance3D.new()
+	print("GRASS_CHUNK d=%d count=%d" % [int(dist), made.size()])
 	mmi.name = "Grass_%d_%d" % [key.x, key.y]
 	mmi.multimesh = multimesh
 	if _material != null:

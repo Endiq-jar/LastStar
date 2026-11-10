@@ -152,6 +152,18 @@ func _run() -> void:
 		var chunks: int = grass.call("chunk_count")
 		_log("INFO" if blades > 500 and chunks > 4 else "FAIL",
 			"grass: %d blades across %d chunks near the player" % [blades, chunks])
+		# Per-chunk breakdown: how many chunks actually produced instances.
+		var populated := 0
+		var nearest := 0
+		for child in grass.get_children():
+			var mmi := child as MultiMeshInstance3D
+			if mmi == null or mmi.multimesh == null:
+				continue
+			if mmi.multimesh.instance_count > 0:
+				populated += 1
+			nearest = maxi(nearest, mmi.multimesh.instance_count)
+		_log("INFO", "grass chunks populated=%d/%d, largest=%d" % [
+			populated, chunks, nearest])
 
 	# --- spellbook / spell wheel -------------------------------------------
 	var w: Wander = Game.wander
