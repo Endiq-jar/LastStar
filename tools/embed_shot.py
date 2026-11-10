@@ -23,12 +23,17 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001 - report and carry on
         print("SHOT_ERROR: %s" % exc)
         return 0
-    im.thumbnail((360, 360))
+    im.thumbnail((420, 420))
     buf = io.BytesIO()
-    im.save(buf, "JPEG", quality=58)
+    im.save(buf, "JPEG", quality=62)
     raw = buf.getvalue()
     print("SHOT_SIZE: %dx%d %d bytes jpeg" % (im.width, im.height, len(raw)))
-    print("SHOT_B64:" + base64.b64encode(raw).decode())
+    # Annotations are truncated hard (~1000 chars), so emit the payload in
+    # short numbered chunks that can be concatenated back together.
+    payload = base64.b64encode(raw).decode()
+    chunk = 600
+    for i in range(0, len(payload), chunk):
+        print("SHOT_PART:%03d:%s" % (i // chunk, payload[i:i + chunk]))
     return 0
 
 

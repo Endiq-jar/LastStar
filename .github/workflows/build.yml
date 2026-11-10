@@ -226,6 +226,7 @@ jobs:
           # Pillow is only needed to re-encode the frame for the log.
           python3 -m pip install --quiet --disable-pip-version-check pillow 2>/dev/null || \
             sudo apt-get install -y -qq python3-pil 2>/dev/null || true
+          echo "::notice::SHOT_BEGIN"
           for SHOT in /tmp/probe/world.png /tmp/probe/world_alt.png; do
             if [ -f "$SHOT" ]; then
               python3 tools/embed_shot.py "$SHOT" | \
@@ -234,6 +235,7 @@ jobs:
               echo "::notice::no screenshot at $SHOT"
             fi
           done
+          echo "::notice::SHOT_END"
 
       - name: Upload render screenshots
         if: always()
