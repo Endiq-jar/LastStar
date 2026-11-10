@@ -584,6 +584,33 @@ jobs:
           /opt/godot/godot --headless --verbose --export-release "Windows Desktop 32" "build/windows32/${EXPORT_NAME}.exe"
           chmod +x build/linux/${EXPORT_NAME}.x86_64
           ls -lh build/linux build/windows build/windows32
+          # Prove both architectures really shipped instead of trusting the
+          # preset names - inspects the PE header machine field.
+          python3 tools/verify_exports.py
+          # Fail loudly if any export produced nothing rather than shipping a
+          # silently empty artifact.
+          for f in "build/linux/${EXPORT_NAME}.x86_64" \
+                   "build/windows/${EXPORT_NAME}.exe" \
+                   "build/windows32/${EXPORT_NAME}.exe"; do
+            test -s "$f" || { echo "::error::missing or empty export: $f"; exit 1; }
+          done
+          # Prove the architectures really differ instead of trusting the preset.
+          python3 - <<'EOF'
+          import struct
+          for label, path in (("x64", "build/windows/LastStar.exe"),
+                              ("x32", "build/windows32/LastStar.exe")):
+              with open(path, "rb") as fh:
+                  head = fh.read(0x200)
+              off = struct.unpack_from("<I", head, 0x3C)[0]
+              with open(path, "rb") as fh:
+                  fh.seek(off)
+                  pe = fh.read(6)
+              machine = struct.unpack_from("<H", pe, 4)[0]
+              arch = {0x8664: "x86_64", 0x14c: "i386"}.get(machine, hex(machine))
+              print("%s %s -> PE machine %s (%s)" % (label, path, hex(machine), arch))
+              expected = "x86_64" if label == "x64" else "i386"
+              assert arch == expected, "%s export is %s, wanted %s" % (path, arch, expected)
+          EOF
 
       - name: Upload desktop builds
         uses: actions/upload-artifact@v5
