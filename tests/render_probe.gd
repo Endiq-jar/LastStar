@@ -98,6 +98,20 @@ func _run() -> void:
 		_log("INFO", "terrain body layer=%d shapes=%d face_verts=%d" % [
 			tbody.collision_layer, tbody.get_child_count(), faces])
 
+	# Direct physics query, independent of the player: if this misses too, the
+	# problem is the space/raycast, not the player script.
+	if tbody != null:
+		var sp := world.get_world_3d().direct_space_state
+		if sp:
+			var q := PhysicsRayQueryParameters3D.create(
+				Vector3(0.0, 200.0, 6.0), Vector3(0.0, -200.0, 6.0), 0xFFFFFFFF)
+			var h := sp.intersect_ray(q)
+			_log("INFO" if not h.is_empty() else "FAIL",
+				"probe raycast from y=200 hit=%s" % (
+					str(h.get("position")) if not h.is_empty() else "NOTHING"))
+		else:
+			_log("FAIL", "no direct_space_state")
+
 	# The player must be standing on the ground, not falling through the world.
 	if players.size() > 0:
 		var pl := players[0] as Node3D
