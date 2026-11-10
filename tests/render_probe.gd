@@ -107,14 +107,14 @@ func _run() -> void:
 	# preload cycles) and names the offending file instead of leaving us with
 	# "Failed to load hud.gd".
 	var script_failures := PackedStringArray()
-	var checked := 0
+	var compiled := 0
 	for dir_path in ["res://scripts", "res://tests"]:
 		for f in _gd_files(dir_path):
-			checked += 1
+			compiled += 1
 			if load(f) == null:
 				script_failures.append(f)
 	if script_failures.is_empty():
-		_log("INFO", "all %d scripts compile" % checked)
+		_log("INFO", "all %d scripts compile" % compiled)
 	else:
 		for f in script_failures:
 			_log("FAIL", "script failed to compile: %s" % f)
