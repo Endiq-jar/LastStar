@@ -85,10 +85,10 @@ func _ready() -> void:
 
 func _autotune_performance() -> void:
 	## Phones like the Oppo F19 Pro (Helio P95 / PowerVR GM9446) can render this
-	## world but not with every effect on. Measure the real frame time for a
-	## second of gameplay and drop to the Performance tier automatically if we
-	## are missing frames - better a smooth, simpler world than a pretty slideshow.
-	await get_tree().create_timer(1.0).timeout
+	## world but not with every effect on. Measure real frame time once and drop
+	## to the Performance tier if frames are being missed.
+	##
+	## Purely frame-driven - no coroutines, no timers - so it cannot wedge.
 	if _perf_done:
 		return
 	_perf_done = true
@@ -97,7 +97,7 @@ func _autotune_performance() -> void:
 		return
 	var avg_ms := (_perf_accum / float(measured)) * 1000.0
 	print("LastStar: average frame time %.1f ms over %d frames" % [avg_ms, measured])
-	# Below ~24 fps on this hardware, shed effects instead of stuttering.
+	# Worse than ~24 fps: shed effects instead of stuttering.
 	if avg_ms > 42.0 and Game.quality_tier != 1:
 		Game.set_quality_tier(1)
 		apply_quality()
@@ -117,35 +117,34 @@ func _watch_render() -> void:
 	## repairing anything. A plain frame counter is enough here.
 	if DisplayServer.get_name() == "headless":
 		return
+	# No GPU readback here on purpose: get_texture().get_image() forces a
+	# pipeline stall and can wedge software/GL drivers. The watchdog instead
+	# verifies state that is cheap and safe to inspect (camera, lights, env).
 	_render_check_countdown = 10
 	_render_checked = false
 
 
 func _check_rendered_frame() -> void:
-	## Called from _process once a few frames have gone by. Grabs whatever the
-	## viewport currently holds - no waiting on renderer callbacks.
+	## Cheap, allocation-free sanity check of the render state.
+	##
+	## Earlier versions read the framebuffer back with get_image() to prove the
+	## view was not black. That readback blocks until the GPU completes, and on
+	## software/GL drivers it wedged the main loop long enough to hang the CI
+	## job. Pixel proof belongs in tests/render_probe.tscn; at runtime we verify
+	## the things that actually go wrong: a missing camera, a disabled sun, or
+	## an environment that was never assigned.
 	_render_checked = true
-	var img := get_viewport().get_texture().get_image()
-	if img == null or img.is_empty():
+	var problems := PackedStringArray()
+	if get_viewport().get_camera_3d() == null:
+		problems.append("no active camera")
+	if sun == null or not sun.visible or sun.light_energy <= 0.01:
+		problems.append("sun not lighting the scene")
+	if environment == null or environment.environment == null:
+		problems.append("no Environment assigned")
+	if problems.is_empty():
 		return
-	var w := img.get_width()
-	var h := img.get_height()
-	if w < 8 or h < 8:
-		return
-	var luma := 0.0
-	var samples := 0
-	for y in range(int(h * 0.35), int(h * 0.75), 12):
-		for x in range(int(w * 0.3), int(w * 0.7), 12):
-			luma += img.get_pixel(x, y).get_luminance()
-			samples += 1
-	if samples == 0:
-		return
-	luma /= float(samples)
-	# A perfectly black middle slice of screen means the 3D layer is not
-	# drawing - the HUD lives in the corners, so the centre is a safe read.
-	if luma <= 0.02:
-		push_warning("LastStar: viewport looks black (luma %.4f) - repairing render state" % luma)
-		repair_render()
+	push_warning("LastStar: render state problem (%s) - repairing" % ", ".join(problems))
+	repair_render()
 
 
 func repair_render() -> void:
@@ -349,11 +348,13 @@ func _process(delta: float) -> void:
 		if _render_check_countdown <= 0:
 			_check_rendered_frame()
 
-	# Skip the first frames: shader compilation makes them meaningless.
+	# Sample frame time; decide once we have enough real frames.
 	if not _perf_done and _perf_frames < 400:
 		_perf_frames += 1
 		if _perf_frames > _perf_warmup:
 			_perf_accum += delta
+			if _perf_frames >= _perf_warmup + 60:
+				_autotune_performance()
 
 
 func _update_time_of_day() -> void:
