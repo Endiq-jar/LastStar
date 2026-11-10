@@ -1,3 +1,4 @@
+class_name Wander
 extends RefCounted
 ## The Wander — the spellbook every Gifted character carries.
 ##

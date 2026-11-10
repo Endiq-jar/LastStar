@@ -124,7 +124,7 @@ var lake_radius: float = 92.0
 
 ## The player's spellbook (scripts/wander.gd), set once the player spawns so the
 ## HUD can read slots and cooldowns without reaching into the scene tree.
-var wander: RefCounted
+var wander: Wander
 
 ## Touch joystick vector, written by the mobile HUD each frame.
 var touch_move: Vector2 = Vector2.ZERO

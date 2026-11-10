@@ -40,7 +40,7 @@ var _idle_time := 0.0
 var _stamina_regen_hold := 0.0
 ## The character's spellbook (scripts/wander.gd). Created once and shared with
 ## the HUD so the wheel and the caster always agree on slots and cooldowns.
-var wander: RefCounted
+var wander: Wander
 
 ## How far above the surface a snapped body starts. The physics engine treats a
 ## body that begins a frame intersecting geometry as "already handled" and can
@@ -87,11 +87,7 @@ func _ready() -> void:
 
 
 func _make_wander() -> void:
-	var script := load("res://scripts/wander.gd")
-	if script == null:
-		push_warning("LastStar: wander.gd did not load - spells are unavailable")
-		return
-	wander = script.new()
+	wander = Wander.new()
 	Game.wander = wander
 
 

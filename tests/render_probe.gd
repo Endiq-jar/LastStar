@@ -144,7 +144,7 @@ func _run() -> void:
 				"terrain normals face up: %.1f%% of %d sampled" % [pct, checked])
 
 	# --- spellbook / spell wheel -------------------------------------------
-	var w = Game.wander
+	var w: Wander = Game.wander
 	if w == null:
 		_log("FAIL", "Game.wander is null - the spell wheel has no spellbook")
 	else:

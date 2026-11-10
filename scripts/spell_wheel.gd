@@ -16,7 +16,7 @@ const SLOT_SIZE := 84.0
 const BOOK_SIZE := 78.0
 const HOLD_TIME := 0.45
 
-var wander: RefCounted  ## scripts/wander.gd instance
+var wander: Wander  ## the player's spellbook
 var _root: Control
 var _slots: Array[Control] = []
 var _icons: Array[TextureRect] = []
@@ -52,7 +52,7 @@ func _ready() -> void:
 	_set_open(false, true)
 
 
-func setup(p_wander: RefCounted) -> void:
+func setup(p_wander: Wander) -> void:
 	## Hand the wheel its spellbook. Safe to call before or after _ready().
 	wander = p_wander
 	if _root == null:
@@ -322,7 +322,7 @@ func _editor_row(id: String, label: String, data) -> Button:
 	b.custom_minimum_size = Vector2(0, 56)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.add_theme_font_size_override("font_size", 18)
-	var equipped_here := id != "" and wander.equipped_at(_editor_slot) == id
+	var equipped_here: bool = id != "" and wander.equipped_at(_editor_slot) == id
 	b.text = "   %s%s" % [label, "  ✓" if equipped_here else ""]
 	if data is Dictionary:
 		if wander.equipped_at(_editor_slot) != id and _find_slot(id) >= 0:
@@ -358,7 +358,7 @@ func _find_slot(id: String) -> int:
 func _cast_slot(i: int) -> void:
 	if wander == null:
 		return
-	var id := wander.equipped_at(i)
+	var id: String = wander.equipped_at(i)
 	if id == "":
 		Game.toast.emit("Empty spell slot — long press to assign")
 		return
@@ -368,7 +368,7 @@ func _cast_slot(i: int) -> void:
 	if wander.cooldown_left(id) > 0.0:
 		Game.toast.emit("%s is recharging" % wander.spell(id)["name"])
 		return
-	var data := wander.begin_cast(id)
+	var data: Dictionary = wander.begin_cast(id)
 	Game.spell_cast.emit(id, data)
 
 
@@ -394,8 +394,8 @@ func _refresh() -> void:
 	if wander == null:
 		return
 	for i in range(_slots.size()):
-		var id := wander.equipped_at(i)
-		var known := wander.known(id)
+		var id: String = wander.equipped_at(i)
+		var known: bool = wander.known(id)
 		var icon := _icons[i]
 		if known:
 			icon.texture = _tex(str(wander.spell(id).get("icon", "")))
@@ -405,7 +405,7 @@ func _refresh() -> void:
 			_glyphs[i].text = "+"
 		var bg := _slots[i].get_node_or_null("Bg") as Panel
 		if bg:
-			var ready_now := known and wander.cooldown_left(id) <= 0.0
+			var ready_now: bool = known and wander.cooldown_left(id) <= 0.0
 			bg.add_theme_stylebox_override("panel", _slot_style(known, ready_now))
 		_sweeps[i].queue_redraw()
 	_book_icon.modulate = Color(1, 1, 1, 1)
@@ -414,10 +414,10 @@ func _refresh() -> void:
 func _draw_sweep(canvas: Control, i: int) -> void:
 	if wander == null:
 		return
-	var id := wander.equipped_at(i)
+	var id: String = wander.equipped_at(i)
 	if not wander.known(id):
 		return
-	var ratio := wander.cooldown_ratio(id)
+	var ratio: float = wander.cooldown_ratio(id)
 	if ratio >= 1.0:
 		return
 	# Draw the remaining cooldown as a dark radial wedge over the icon.
