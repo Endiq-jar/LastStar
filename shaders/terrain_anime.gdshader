@@ -63,7 +63,7 @@ void fragment() {
 	// Meadow: two greens, broken up by the soft macro patches.
 	vec3 grass = mix(meadow_deep.rgb, meadow_tint.rgb, 0.35 + patch * 0.65);
 	// A little golden meadow mixed in, the way open-world grass reads.
-	grass = mix(grass, vec3(0.62, 0.66, 0.28), dry * 0.22);
+	grass = mix(grass, vec3(0.52, 0.56, 0.24), dry * 0.14);
 
 	// Rock: warm grey, cooler in shadowed bands.
 	vec3 rock_col = rock_tint.rgb * mix(0.66, 1.0, patch);

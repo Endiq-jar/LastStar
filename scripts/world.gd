@@ -454,7 +454,11 @@ func _build_spawn_glade() -> void:
 	box.size = Vector3(1.0, 2.2, 0.6)
 	stone.mesh = box
 	var sm := StandardMaterial3D.new()
-	sm.albedo_color = Color(0.82, 0.86, 0.9)
+	# 0.82 albedo under a 1.3-energy sun clipped to white; these read as blank
+	# white slabs. A weathered grey stone matches the rock band on the terrain.
+	sm.albedo_color = Color(0.46, 0.47, 0.50)
+	sm.roughness = 0.85
+	sm.metallic = 0.0
 	stone.material_override = sm
 	stone.position.y = 1.1
 	stone.rotation_degrees = Vector3(0, 25, 0)

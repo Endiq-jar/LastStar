@@ -14,13 +14,13 @@ render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 //   * vertex work is cheap but fragment overdraw is not, so the shader avoids
 //     extra texture fetches entirely and does all variation in the vertex stage.
 
-uniform vec4 grass_color : source_color = vec4(0.34, 0.60, 0.26, 1.0);
+uniform vec4 grass_color : source_color = vec4(0.24, 0.46, 0.18, 1.0);
 uniform vec4 grass_tip : source_color = vec4(0.62, 0.84, 0.34, 1.0);
-uniform vec4 dry_color : source_color = vec4(0.72, 0.74, 0.34, 1.0);
+uniform vec4 dry_color : source_color = vec4(0.58, 0.62, 0.30, 1.0);
 uniform float wind_strength : hint_range(0.0, 1.0) = 0.22;
 uniform float wind_speed : hint_range(0.0, 4.0) = 1.4;
 uniform vec2 wind_dir = vec2(0.85, 0.35);
-uniform float color_variance : hint_range(0.0, 1.0) = 0.35;
+uniform float color_variance : hint_range(0.0, 1.0) = 0.20;
 uniform sampler2D blade_tex : source_color, filter_linear_mipmap, repeat_disable;
 uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
 
@@ -62,7 +62,7 @@ void fragment() {
 	float t = clamp(UV.y, 0.0, 1.0);
 	vec3 base = grass_color.rgb;
 	// Some tufts lean dry/yellow, the way a real meadow is not one flat green.
-	base = mix(base, dry_color.rgb, v_tint * color_variance * 0.55);
+	base = mix(base, dry_color.rgb, v_tint * color_variance * 0.30);
 	vec3 col = mix(base, grass_tip.rgb, t * 0.85);
 	// A touch of extra brightness at the very tip.
 	col += grass_tip.rgb * smoothstep(0.75, 1.0, t) * 0.06;
