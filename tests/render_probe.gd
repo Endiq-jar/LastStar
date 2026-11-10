@@ -143,6 +143,16 @@ func _run() -> void:
 			_log("INFO" if pct > 99.0 else "FAIL",
 				"terrain normals face up: %.1f%% of %d sampled" % [pct, checked])
 
+	# --- grass field --------------------------------------------------------
+	var grass := world.get_node_or_null("GrassField")
+	if grass == null:
+		_log("FAIL", "GrassField missing - the meadow is not being built")
+	else:
+		var blades: int = grass.call("blade_count")
+		var chunks: int = grass.call("chunk_count")
+		_log("INFO" if blades > 500 and chunks > 4 else "FAIL",
+			"grass: %d blades across %d chunks near the player" % [blades, chunks])
+
 	# --- spellbook / spell wheel -------------------------------------------
 	var w: Wander = Game.wander
 	if w == null:

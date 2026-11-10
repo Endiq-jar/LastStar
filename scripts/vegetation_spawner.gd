@@ -9,10 +9,8 @@ const TREE_COUNT := 170
 const PINE_COUNT := 130
 const ROCK_COUNT := 100
 const FLOWER_COUNT := 300
-const GRASS_TUFT_COUNT := 2600
 const SPREAD := 330.0
 
-var _grass_meshes: Array[MultiMeshInstance3D] = []
 var _time := 0.0
 var _player: Node3D
 ## Distance culling for the heavy scatter groups (see _process).
@@ -31,7 +29,6 @@ func _ready() -> void:
 	_spawn_pines(terrain)
 	_spawn_rocks(terrain)
 	_spawn_flowers(terrain)
-	_spawn_grass(terrain)
 
 
 func _toon(color: Color, rim: float = 0.3) -> ShaderMaterial:
@@ -67,9 +64,6 @@ func _process(delta: float) -> void:
 			if item is Node3D:
 				var n := item as Node3D
 				n.visible = n.global_position.distance_to(origin) < CULL_NEAR
-	for mmi in _grass_meshes:
-		if mmi != null and is_instance_valid(mmi):
-			mmi.visible = _player.global_position.distance_to(mmi.global_position) < CULL_NEAR * 1.4
 
 
 func _pick(terrain: Node, rng: RandomNumberGenerator, min_h: float, max_h: float, max_slope: float, count: int, avoid_lake: bool = true) -> Array[Vector3]:
@@ -268,37 +262,3 @@ func _spawn_flowers(terrain: Node) -> void:
 		bloom.position.y = 0.32
 		flower.add_child(bloom)
 		root.add_child(flower)
-
-
-func _spawn_grass(terrain: Node) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 555
-	var spots := _pick(terrain, rng, 2.2, 55.0, 0.55, GRASS_TUFT_COUNT)
-	if spots.is_empty():
-		return
-
-	var blade := QuadMesh.new()
-	blade.size = Vector2(0.55, 0.7)
-	blade.orientation = PlaneMesh.FACE_Y
-	var mat := ShaderMaterial.new()
-	mat.shader = load("res://shaders/grass_sway.gdshader")
-	mat.set_shader_parameter("grass_color", Color(0.42, 0.72, 0.34))
-	mat.set_shader_parameter("grass_tip", Color(0.72, 0.92, 0.45))
-
-	var multimesh := MultiMesh.new()
-	multimesh.transform_format = MultiMesh.TRANSFORM_3D
-	multimesh.mesh = blade
-	multimesh.instance_count = spots.size()
-	for i in range(spots.size()):
-		var p: Vector3 = spots[i]
-		var s := rng.randf_range(0.7, 1.5)
-		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s))
-		multimesh.set_instance_transform(i, Transform3D(basis, p + Vector3(0, 0.33 * s, 0)))
-
-	var mmi := MultiMeshInstance3D.new()
-	mmi.name = "GrassCarpet"
-	mmi.multimesh = multimesh
-	mmi.material_override = mat
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mmi)
-	_grass_meshes.append(mmi)

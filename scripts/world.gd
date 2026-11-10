@@ -10,6 +10,7 @@ const WaypointScript := preload("res://scripts/waypoint_statue.gd")
 const WaterScript := preload("res://scripts/water_plane.gd")
 const PlayerScript := preload("res://scripts/player.gd")
 const AudioDirectorScript := preload("res://scripts/audio_director.gd")
+const GrassFieldScript := preload("res://scripts/grass_field.gd")
 
 const ENEMY_COUNT := 14
 
@@ -32,6 +33,7 @@ var _perf_warmup := 45
 var _perf_accum := 0.0
 var _perf_done := false
 ## Countdown of frames to wait before sampling the framebuffer once.
+var _grass_field: Node3D
 var _render_check_countdown := -1
 var _render_checked := false
 
@@ -61,6 +63,7 @@ func _ready() -> void:
 	# HUD still draws), so nothing optional may run before them.
 	_setup_environment()
 	_spawn_player()
+	_build_grass_field()
 
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
@@ -228,6 +231,13 @@ func apply_quality() -> void:
 	else:
 		sun.shadow_enabled = true
 		sun.directional_shadow_max_distance = 260.0 if tier == 2 else 190.0
+
+	# --- grass -------------------------------------------------------------
+	# Grass is the single biggest draw on a mobile GPU, so the tier controls its
+	# density rather than switching it off: an empty valley looks broken, a
+	# thinner meadow still looks like a meadow.
+	if _grass_field != null and _grass_field.has_method("set_density_scale"):
+		_grass_field.call("set_density_scale", 1.0 if tier >= 2 else (0.65 if tier == 0 else 0.35))
 
 	# --- vegetation ---------------------------------------------------------
 	if veg:
@@ -658,6 +668,21 @@ func _spawn_player() -> void:
 	var spawn := Vector3(0.0, ground + 6.0, 6.0)
 	player.position = spawn
 	add_child(player)
+
+
+func _build_grass_field() -> void:
+	## A streaming grass carpet that follows the player, so the whole valley is
+	## grassed without paying for blades that are nowhere near the camera.
+	var player := get_node_or_null("Player")
+	var t := get_node_or_null("Terrain")
+	if player == null or t == null:
+		push_warning("LastStar: no player/terrain - grass field not built")
+		return
+	var field := Node3D.new()
+	field.set_script(GrassFieldScript)
+	add_child(field)
+	field.call("setup", t, player)
+	_grass_field = field
 
 
 func _add_audio() -> void:
