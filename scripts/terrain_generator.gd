@@ -87,10 +87,18 @@ func get_height_at(x: float, z: float) -> float:
 	return h + SEA_LEVEL + 12.0
 
 
+## Steepness at a point, as a true gradient: metres of rise per metre of run.
+##
+## This used to return the raw height difference across a 3 m sample without
+## dividing by the distance, so it reported metres rather than a ratio. Every
+## caller compares it against a value like 0.52 meaning "52% grade", so the
+## units mismatch rejected ~94% of the whole map: the grass carpet came out at
+## 5% of its intended density and trees avoided perfectly flat meadows.
 func get_slope_at(x: float, z: float) -> float:
+	const SAMPLE := 3.0
 	var dx := get_height_at(x + 1.5, z) - get_height_at(x - 1.5, z)
 	var dz := get_height_at(x, z + 1.5) - get_height_at(x, z - 1.5)
-	return sqrt(dx * dx + dz * dz)
+	return sqrt(dx * dx + dz * dz) / SAMPLE
 
 
 func is_underwater(x: float, z: float) -> bool:
