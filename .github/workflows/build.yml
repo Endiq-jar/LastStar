@@ -126,8 +126,14 @@ jobs:
         # script in scripts/ and tests/, which forces the engine to compile it.
         run: |
           set -uo pipefail
-          /opt/godot/godot --headless --path . --script res://tools/compile_check.gd \
-            > /tmp/compile.log 2>&1 || true
+          # `timeout` is not optional here. A SceneTree script that fails to
+          # reach quit() - for instance because a loaded script hangs in
+          # _init() - leaves the editor running forever, and this step has no
+          # other bound: the job would sit until the six-hour limit.
+          timeout -k 10 180 /opt/godot/godot --headless --path . \
+            --script res://tools/compile_check.gd > /tmp/compile.log 2>&1 \
+            || echo "::warning::compile check exited early (rc=$?), see log"
+          tail -5 /tmp/compile.log || true
           grep -E "COMPILE_(FAIL|ERROR)|COMPILED:" /tmp/compile.log || true
           if grep -qE "COMPILE_FAIL|COMPILE_ERROR" /tmp/compile.log; then
             grep -E "COMPILE_FAIL|COMPILE_ERROR" /tmp/compile.log | head -20 \
