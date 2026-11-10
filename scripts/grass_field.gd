@@ -19,6 +19,7 @@ const BLADES_NEAR := 2600         ## instances in a chunk adjacent to the player
 const BLADES_MID := 1300
 const BLADES_FAR := 520
 const MAX_CHUNKS := 81            ## (2*5+1)^2, hard cap on live chunks
+const SEA_MARGIN := 2.4           ## metres above water level where grass starts
 
 ## Two crossed quads per tuft, so a tuft has volume from every angle.
 const BLADE_W := 0.62
@@ -175,11 +176,20 @@ func _build_chunk(key: Vector2i) -> void:
 		var h: float = _terrain.get_height_at(x, z)
 		# Grass grows on gentle ground above the shoreline, not on cliffs,
 		# not underwater and not on the high rock/snow bands.
-		if h < 2.4 or h > 58.0:
+		if h > 58.0:
 			continue
 		if _terrain.get_slope_at(x, z) > 0.52:
 			continue
-		if Vector2(x, z).distance_to(Game.lake_center) < Game.lake_radius * 0.82:
+		# Exclude actual water, not a circle around it. The old blanket
+		# exclusion (lake_radius * 0.82 = 75 m from the lake centre) also
+		# swallowed the spawn glade - the player starts 66 m from the centre,
+		# so the entire meadow around them was silently rejected and the field
+		# came out at a few thousand blades instead of tens of thousands.
+		if _terrain.is_underwater(x, z):
+			continue
+		# Keep a small dry margin around the shoreline so blades do not poke
+		# through the water surface.
+		if h < SEA_MARGIN:
 			continue
 		var s := rng.randf_range(0.75, 1.45) * height_scale
 		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s))
@@ -191,7 +201,6 @@ func _build_chunk(key: Vector2i) -> void:
 		multimesh.set_instance_transform(i, made[i])
 
 	var mmi := MultiMeshInstance3D.new()
-	print("GRASS_CHUNK d=%d count=%d" % [int(dist), made.size()])
 	mmi.name = "Grass_%d_%d" % [key.x, key.y]
 	mmi.multimesh = multimesh
 	if _material != null:

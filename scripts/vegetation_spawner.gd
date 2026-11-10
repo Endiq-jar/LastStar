@@ -76,7 +76,11 @@ func _pick(terrain: Node, rng: RandomNumberGenerator, min_h: float, max_h: float
 		var h: float = terrain.get_height_at(x, z)
 		if h < min_h or h > max_h:
 			continue
-		if avoid_lake and Vector2(x, z).distance_to(Game.lake_center) < Game.lake_radius * 0.85:
+		# Reject actual water rather than a circle around the lake centre:
+		# the old radius test (78 m) also covered the spawn glade, because the
+		# player starts 66 m from the lake centre. That left the whole starting
+		# area as bare dirt with no trees, flowers or rocks.
+		if avoid_lake and terrain.is_underwater(x, z):
 			continue
 		if terrain.get_slope_at(x, z) > max_slope:
 			continue
