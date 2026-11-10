@@ -294,8 +294,8 @@ func _setup_environment() -> void:
 
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.17, 0.36, 0.72)
-	sky_mat.sky_horizon_color = Color(0.62, 0.82, 0.97)
+	sky_mat.sky_top_color = Color(0.15, 0.32, 0.66)
+	sky_mat.sky_horizon_color = Color(0.74, 0.88, 1.0)
 	sky_mat.sky_curve = 0.11
 	sky_mat.sky_energy_multiplier = 1.15
 	# The ground half of a procedural sky is only seen below the horizon, but a
@@ -474,8 +474,12 @@ func _update_time_of_day() -> void:
 	var sky := env.sky
 	if sky != null and sky.sky_material is ProceduralSkyMaterial:
 		var mat := sky.sky_material as ProceduralSkyMaterial
-		mat.sky_top_color = Color(0.17, 0.36, 0.72).lerp(Color(0.24, 0.31, 0.56), warmth)
-		mat.sky_horizon_color = Color(0.62, 0.82, 0.97).lerp(Color(1.0, 0.74, 0.55), warmth)
+		# Deeper at the zenith, paler and warmer at the horizon. The previous
+		# pair were nearly the same value, so the whole upper half of the frame
+		# was one flat blue slab and the sky competed with the terrain for
+		# attention.
+		mat.sky_top_color = Color(0.15, 0.32, 0.66).lerp(Color(0.22, 0.30, 0.55), warmth)
+		mat.sky_horizon_color = Color(0.74, 0.88, 1.0).lerp(Color(1.0, 0.80, 0.62), warmth)
 		mat.sky_energy_multiplier = lerpf(1.15, 1.0, warmth)
 		mat.ground_horizon_color = mat.sky_horizon_color
 		mat.ground_bottom_color = Color(0.20, 0.26, 0.22).lerp(Color(0.28, 0.24, 0.22), warmth)
@@ -826,27 +830,36 @@ func _spawn_clouds() -> void:
 	mat.billboard_keep_scale = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat.albedo_texture = tex
-	mat.albedo_color = Color(1.0, 0.99, 0.97, 0.55)
+	# Clouds are lit by the sky, not emissive. 0.55 alpha over a bright blue sky
+	# gave near-white puffs that read as paper cut-outs; slightly bluer and
+	# fainter lets them sit inside the sky.
+	mat.albedo_color = Color(0.96, 0.97, 1.0, 0.42)
 
-	for i in range(14):
+	# More clusters, spread as long horizontal bands rather than scattered
+	# blobs: cloud in an open sky reads as layered streaks near the horizon, and
+	# a dozen round puffs at random heights read as marbles stuck to the sky.
+	for i in range(34):
 		var cluster := Node3D.new()
 		cluster.position = Vector3(
-			_rng.randf_range(-520.0, 520.0),
-			_rng.randf_range(120.0, 195.0),
-			_rng.randf_range(-520.0, 520.0))
-		# 3-5 overlapping puffs of different sizes make a believable cloud.
-		var puffs := _rng.randi_range(3, 5)
+			_rng.randf_range(-680.0, 680.0),
+			_rng.randf_range(150.0, 260.0),
+			_rng.randf_range(-680.0, 680.0))
+		# Flatten the cluster along Y so it has a cloud's proportions.
+		cluster.scale = Vector3(1.0, 0.55, 1.0)
+		# 4-7 overlapping puffs of different sizes make a believable cloud.
+		var puffs := _rng.randi_range(4, 7)
 		for p in range(puffs):
 			var cloud := MeshInstance3D.new()
 			var quad := QuadMesh.new()
-			var s := _rng.randf_range(46.0, 96.0)
-			quad.size = Vector2(s, s * 0.52)
+			var s := _rng.randf_range(90.0, 210.0)
+			quad.size = Vector2(s, s * 0.34)
 			cloud.mesh = quad
 			cloud.material_override = mat
+			# Spread mostly along X: clouds stretch sideways, not in depth.
 			cloud.position = Vector3(
-				_rng.randf_range(-0.55, 0.55) * s,
-				_rng.randf_range(-0.10, 0.10) * s,
-				_rng.randf_range(-0.55, 0.55) * s)
+				_rng.randf_range(-0.95, 0.95) * s,
+				_rng.randf_range(-0.04, 0.04) * s,
+				_rng.randf_range(-0.22, 0.22) * s)
 			cloud.rotation.y = _rng.randf() * TAU
 			cloud.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			cluster.add_child(cloud)

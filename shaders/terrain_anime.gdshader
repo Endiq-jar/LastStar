@@ -1,5 +1,10 @@
 shader_type spatial;
 render_mode cull_back, diffuse_toon, specular_toon, depth_draw_opaque;
+// NOTE: with diffuse_toon the transition point between lit and shadowed is fixed
+// and very hard, which is what produced the crisp diagonal shadow edges across
+// the hills. The shader compensates by never letting albedo drop far and by
+// keeping ambient high, so the terminator reads as a colour change rather than
+// as a cut-out.
 
 // Stylized Genshin-like terrain: three painted layers (meadow / rock / sand)
 // triplanar-blended by height + slope, with soft painterly macro variation and
@@ -13,7 +18,7 @@ uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_e
 uniform vec4 meadow_tint : source_color = vec4(0.28, 0.45, 0.20, 1.0);
 uniform vec4 meadow_deep : source_color = vec4(0.13, 0.27, 0.13, 1.0);
 uniform vec4 rock_tint : source_color = vec4(0.42, 0.41, 0.44, 1.0);
-uniform vec4 sand_tint : source_color = vec4(0.74, 0.68, 0.52, 1.0);
+uniform vec4 sand_tint : source_color = vec4(0.58, 0.52, 0.38, 1.0);
 uniform vec4 shadow_tint : source_color = vec4(0.68, 0.72, 0.95, 1.0);
 
 uniform float uv_scale : hint_range(0.002, 0.2) = 0.045;
@@ -99,16 +104,23 @@ void fragment() {
 	rock_col *= mix(1.0, rock_l * 1.9, 0.42);
 
 	// Height bands: sand at the shoreline, meadow in the valley, rock up high.
-	float shore = 1.0 - smoothstep(water_level + 0.4, water_level + 2.6, h);
+	// Narrow. At 2.6 m this covered the whole lake basin in pale sand, which
+	// showed up as big cream flats on the map edge.
+	float shore = 1.0 - smoothstep(water_level + 0.2, water_level + 1.3, h);
 	float highland = smoothstep(rock_height * 0.78, rock_height * 1.35, h);
 	vec3 sand_col = sand_tint.rgb * mix(1.0, sand_l * 1.9, 0.38);
 	vec3 col = mix(grass, sand_col, shore);
 	col = mix(col, rock_col, highland * 0.9);
 
-	// Slope: grass gives way to rock then bare cliff faces, banded so hillsides
-	// read as flat planes instead of gradients.
-	float rock_slope = smoothstep(slope_rock, slope_rock + 0.14, slope);
-	rock_slope = floor(rock_slope * 3.0 + 0.5) / 3.0;
+	// Slope: grass gives way to rock then bare cliff faces.
+	//
+	// This used to be quantized into three hard steps. Quantizing a slope test
+	// that varies with the terrain's own triangle normals turned every
+	// hillside fold into a crisp triangular wedge of grey, which is what made
+	// the green look like it had been cut out with a knife. The step is soft
+	// now, and the transition is pushed by the same macro noise that drives the
+	// meadow colour so the boundary wanders the way a treeline does.
+	float rock_slope = smoothstep(slope_rock, slope_rock + 0.22, slope + (patch - 0.5) * 0.10);
 	float cliff_slope = smoothstep(slope_cliff, slope_cliff + 0.12, slope);
 	col = mix(col, rock_col * mix(1.0, 0.80, cliff_slope), rock_slope * 0.92);
 
@@ -120,7 +132,14 @@ void fragment() {
 
 	// Wet band near the shore: darker + glossier.
 	float wet = 1.0 - smoothstep(water_level, water_level + wet_band, h);
-	col = mix(col, col * vec3(0.62, 0.68, 0.78), wet * 0.55);
+	col = mix(col, col * vec3(0.66, 0.72, 0.82), wet * 0.45);
+
+	// Fine dither. The renderer is 8-bit and the sky gradient is wide and
+	// smooth, so a hard band appeared around the horizon and on the hillside
+	// falloff. A sub-LSB noise offset breaks the quantization steps up into
+	// something the eye reads as a gradient.
+	float dither = fract(sin(dot(FRAGCOORD.xy, vec2(12.9898, 78.233))) * 43758.5453);
+	col += (dither - 0.5) * (1.0 / 255.0);
 
 	// --- aerial perspective -------------------------------------------------
 	// The problem with doing this with fog only is that fog multiplies the

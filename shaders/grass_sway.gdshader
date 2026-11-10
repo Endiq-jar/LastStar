@@ -79,15 +79,19 @@ void fragment() {
 
 	// Break up the flat fill with a cheap per-tuft value variation. Without
 	// this every tuft has identical colour and the field reads as one surface.
-	col *= 0.86 + v_tint * 0.28;
+	// Centred a little above 1.0: the previous 0.86-1.14 range biased the whole
+	// field darker, which is why the grass read as wet mud next to the terrain.
+	col *= 0.94 + v_tint * 0.30;
 
 	// --- distance fade ------------------------------------------------------
 	// Far chunks cover many screen pixels each with a quad, so their flat colour
 	// dominates the silhouette. Mute and cool them toward the hillside colour so
 	// the field settles into the terrain instead of hovering over it.
 	float dist = length(VERTEX);
-	float far_t = smoothstep(55.0, 135.0, dist);
-	col = mix(col, vec3(0.19, 0.26, 0.14), far_t * 0.55);
+	// Fade to the meadow's own mid tone, not to a dark forest green - the field
+	// has to sit in the hillside, and the hillside is not dark.
+	float far_t = smoothstep(60.0, 140.0, dist);
+	col = mix(col, vec3(0.26, 0.34, 0.20), far_t * 0.45);
 
 	ALBEDO = col;
 	ROUGHNESS = 0.94;

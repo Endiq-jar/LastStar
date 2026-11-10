@@ -304,6 +304,11 @@ func _run() -> void:
 		_finish(_fail)
 		return
 
+	# A wandering enemy parked on the camera lens and a burst pillar frozen mid
+	# cast have both ruined otherwise fine captures. Clear anything transient
+	# that has drifted into the lens before shooting.
+	_clear_frame(world)
+
 	# Give the renderer a few real frames without blocking on frame_post_draw,
 	# which never fires if the loop is stalled.
 	await get_tree().create_timer(0.4).timeout
@@ -392,6 +397,13 @@ func _run() -> void:
 
 	# Push the sun to a warm low morning for the beauty frame so the shot shows
 	# the graded palette rather than whatever time the world happened to boot at.
+	# Force the richest quality tier for the beauty frame. The autotuner drops to
+	# Performance on any slow or software renderer - which is exactly what CI
+	# runs - and that tier disables glow, SSAO and MSAA, so the published
+	# screenshot was showing the worst settings the game can produce.
+	Game.set_quality_tier(2)
+	if world.has_method("apply_quality"):
+		world.call("apply_quality")
 	if world.has_method("_set_beauty_time"):
 		world.call("_set_beauty_time", 0.302)
 	beauty.current = true
@@ -411,6 +423,48 @@ func _run() -> void:
 			_log("WARN", "wide view is overexposed (mean luma %.2f)" % s3["luma"])
 
 	_finish(_fail)
+
+
+func _clear_frame(world: Node) -> void:
+	## Remove anything sitting on top of the camera.
+	##
+	## The gameplay frame is a third-person view from about 4 m behind the player
+	## and the world is paused when it is captured, so a tween-driven effect (a
+	## burst pillar) never finishes and an enemy that wandered close stays put.
+	## Both end up covering a large, opaque part of the frame and neither is what
+	## the shot is meant to show.
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var from := cam.global_position
+	var removed := 0
+	# Transient VFX: unshaded emissive meshes parented to an unnamed runtime node.
+	for fx_node in world.find_children("*", "MeshInstance3D", true, false):
+		var mi := fx_node as MeshInstance3D
+		var mat := mi.material_override
+		if not (mat is StandardMaterial3D):
+			continue
+		var sm := mat as StandardMaterial3D
+		if sm.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED or not sm.emission_enabled:
+			continue
+		var holder := mi.get_parent()
+		if holder != null and (holder.name.begins_with("@") or mi.name.begins_with("@")):
+			# Walk up to the outermost transient node so the whole effect goes.
+			var root := holder
+			while root.get_parent() != null and root.get_parent() != world \
+					and root.get_parent().name.begins_with("@"):
+				root = root.get_parent()
+			root.queue_free()
+			removed += 1
+	# Enemies that have drifted within 7 m of the lens.
+	var enemies := world.get_node_or_null("Enemies")
+	if enemies != null:
+		for enemy in enemies.get_children():
+			if enemy is Node3D and (enemy as Node3D).global_position.distance_to(from) < 7.0:
+				enemy.queue_free()
+				removed += 1
+	if removed > 0:
+		_log("INFO", "cleared %d transient/enemy nodes from the camera frame" % removed)
 
 
 func _report_palette(img: Image, label: String) -> void:
@@ -557,16 +611,21 @@ func _dump_frustum(cam: Camera3D, world: Node) -> void:
 				str(st.albedo_color)]
 		elif mat == null:
 			desc = "no material_override (surface override: %s)" % str(m.get_surface_override_material(0))
-		near_hits.append("%s node=%s dist=%.1f size=%.1f %s" % [
+		var screen := cam.unproject_position(m.global_position)
+		near_hits.append("%06.1fm  screen=(%4d,%3d)  size=%.1f  %s  %s  %s" % [
+			dist, int(screen.x), int(screen.y), size,
 			str(m.get_path()).replace(str(world.get_path()) + "/", ""),
 			m.mesh.resource_path.get_file() if m.mesh.resource_path != "" else m.mesh.get_class(),
-			dist, size, desc])
+			desc])
 	if near_hits.is_empty():
 		_log("INFO", "frustum: nothing large within 40m in front of the camera")
 	else:
+		# Strings are prefixed with a zero-padded distance, so sorting is
+		# nearest-first. Sorting alphabetically (as this did) hid the culprit
+		# behind a dozen "@Area3D" props and reported the symptom only.
 		near_hits.sort()
-		_log("INFO", "frustum has %d large meshes within 40m:" % near_hits.size())
-		for i in range(mini(near_hits.size(), 12)):
+		_log("INFO", "frustum has %d large meshes within 40m, nearest first:" % near_hits.size())
+		for i in range(mini(near_hits.size(), 14)):
 			_log("INFO", "  " + near_hits[i])
 
 
