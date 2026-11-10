@@ -693,20 +693,62 @@ func _add_audio() -> void:
 
 
 func _spawn_clouds() -> void:
-	# Big soft billboard clouds drifting above the valley for depth.
+	## Soft billboard clouds drifting above the valley.
+	##
+	## These used to be plain unshaded white quads. With no texture and no
+	## falloff they rendered as solid blue-white rectangles hanging in the sky -
+	## the single most "this is a prototype" thing in the whole scene. Each
+	## cloud is now a cluster of soft procedural puffs that fade at the rim.
+	var tex := _cloud_texture()
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_color = Color(1, 1, 1, 0.32)
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
-	mat.no_depth_test = false
-	for i in range(18):
-		var cloud := MeshInstance3D.new()
-		var quad := QuadMesh.new()
-		var s := _rng.randf_range(60.0, 150.0)
-		quad.size = Vector2(s, s * 0.45)
-		cloud.mesh = quad
-		cloud.material_override = mat
-		cloud.position = Vector3(_rng.randf_range(-400.0, 400.0), _rng.randf_range(95.0, 170.0), _rng.randf_range(-400.0, 400.0))
-		cloud.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(cloud)
+	mat.billboard_keep_scale = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_texture = tex
+	mat.albedo_color = Color(1.0, 0.99, 0.97, 0.55)
+
+	for i in range(14):
+		var cluster := Node3D.new()
+		cluster.position = Vector3(
+			_rng.randf_range(-520.0, 520.0),
+			_rng.randf_range(120.0, 195.0),
+			_rng.randf_range(-520.0, 520.0))
+		# 3-5 overlapping puffs of different sizes make a believable cloud.
+		var puffs := _rng.randi_range(3, 5)
+		for p in range(puffs):
+			var cloud := MeshInstance3D.new()
+			var quad := QuadMesh.new()
+			var s := _rng.randf_range(46.0, 96.0)
+			quad.size = Vector2(s, s * 0.52)
+			cloud.mesh = quad
+			cloud.material_override = mat
+			cloud.position = Vector3(
+				_rng.randf_range(-0.55, 0.55) * s,
+				_rng.randf_range(-0.10, 0.10) * s,
+				_rng.randf_range(-0.55, 0.55) * s)
+			cloud.rotation.y = _rng.randf() * TAU
+			cloud.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			cluster.add_child(cloud)
+		add_child(cluster)
+
+
+func _cloud_texture() -> Texture2D:
+	## A radial soft blob, generated once: opaque in the middle, transparent at
+	## the rim, with a little noise so the edge is not a clean circle.
+	var size := 96
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var noise := FastNoiseLite.new()
+	noise.frequency = 0.055
+	noise.seed = 7
+	var half := float(size) * 0.5
+	for y in range(size):
+		for x in range(size):
+			var nx := (float(x) + 0.5 - half) / half
+			var ny := (float(y) + 0.5 - half) / half
+			var r := sqrt(nx * nx + ny * ny)
+			# Soft edge, pushed in and out by noise.
+			var edge := 1.0 - smoothstep(0.45, 1.0, r + noise.get_noise_2d(x, y) * 0.14)
+			img.set_pixel(x, y, Color(1, 1, 1, clampf(edge, 0.0, 1.0)))
+	return ImageTexture.create_from_image(img)

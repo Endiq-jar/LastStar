@@ -310,6 +310,37 @@ func _run() -> void:
 			_log("INFO", "alt view mean_luma=%.3f nonblack=%.1f%% colours=%d" % [
 				s2["luma"], s2["nonblack"] * 100.0, s2["colours"]])
 
+	# --- environment beauty shot -------------------------------------------
+	# A fixed, wide vantage point over the valley. The gameplay camera is a
+	# close third-person shoulder view, which is useless for judging terrain,
+	# grass and sky; this frame is what the environment actually looks like.
+	var beauty := Camera3D.new()
+	beauty.fov = 68.0
+	beauty.near = 0.1
+	beauty.far = 1200.0
+	world.add_child(beauty)
+	var eye := Vector3(-62.0, 0.0, -74.0)
+	var terrain_node := world.get_node_or_null("Terrain")
+	if terrain_node != null and terrain_node.has_method("get_height_at"):
+		eye.y = terrain_node.get_height_at(eye.x, eye.z) + 26.0
+	else:
+		eye.y = 40.0
+	beauty.global_position = eye
+	beauty.look_at(Vector3(30.0, eye.y - 14.0, 40.0), Vector3.UP)
+	beauty.current = true
+	await get_tree().create_timer(0.5).timeout
+	await get_tree().process_frame
+	var img3 := get_viewport().get_texture().get_image()
+	if img3:
+		img3.save_png(out_dir.path_join("world_wide.png"))
+		var s3 := _analyse(img3)
+		_log("INFO", "wide view mean_luma=%.3f nonblack=%.1f%% colours=%d sky=%.1f%%" % [
+			s3["luma"], s3["nonblack"] * 100.0, s3["colours"], s3["sky"] * 100.0])
+		# A washed-out frame is the failure mode we actually hit: everything
+		# blown to near-white. Flag it.
+		if s3["luma"] > 0.72:
+			_log("WARN", "wide view is overexposed (mean luma %.2f)" % s3["luma"])
+
 	_finish(_fail)
 
 

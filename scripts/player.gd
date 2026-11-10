@@ -14,8 +14,8 @@ const DOUBLE_JUMP_VELOCITY := 7.4
 const GLIDE_FALL := -2.0
 const GRAVITY_SCALE := 1.35
 const TURN_SPEED := 13.0
-const CAM_DISTANCE := 4.6
-const CAM_HEIGHT := 1.62
+const CAM_DISTANCE := 4.2
+const CAM_HEIGHT := 2.05
 const CAM_SHOULDER := 0.45
 const MOUSE_SENS := 0.0026
 const STICK_SENS := 2.4
@@ -113,7 +113,9 @@ func _build_camera() -> void:
 
 	_spring = SpringArm3D.new()
 	_spring.spring_length = CAM_DISTANCE
-	_spring.margin = 0.25
+	# A generous margin keeps the near plane out of the hillside; without it the
+	# arm stops flush against the ground and the camera clips inside.
+	_spring.margin = 0.55
 	# Only the world layer. The player itself is on layer 2, so the arm can never
 	# collide with the character and jam the camera inside its own head.
 	_spring.collision_mask = 1

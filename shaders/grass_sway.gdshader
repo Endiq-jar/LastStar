@@ -10,7 +10,7 @@ render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 //     extra texture fetches entirely and does all variation in the vertex stage.
 
 uniform vec4 grass_color : source_color = vec4(0.34, 0.60, 0.26, 1.0);
-uniform vec4 grass_tip : source_color = vec4(0.78, 0.94, 0.46, 1.0);
+uniform vec4 grass_tip : source_color = vec4(0.62, 0.84, 0.34, 1.0);
 uniform vec4 dry_color : source_color = vec4(0.72, 0.74, 0.34, 1.0);
 uniform float wind_strength : hint_range(0.0, 1.0) = 0.22;
 uniform float wind_speed : hint_range(0.0, 4.0) = 1.4;
@@ -51,7 +51,7 @@ void fragment() {
 	base = mix(base, dry_color.rgb, v_tint * color_variance * 0.55);
 	vec3 col = mix(base, grass_tip.rgb, t * 0.85);
 	// A touch of extra brightness at the very tip.
-	col += grass_tip.rgb * smoothstep(0.75, 1.0, t) * 0.18;
+	col += grass_tip.rgb * smoothstep(0.75, 1.0, t) * 0.06;
 
 	ALBEDO = col;
 	ROUGHNESS = 0.92;
@@ -59,7 +59,7 @@ void fragment() {
 	SPECULAR = 0.0;
 	// Backlight fakes subsurface scatter: blades glow when lit from behind,
 	// which is most of what makes wind-blown grass look alive.
-	BACKLIGHT = grass_tip.rgb * 0.55;
+	BACKLIGHT = grass_tip.rgb * 0.20;
 	// Keep the shadow-facing side from going black; ambient handles the rest.
-	EMISSION = base * 0.06;
+	EMISSION = base * 0.015;
 }

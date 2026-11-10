@@ -10,8 +10,8 @@ uniform sampler2D rock_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D sand_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 
-uniform vec4 meadow_tint : source_color = vec4(0.55, 0.78, 0.38, 1.0);
-uniform vec4 meadow_deep : source_color = vec4(0.34, 0.58, 0.30, 1.0);
+uniform vec4 meadow_tint : source_color = vec4(0.38, 0.62, 0.28, 1.0);
+uniform vec4 meadow_deep : source_color = vec4(0.20, 0.42, 0.20, 1.0);
 uniform vec4 rock_tint : source_color = vec4(0.68, 0.66, 0.62, 1.0);
 uniform vec4 sand_tint : source_color = vec4(0.90, 0.83, 0.66, 1.0);
 uniform vec4 shadow_tint : source_color = vec4(0.68, 0.72, 0.95, 1.0);
