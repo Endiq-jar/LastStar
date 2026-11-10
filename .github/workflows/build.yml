@@ -117,6 +117,31 @@ jobs:
           fi
           echo "World booted cleanly."
 
+      - name: Compile every script
+        # The 4.3 compiler rejects things a third-party linter accepts (type
+        # inference on lazily-typed properties, for one). Loading each script
+        # here turns a confusing boot failure into a precise file list.
+        run: |
+          set -uo pipefail
+          /opt/godot/godot --headless --path . --script tools/check_scripts.gd \
+            > /tmp/compile.log 2>&1 || true
+          grep -E "^CHECK_(OK|FAIL|RESULT)" /tmp/compile.log | tail -40 | \
+            while IFS= read -r line; do echo "::notice::$line"; done
+          grep -E "^CHECK_FAIL" /tmp/compile.log | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          grep -E "^SCRIPT ERROR|^Parse Error" /tmp/compile.log | head -20 | \
+            while IFS= read -r line; do echo "::error::$line"; done
+          if grep -qE "^CHECK_FAIL" /tmp/compile.log; then
+            exit 1
+          fi
+          grep -qE "^CHECK_RESULT: 0 failed" /tmp/compile.log || {
+            echo "::error::script check did not complete"
+            tail -30 /tmp/compile.log
+            exit 1
+          }
+          echo "All scripts compile."
+
       - name: Structural probe (headless, no GPU required)
         # The terrain winding bug produced a mesh with vertices, a collision
         # shape with faces, and a framebuffer full of sky - it passed every
