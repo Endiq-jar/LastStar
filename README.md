@@ -33,6 +33,7 @@ produces an installable APK on every push.
 | **Progression** | 12 star sigils to recover, waypoint statues that heal the party and set your respawn, quest tracker, victory banner |
 | **World dressing** | Lake with stylized wave shader, wind arches, glowing crystal formations, campfires, rolling clouds, 3 700+ instanced trees/rocks/flowers and a 2 600-blade swooshing grass carpet |
 | **Day / night** | Sun angle, colour and ambient light drift over time; campfire and crystal lights carry the night |
+| **Environment (rendered)** | ![wide](docs/render_wide.png) ![gameplay](docs/render_world.png) |
 | **Grass** | A streaming meadow over the whole valley: 26 m chunks rebuilt around the player out to 130 m, density falling off with distance (2,600 / 1,300 / 520 blades per chunk), ~80,000 instances at full quality. Wind-waved, per-instance colour variation, root-to-tip gradient and faked subsurface scattering |
 | **Mobile UI** | Touch joystick + right-side camera drag + on-screen action buttons, plus a **Quality** toggle (Balanced / Performance / High) |
 
