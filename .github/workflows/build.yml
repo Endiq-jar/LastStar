@@ -83,7 +83,10 @@ jobs:
           set -uo pipefail
           /opt/godot/godot --headless --path . --script tools/check_scripts.gd \
             > /tmp/compile.log 2>&1 || true
-          grep -E "^CHECK_(OK|FAIL|RESULT)" /tmp/compile.log | tail -40 | \
+          grep -cE "^CHECK_OK" /tmp/compile.log | while IFS= read -r n; do
+            echo "::notice::compiled $n scripts"
+          done
+          grep -E "^CHECK_FAIL|^CHECK_RESULT" /tmp/compile.log | \
             while IFS= read -r line; do echo "::notice::$line"; done
           grep -E "^CHECK_FAIL" /tmp/compile.log | while IFS= read -r line; do
             echo "::error::$line"
@@ -97,9 +100,17 @@ jobs:
           if grep -qE "^CHECK_FAIL" /tmp/compile.log; then
             exit 1
           fi
+          # The checker prints CHECK_RESULT as its last line. If the process
+          # died before reaching it, that is a failure too - but say which.
+          if ! grep -qE "^CHECK_RESULT:" /tmp/compile.log; then
+            echo "::error::script check did not finish"
+            tail -25 /tmp/compile.log | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
           grep -qE "^CHECK_RESULT: 0 failed" /tmp/compile.log || {
-            echo "::error::script check did not complete"
-            tail -30 /tmp/compile.log
+            echo "::error::some scripts failed to compile"
             exit 1
           }
           echo "All scripts compile."
