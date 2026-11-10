@@ -71,6 +71,27 @@ APK, a Linux build and a Windows build attached.
 **Requirements:** arm64-v8a device, Android 7.0+ (API 24), ~25 MB download. Renderer: Mobile
 (Vulkan), landscape, touch joystick + action buttons.
 
+## 🩺 Rendering safety net
+
+The game is written so it **cannot** show a black screen with only the HUD:
+
+* the player (and therefore the camera) is built **first**; all optional scenery
+  is dressed on afterwards,
+* the character rig is built *after* the camera and every rig accessor is
+  null-safe, so a rig problem can't stop rendering,
+* `world.tscn` ships a real `Environment`, the sun never drops below the
+  horizon, and ambient light has a floor - the valley stays lit,
+* a deferred fallback camera is installed if the viewport somehow has none,
+* a render watchdog samples the first frames and calls `repair_render()` if the
+  view comes out black,
+* **Pause menu → "Repair view"** rebuilds the camera, environment and lights on
+  demand, and quality tiers are reversible and remembered in `user://video.cfg`.
+
+CI enforces all of it: `tests/render_probe.tscn` actually renders the world under
+Xvfb, screenshots the framebuffer and measures mean luminance, non-black coverage
+and distinct colour count. A build fails if the 3D view is genuinely black, and
+the screenshots are uploaded as the `render-probe` artifact on every run.
+
 ### Release signing (optional)
 
 Without configuration the CI ships a *debug-signed* APK that installs fine on any device.
