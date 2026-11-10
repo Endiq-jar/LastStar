@@ -85,7 +85,7 @@ void fragment() {
 	// not a noise texture.
 	float snow = smoothstep(snow_height - 14.0, snow_height + 20.0, h);
 	snow *= 1.0 - smoothstep(0.42, 0.62, slope);
-	col = mix(col, vec3(0.95, 0.97, 1.0), snow * 0.92);
+	col = mix(col, vec3(0.84, 0.88, 0.95), snow * 0.88);
 
 	// Wet band near the shore: darker + glossier.
 	float wet = 1.0 - smoothstep(water_level, water_level + wet_band, h);

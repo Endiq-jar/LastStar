@@ -173,7 +173,9 @@ func repair_render() -> void:
 	# silhouette lit only by ambient.
 	if sun:
 		sun.visible = true
-		sun.light_energy = maxf(sun.light_energy, 1.4)
+		# Enough to light the scene, not enough to clip it: 1.4 here fought the
+		# calibrated daytime value every time the self-repair ran.
+		sun.light_energy = maxf(sun.light_energy, 0.85)
 		sun.rotation_degrees = Vector3(-48.0, -38.0, 0.0)
 
 	# Bring the player's own camera back to a sane orbit distance.
@@ -300,9 +302,14 @@ func _setup_environment() -> void:
 	sky_mat.sun_curve = 0.10
 	sky.sky_material = sky_mat
 	env.sky = sky
+	# Ambient was 1.15 here, then recomputed every frame to 0.85-1.40 by the
+	# day/night pass, on top of a bright procedural sky at 0.85 contribution and
+	# a sun at up to 1.80 energy. Three bright lights stacked is what washed the
+	# whole world to pale mint. An anime look wants a modest ambient and a
+	# strong, contrasty key light instead.
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 1.15
-	env.ambient_light_color = Color(0.78, 0.87, 1.0)
+	env.ambient_light_energy = 0.42
+	env.ambient_light_color = Color(0.62, 0.74, 1.0)
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	# Sky ambient alone can dip to near-black once the sun is low; this floor
 	# guarantees every surface always receives usable light.
@@ -335,8 +342,9 @@ func _setup_environment() -> void:
 
 	environment.environment = env
 
-	sun.light_color = Color(1.0, 0.95, 0.84)
-	sun.light_energy = 1.55
+	sun.light_color = Color(1.0, 0.95, 0.86)
+	# Matches the daytime value the day/night pass computes (0.85-1.30).
+	sun.light_energy = 1.05
 	sun.light_angular_distance = 0.4
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
@@ -378,16 +386,19 @@ func _update_time_of_day() -> void:
 	var day := clampf(sin(sun_angle) * 0.5 + 0.6, 0.0, 1.0)
 	var dusk := pow(clampf(1.0 - absf(day - 0.45) / 0.45, 0.0, 1.0), 2.0)
 
-	sun.light_energy = 0.85 + day * 0.95
-	sun.light_color = Color(1.0, 0.94, 0.84).lerp(Color(1.0, 0.68, 0.46), clampf(dusk, 0.0, 1.0) * 0.65)
+	# 0.85-1.80 was blowing out every sunlit surface; the terracing in the
+	# terrain shader does the stylising, so the key light can be honest.
+	sun.light_energy = 0.85 + day * 0.45
+	sun.light_color = Color(1.0, 0.95, 0.86).lerp(Color(1.0, 0.70, 0.48), clampf(dusk, 0.0, 1.0) * 0.6)
 	sun.visible = true
 
 	var env := environment.environment as Environment
 	if env == null:
 		return
-	# Ambient never falls below a usable floor either.
-	env.ambient_light_energy = 0.85 + day * 0.55
-	env.ambient_light_color = Color(0.62, 0.72, 0.95).lerp(Color(0.80, 0.88, 1.0), day)
+	# Keep ambient low and cool so the warm key light reads as sunlight rather
+	# than as one of three equally bright lights.
+	env.ambient_light_energy = 0.34 + day * 0.20
+	env.ambient_light_color = Color(0.52, 0.64, 0.95).lerp(Color(0.68, 0.80, 1.0), day)
 	env.fog_light_color = Color(0.70, 0.82, 0.96).lerp(Color(1.0, 0.76, 0.58), clampf(dusk, 0.0, 1.0) * 0.55)
 
 
