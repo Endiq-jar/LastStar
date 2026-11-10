@@ -153,7 +153,16 @@ func _build() -> void:
 			var p01 := Vector3(wx0, get_height_at(wx0, wz1), wz1)
 			var p11 := Vector3(wx1, get_height_at(wx1, wz1), wz1)
 
+<<<<<<< HEAD
 			for v in [p00, p01, p10, p10, p01, p11]:
+=======
+			# Winding matters: Godot computes a triangle normal as
+			# (p1-p3) x (p1-p2), so (p00,p01,p10) produced a DOWNWARD normal.
+			# That inverted the surface (backface-culled = invisible terrain,
+			# lit from underneath = "world upside down"). Counter-clockwise
+			# when viewed from above is the correct order.
+			for v in [p00, p10, p01, p10, p11, p01]:
+>>>>>>> 4665bbf (fix: terrain triangles were wound backwards - the world was upside down)
 				st.set_uv(Vector2(v.x, v.z) * 0.02)
 				st.add_vertex(v)
 
@@ -195,7 +204,13 @@ func _build_collision_shape() -> ConcavePolygonShape3D:
 			var p10 := Vector3(x1, get_height_at(x1, z0), z0)
 			var p01 := Vector3(x0, get_height_at(x0, z1), z1)
 			var p11 := Vector3(x1, get_height_at(x1, z1), z1)
+<<<<<<< HEAD
 			for v in [p00, p01, p10, p10, p01, p11]:
+=======
+			# Same winding rule as the visual mesh above - see the comment
+			# there. Inverted triangles made the ground unmovable for physics.
+			for v in [p00, p10, p01, p10, p11, p01]:
+>>>>>>> 4665bbf (fix: terrain triangles were wound backwards - the world was upside down)
 				st.add_vertex(v)
 	var mesh := st.commit()
 	return mesh.create_trimesh_shape()
