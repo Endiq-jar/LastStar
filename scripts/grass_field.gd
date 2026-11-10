@@ -105,8 +105,11 @@ func _refresh(force: bool) -> void:
 	_last_center = _chunk_of(_player.global_position)
 	_queue_around(_last_center)
 	if force:
+		# Fill the ring in one go at startup. It is ~70k instance transforms,
+		# which is a few milliseconds of CPU - far better spent once than
+		# spread over 30 frames that visibly pop chunks in.
 		var guard := 0
-		while not _pending.is_empty() and guard < MAX_CHUNKS:
+		while not _pending.is_empty() and guard < MAX_CHUNKS * 2:
 			_build_chunk(_pending.pop_front())
 			guard += 1
 
@@ -140,7 +143,9 @@ func _build_chunk(key: Vector2i) -> void:
 		return
 	if _chunks.size() >= MAX_CHUNKS:
 		return
-	var center := _last_center
+	# Distance is measured from where the player is *now*: chunks are queued in
+	# batches and the player keeps moving while they are built.
+	var center := _chunk_of(_player.global_position) if _player != null else _last_center
 	var d := key - center
 	var dist := Vector2(d).length()
 	var count := BLADES_FAR

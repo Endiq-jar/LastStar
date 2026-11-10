@@ -63,7 +63,6 @@ func _ready() -> void:
 	# HUD still draws), so nothing optional may run before them.
 	_setup_environment()
 	_spawn_player()
-	_build_grass_field()
 
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
@@ -76,6 +75,7 @@ func _ready() -> void:
 	_add_audio()
 	Game.quest_changed.emit(Game.quest_text)
 	apply_quality()
+	_build_grass_field.call_deferred()
 
 	# Never ship a black screen: if for any reason the player's camera did not
 	# come up current, park a fallback camera over the valley, then keep an eye
