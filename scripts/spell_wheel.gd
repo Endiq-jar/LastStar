@@ -35,10 +35,6 @@ var _visible_pos := Vector2.ZERO
 var _hidden_pos := Vector2.ZERO
 
 
-func setup(p_wander: RefCounted) -> void:
-	wander = p_wander
-
-
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -478,6 +478,10 @@ func _update_quality_label() -> void:
 
 func _process(_delta: float) -> void:
 	_update_compass()
+	# Guard the bars: if _build() ever bails early these are null, and assigning
+	# to a null property spams a script error every frame.
+	if _energy == null or _stamina == null:
+		return
 	if not Game.is_paused:
 		_energy.value = Game.energy
 		_stamina.value = Game.stamina
