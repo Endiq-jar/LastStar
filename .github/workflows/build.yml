@@ -135,8 +135,11 @@ jobs:
             || echo "::warning::compile check exited early (rc=$?), see log"
           tail -5 /tmp/compile.log || true
           grep -E "COMPILE_(FAIL|ERROR)|COMPILED:" /tmp/compile.log || true
-          if grep -qE "COMPILE_FAIL|COMPILE_ERROR" /tmp/compile.log; then
-            grep -E "COMPILE_FAIL|COMPILE_ERROR" /tmp/compile.log | head -20 \
+          # The engine's own diagnostics are the authority: a GDScript that
+          # fails to compile prints "Parse Error" or "SCRIPT ERROR" while being
+          # loaded, whether or not load() also returns null for it.
+          if grep -qE "COMPILE_FAIL|COMPILE_ERROR|Parse Error|SCRIPT ERROR" /tmp/compile.log; then
+            grep -E "COMPILE_FAIL|COMPILE_ERROR|Parse Error|SCRIPT ERROR" /tmp/compile.log | head -20 \
               | while IFS= read -r line; do echo "::error title=Compile::$line"; done
             echo "::error::one or more scripts failed to compile"
             exit 1

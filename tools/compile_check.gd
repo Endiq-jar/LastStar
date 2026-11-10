@@ -40,9 +40,12 @@ func _init() -> void:
 			print("COMPILE_FAIL: %s did not load (parse or compile error)" % path)
 			failed += 1
 			continue
-		if not script.can_instantiate():
-			print("COMPILE_FAIL: %s loaded but cannot be instantiated" % path)
-			failed += 1
+		# Deliberately NOT checking can_instantiate() here: for GDScript it
+		# reports false for ordinary non-tool scripts, so it flagged every
+		# gameplay script in the project as broken. load() returning a Script is
+		# the real signal - the engine refuses to produce one for a script that
+		# failed to compile - and it prints its own "Parse Error" line, which the
+		# workflow greps for as a second opinion.
 
 	print("COMPILED: %d scripts, %d failed" % [files.size(), failed])
 	quit(1 if failed > 0 else 0)
