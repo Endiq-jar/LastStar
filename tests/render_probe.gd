@@ -22,10 +22,22 @@ func _log(kind: String, msg: String) -> void:
 
 
 func _ready() -> void:
+	# Hard watchdog: the probe must always terminate. A wedged await (typically
+	# RenderingServer.frame_post_draw never firing when no frame is drawn) would
+	# otherwise hang the job until the 60 minute timeout.
+	_watchdog.call_deferred()
 	# Never touch the tree from _ready(): while a node propagates READY its parent
 	# has `blocked > 0`, and add_child() to it fails with "Parent node is busy
 	# setting up children". Defer to an idle frame so the world really boots.
 	_run.call_deferred()
+
+
+func _watchdog() -> void:
+	await get_tree().create_timer(120.0).timeout
+	print("PROBE_FAIL: probe timed out after 120s (no frames were drawn)")
+	print("PROBE_RESULT: FAIL (watchdog)")
+	print("PROBE_END")
+	get_tree().quit(1)
 
 
 func _run() -> void:
