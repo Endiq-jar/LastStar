@@ -15,9 +15,9 @@ extends Node3D
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
 const VIEW_CHUNKS := 5            ## radius, in chunks (5 * 26 = 130 m)
-const BLADES_NEAR := 2600         ## instances in a chunk adjacent to the player
-const BLADES_MID := 1300
-const BLADES_FAR := 520
+const BLADES_NEAR := 3400         ## instances in a chunk adjacent to the player
+const BLADES_MID := 1700
+const BLADES_FAR := 700
 const MAX_CHUNKS := 81            ## (2*5+1)^2, hard cap on live chunks
 const SEA_MARGIN := 2.4           ## metres above water level where grass starts
 
@@ -54,41 +54,26 @@ func setup(terrain: Node, player: Node3D) -> void:
 
 
 func _build_resources() -> void:
-	# One tuft = three thin quads fanned around the vertical axis. Three is the
-	# sweet spot: it fills the silhouette from any camera angle without the
-	# overdraw of a full star of quads.
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for i in range(3):
-		var a := TAU * float(i) / 3.0
-		var dir := Vector3(cos(a), 0.0, sin(a))
-		var side := Vector3(-dir.z, 0.0, dir.x) * (BLADE_W * 0.5)
-		var base := dir * 0.06
-		var top := dir * 0.16 + Vector3(0.0, BLADE_H, 0.0)
-		# Slight bend so the blade is not a flat rectangle.
-		var mid_l := base - side + Vector3(0.0, BLADE_H * 0.45, 0.0)
-		var mid_r := base + side + Vector3(0.0, BLADE_H * 0.45, 0.0)
-		_tri(st, base - side, mid_l, mid_r)
-		_tri(st, base - side, mid_r, base + side)
-		_tri(st, mid_l, top, mid_r)
-	st.index()
-	_blade_mesh = st.commit()
+	# One textured quad per tuft. The blade cluster lives in the texture's alpha
+	# channel, so a single plane draws a full tuft - three solid quads per tuft
+	# (the old approach) merged into bright cauliflower blobs at any distance
+	# and cost three times the overdraw.
+	var quad := QuadMesh.new()
+	quad.size = Vector2(BLADE_W * 3.4, BLADE_H * 1.15)
+	quad.orientation = PlaneMesh.FACE_Y
+	_blade_mesh = quad
 
 	_material = ShaderMaterial.new()
 	var shader := load("res://shaders/grass_sway.gdshader")
 	if shader != null:
 		_material.shader = shader
+		var tex := load("res://icons/grass/tuft.png")
+		if tex != null:
+			_material.set_shader_parameter("blade_tex", tex)
+		else:
+			push_warning("LastStar: grass tuft texture missing - blades will be solid")
 	else:
 		push_warning("LastStar: grass shader missing - grass will look flat")
-
-
-func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
-	st.set_uv(Vector2(0.0, 0.0))
-	st.add_vertex(a)
-	st.set_uv(Vector2(1.0, 0.45))
-	st.add_vertex(b)
-	st.set_uv(Vector2(0.0, 0.45))
-	st.add_vertex(c)
 
 
 func _process(_delta: float) -> void:

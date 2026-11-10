@@ -172,8 +172,8 @@ func _run() -> void:
 		_log("INFO", "grass diagnostics: %s" % str(grass.call("diagnostics")))
 		# Density gate: the meadow must actually be a meadow. A slope/height
 		# bug once cut this to 5% of intent and nothing noticed.
-		if blades < 20000:
-			_log("FAIL", "grass is far too sparse (%d blades, expected >20000)" % blades)
+		if blades < 30000:
+			_log("FAIL", "grass is far too sparse (%d blades, expected >30000)" % blades)
 
 	# --- spellbook / spell wheel -------------------------------------------
 	var w: Wander = Game.wander

@@ -135,8 +135,8 @@ func _terrain_material() -> ShaderMaterial:
 	m.set_shader_parameter("sand_tex", _make_noise_tex(303, 0.09, 256))
 	m.set_shader_parameter("macro_tex", _make_noise_tex(404, 0.012, 512))
 	m.set_shader_parameter("water_level", SEA_LEVEL)
-	m.set_shader_parameter("rock_height", 74.0)
-	m.set_shader_parameter("snow_height", 150.0)
+	m.set_shader_parameter("rock_height", 96.0)
+	m.set_shader_parameter("snow_height", 128.0)
 	m.set_shader_parameter("uv_scale", 0.055)
 	m.set_shader_parameter("macro_scale", 0.0045)
 	return m

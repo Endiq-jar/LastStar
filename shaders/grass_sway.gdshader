@@ -1,6 +1,11 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 
+// Alpha-scissor, not alpha-blend: a cut-out discard costs no sorting and no
+// blending on mobile GLES3, which is why every open-world game does grass this
+// way. Alpha blending here would also make blades sort against each other and
+// flicker as the camera turns.
+
 // Wind-swept stylized grass for MultiMeshInstance3D.
 //
 // Written for the Compatibility (OpenGL ES 3.0) renderer, which is what ships
@@ -16,6 +21,8 @@ uniform float wind_strength : hint_range(0.0, 1.0) = 0.22;
 uniform float wind_speed : hint_range(0.0, 4.0) = 1.4;
 uniform vec2 wind_dir = vec2(0.85, 0.35);
 uniform float color_variance : hint_range(0.0, 1.0) = 0.35;
+uniform sampler2D blade_tex : source_color, filter_linear_mipmap, repeat_disable;
+uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
 
 varying float v_tint;
 varying float v_height;
@@ -43,6 +50,13 @@ void vertex() {
 }
 
 void fragment() {
+	// Cut the blade shape out of the quad. Anything outside the drawn tuft is
+	// discarded outright, so the quad never reads as a rectangle.
+	vec4 tex = texture(blade_tex, UV);
+	if (tex.a < alpha_cut) {
+		discard;
+	}
+
 	// Root-to-tip gradient. Dark at the base anchors the tuft in the soil;
 	// bright at the tip catches the sky, which is what makes stylised grass glow.
 	float t = clamp(UV.y, 0.0, 1.0);

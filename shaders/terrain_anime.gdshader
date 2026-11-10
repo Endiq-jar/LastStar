@@ -53,31 +53,47 @@ void fragment() {
 	patch = floor(patch / max(band_softness, 0.001)) * band_softness;
 	patch = clamp(patch, 0.0, 1.0);
 
-	vec3 meadow = tri(meadow_tex, v_world, wn, uv_scale);
-	vec3 rock = tri(rock_tex, v_world, wn, uv_scale * 0.55);
-	vec3 sand = tri(sand_tex, v_world, wn, uv_scale * 1.4);
-	meadow *= meadow_tint.rgb * mix(meadow_deep.rgb, vec3(1.0), patch * 0.45);
-	rock *= rock_tint.rgb * (0.86 + patch * 0.28);
-	sand *= sand_tint.rgb;
+	// Anime terrain is painted in flat planes, not textured noise. The old
+	// version multiplied triplanar noise at uv_scale 0.055 over everything,
+	// which at distance turned every mountain into a wall of fine-grained
+	// static. Now the large-scale `patch` value picks the colour and the
+	// texture only adds a faint brush grain on top.
+	float dry = smoothstep(0.35, 0.75, patch);
 
-	// Height bands: sand at shoreline, meadow in the valley, rock up high.
-	float shore = 1.0 - smoothstep(water_level + 0.4, water_level + 2.4, h);
-	float highland = smoothstep(rock_height * 0.55, rock_height * 1.15, h);
-	vec3 col = mix(meadow, sand, shore);
-	col = mix(col, rock, highland * 0.85);
+	// Meadow: two greens, broken up by the soft macro patches.
+	vec3 grass = mix(meadow_deep.rgb, meadow_tint.rgb, 0.35 + patch * 0.65);
+	// A little golden meadow mixed in, the way open-world grass reads.
+	grass = mix(grass, vec3(0.62, 0.66, 0.28), dry * 0.22);
 
-	// Slope: grass gives way to rock then bare cliff faces.
-	float rock_slope = smoothstep(slope_rock, slope_rock + 0.16, slope);
-	float cliff_slope = smoothstep(slope_cliff, slope_cliff + 0.14, slope);
-	col = mix(col, rock * mix(1.0, 0.82, cliff_slope), rock_slope * 0.9);
+	// Rock: warm grey, cooler in shadowed bands.
+	vec3 rock_col = rock_tint.rgb * mix(0.78, 1.06, patch);
 
-	// Snow caps on very high, flatter ground (warm keeps it stylized, not grey).
-	float snow = smoothstep(snow_height - 18.0, snow_height + 12.0, h) * (1.0 - slope * 0.8);
-	col = mix(col, vec3(0.96, 0.97, 1.0), clamp(snow, 0.0, 1.0) * 0.85);
+	// Height bands: sand at the shoreline, meadow in the valley, rock up high.
+	float shore = 1.0 - smoothstep(water_level + 0.4, water_level + 2.6, h);
+	float highland = smoothstep(rock_height * 0.62, rock_height * 1.05, h);
+	vec3 col = mix(grass, sand_tint.rgb, shore);
+	col = mix(col, rock_col, highland * 0.9);
+
+	// Slope: grass gives way to rock then bare cliff faces, banded so hillsides
+	// read as flat planes instead of gradients.
+	float rock_slope = smoothstep(slope_rock, slope_rock + 0.14, slope);
+	rock_slope = floor(rock_slope * 3.0 + 0.5) / 3.0;
+	float cliff_slope = smoothstep(slope_cliff, slope_cliff + 0.12, slope);
+	col = mix(col, rock_col * mix(1.0, 0.80, cliff_slope), rock_slope * 0.92);
+
+	// Snow caps only on genuinely high ground: a clean white with a cool tint,
+	// not a noise texture.
+	float snow = smoothstep(snow_height - 14.0, snow_height + 20.0, h);
+	snow *= 1.0 - smoothstep(0.42, 0.62, slope);
+	col = mix(col, vec3(0.95, 0.97, 1.0), snow * 0.92);
 
 	// Wet band near the shore: darker + glossier.
 	float wet = 1.0 - smoothstep(water_level, water_level + wet_band, h);
 	col = mix(col, col * vec3(0.62, 0.68, 0.78), wet * 0.55);
+
+	// A very faint brush grain, not a visible pattern.
+	float grain = texture(meadow_tex, v_world.xz * uv_scale).r;
+	col *= 0.94 + grain * 0.12;
 
 	ALBEDO = col;
 	ROUGHNESS = mix(0.92, 0.24, wet);
