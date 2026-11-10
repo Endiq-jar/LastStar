@@ -86,6 +86,16 @@ func _run() -> void:
 	_log("INFO" if players.size() == 1 else "FAIL",
 		"player nodes in group = %d" % players.size())
 
+	# The player must be standing on the ground, not falling through the world.
+	if players.size() > 0:
+		var pl := players[0] as Node3D
+		var py := pl.global_position.y
+		if py < -5.0:
+			_log("FAIL", "player is below the world (y=%.1f) - terrain collision or spawn is broken" % py)
+		else:
+			_log("INFO", "player standing at y=%.1f (on_floor=%s)" % [
+				py, str(pl is CharacterBody3D and (pl as CharacterBody3D).is_on_floor())])
+
 	var wenv := world.get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if wenv == null or wenv.environment == null:
 		_log("FAIL", "WorldEnvironment has no Environment assigned")

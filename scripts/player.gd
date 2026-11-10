@@ -53,8 +53,15 @@ signal burst_used(element: int, position: Vector3, power: float)
 func _ready() -> void:
 	add_to_group("player")
 	collision_layer = 2
+	# Collide with the world layer only. Layer 4 is used by pickups/waypoints;
+	# including it here made the body snag on trigger volumes.
 	collision_mask = 1
 	_spawn_origin = global_position
+	# Snap onto the actual ground, deferred: the physics space is not queryable
+	# until the body has entered the tree and a physics frame has run. The world
+	# only knows the analytic terrain height, which can sit slightly below the
+	# collision mesh - spawning under it means falling through the world forever.
+	_snap_to_ground.call_deferred(global_position)
 	# Camera first: it is the one node the scene cannot do without. The rig and
 	# the rest of the wiring come after, so a problem dressing the character can
 	# never leave the player (and the viewport) without a camera.
@@ -147,10 +154,31 @@ func _on_character_changed(_index: int) -> void:
 	_apply_rig_colors()
 
 
+func _snap_to_ground(at: Vector3) -> void:
+	## Raycast down from high above `at` and place the body on whatever solid
+	## surface is there. Falls back to the given height when nothing is hit.
+	var from := Vector3(at.x, at.y + 60.0, at.z)
+	var to := Vector3(at.x, at.y - 80.0, at.z)
+	var space := get_world_3d().direct_space_state
+	if space:
+		var query := PhysicsRayQueryParameters3D.create(from, to, 1)
+		query.exclude = [get_rid()]
+		var hit := space.intersect_ray(query)
+		if hit and hit.has("position"):
+			var p: Vector3 = hit["position"]
+			global_position = p + Vector3(0.0, 0.6, 0.0)
+			velocity = Vector3.ZERO
+			return
+	global_position = at + Vector3(0.0, 1.0, 0.0)
+	velocity = Vector3.ZERO
+
+
 func _on_respawn() -> void:
 	var target: Vector3 = Game.checkpoint if Game.has_checkpoint else _spawn_origin
-	global_position = target
-	velocity = Vector3.ZERO
+	# Land ON the ground at the checkpoint, not at the stored (possibly
+	# underground) coordinate - otherwise respawning drops you through the world
+	# again and the player loops forever at the bottom of the map.
+	_snap_to_ground(target)
 	_gliding = false
 
 

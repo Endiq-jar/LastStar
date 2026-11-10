@@ -628,7 +628,9 @@ func _spawn_player() -> void:
 	var player := CharacterBody3D.new()
 	player.name = "Player"
 	player.set_script(PlayerScript)
-	var spawn := Vector3(0, _height(0, 0) + 4.0, 6.0)
+	# Start comfortably above the analytic surface; the player snaps itself onto
+	# the collision mesh on its first physics frame.
+	var spawn := Vector3(0.0, _height(0.0, 0.0) + 6.0, 6.0)
 	player.position = spawn
 	add_child(player)
 
