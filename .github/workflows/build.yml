@@ -223,6 +223,9 @@ jobs:
           fi
           grep -E "PROBE_INFO: (size=|alt view)" /tmp/probe.log | \
             while IFS= read -r line; do echo "::notice title=pixels::$line"; done
+          # Pillow is only needed to re-encode the frame for the log.
+          python3 -m pip install --quiet --disable-pip-version-check pillow 2>/dev/null || \
+            sudo apt-get install -y -qq python3-pil 2>/dev/null || true
           for SHOT in /tmp/probe/world.png /tmp/probe/world_alt.png; do
             if [ -f "$SHOT" ]; then
               python3 tools/embed_shot.py "$SHOT" | \
