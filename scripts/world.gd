@@ -31,6 +31,9 @@ var _perf_frames := 0
 var _perf_warmup := 45
 var _perf_accum := 0.0
 var _perf_done := false
+## Countdown of frames to wait before sampling the framebuffer once.
+var _render_check_countdown := -1
+var _render_checked := false
 
 
 func _ready() -> void:
@@ -107,21 +110,28 @@ func _watch_render() -> void:
 	## frames we look at the actual pixels once; if the 3D layer came out black
 	## we repair the most likely causes so the player is never stuck staring at
 	## a black screen with a HUD floating on top of it.
-	for i in range(12):
-		await get_tree().process_frame
+	##
+	## Deliberately does NOT await RenderingServer.frame_post_draw: on a device
+	## whose render loop has stalled that signal never fires, which would leave
+	## this coroutine (and the auto-tuner behind it) wedged forever instead of
+	## repairing anything. A plain frame counter is enough here.
 	if DisplayServer.get_name() == "headless":
 		return
-	await RenderingServer.frame_post_draw
-	var cam := get_viewport().get_camera_3d()
-	if cam == null:
-		_ensure_camera()
-		return
+	_render_check_countdown = 10
+	_render_checked = false
+
+
+func _check_rendered_frame() -> void:
+	## Called from _process once a few frames have gone by. Grabs whatever the
+	## viewport currently holds - no waiting on renderer callbacks.
+	_render_checked = true
 	var img := get_viewport().get_texture().get_image()
 	if img == null or img.is_empty():
 		return
-	# Sample the middle of the screen, avoiding the HUD corners.
 	var w := img.get_width()
 	var h := img.get_height()
+	if w < 8 or h < 8:
+		return
 	var luma := 0.0
 	var samples := 0
 	for y in range(int(h * 0.35), int(h * 0.75), 12):
@@ -131,10 +141,11 @@ func _watch_render() -> void:
 	if samples == 0:
 		return
 	luma /= float(samples)
-	if luma > 0.02:
-		return
-	push_warning("LastStar: viewport looks black (luma %.4f) - repairing render state" % luma)
-	repair_render()
+	# A perfectly black middle slice of screen means the 3D layer is not
+	# drawing - the HUD lives in the corners, so the centre is a safe read.
+	if luma <= 0.02:
+		push_warning("LastStar: viewport looks black (luma %.4f) - repairing render state" % luma)
+		repair_render()
 
 
 func repair_render() -> void:
@@ -332,6 +343,12 @@ func _process(delta: float) -> void:
 		return
 	_day_time = fposmod(_day_time + delta * _day_speed, 1.0)
 	_update_time_of_day()
+	# One-shot black-frame check, a few frames in (no renderer awaits).
+	if not _render_checked and _render_check_countdown >= 0:
+		_render_check_countdown -= 1
+		if _render_check_countdown <= 0:
+			_check_rendered_frame()
+
 	# Skip the first frames: shader compilation makes them meaningless.
 	if not _perf_done and _perf_frames < 400:
 		_perf_frames += 1

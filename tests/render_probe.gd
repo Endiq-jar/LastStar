@@ -67,8 +67,11 @@ func _run() -> void:
 	get_tree().root.add_child(world)
 
 	# Let _ready() chains, vegetation (one frame await) and tweens settle.
+	# Bounded by a wall-clock guard as well as a frame count: `process_frame`
+	# stops arriving if the main loop is blocked, which would hang the job.
 	for i in range(45):
 		await get_tree().process_frame
+	await get_tree().create_timer(1.0).timeout
 
 	# Diagnostic breadcrumbs: these survive the CI annotation cap, so they are
 	# the fastest way to explain a failed probe.
@@ -163,7 +166,10 @@ func _run() -> void:
 		_finish(_fail)
 		return
 
-	await RenderingServer.frame_post_draw
+	# Give the renderer a few real frames without blocking on frame_post_draw,
+	# which never fires if the loop is stalled.
+	await get_tree().create_timer(0.4).timeout
+	await get_tree().process_frame
 	var img := get_viewport().get_texture().get_image()
 	if img == null or img.is_empty():
 		_log("FAIL", "viewport texture empty (nothing is being rendered)")
@@ -190,8 +196,8 @@ func _run() -> void:
 		# Nudge the camera only: rotating the player's pivot would also move the
 		# SpringArm's collision cast and can put the camera inside a hill.
 		cam.global_position += Vector3(0.0, 6.0, 0.0)
-		await get_tree().create_timer(0.35).timeout
-		await RenderingServer.frame_post_draw
+		await get_tree().create_timer(0.45).timeout
+		await get_tree().process_frame
 		var img2 := get_viewport().get_texture().get_image()
 		if img2:
 			img2.save_png(out_dir.path_join("world_alt.png"))
