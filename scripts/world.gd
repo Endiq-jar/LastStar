@@ -385,30 +385,72 @@ func _process(delta: float) -> void:
 
 
 func _update_time_of_day() -> void:
-	# Golden-hour biased cycle. The sun stays above the horizon for most of the
-	# loop and never drops so low that the valley goes unlit: an open-world game
-	# that spends a third of its time pitch black reads as "the screen is broken".
+	## A graded cycle: dawn -> warm morning -> noon -> golden afternoon -> dusk.
+	##
+	## The old version only lerped the sun colour and ambient energy, so the
+	## world barely changed character across the day. Genshin's look comes from
+	## the whole frame moving together: warm low sun, purple-blue shadows, sky
+	## that shifts hue, and fog that picks up the sun's colour. Every one of
+	## those is driven from a single `warmth` value here.
 	var sun_angle: float = (_day_time - 0.25) * TAU
 	var elevation := sin(sun_angle) * 26.0 + 4.0
 	sun.rotation_degrees = Vector3(-clampf(elevation, -12.0, 72.0), -38.0, 0.0)
+	sun.visible = true
 
 	var day := clampf(sin(sun_angle) * 0.5 + 0.6, 0.0, 1.0)
-	var dusk := pow(clampf(1.0 - absf(day - 0.45) / 0.45, 0.0, 1.0), 2.0)
+	# 1.0 at the warmest (dawn/dusk), 0.0 at high noon.
+	var low_sun := 1.0 - clampf((elevation - 4.0) / 30.0, 0.0, 1.0)
+	var warmth := pow(clampf(low_sun, 0.0, 1.0), 1.6)
 
-	# 0.85-1.80 was blowing out every sunlit surface; the terracing in the
-	# terrain shader does the stylising, so the key light can be honest.
-	sun.light_energy = 0.85 + day * 0.45
-	sun.light_color = Color(1.0, 0.95, 0.86).lerp(Color(1.0, 0.70, 0.48), clampf(dusk, 0.0, 1.0) * 0.6)
-	sun.visible = true
+	# --- key light ---------------------------------------------------------
+	# Noon white-warm, low sun deep amber. Energy dips a little at the extremes
+	# so a raking sun does not clip the hillsides.
+	sun.light_energy = lerpf(0.78, 1.15, 1.0 - warmth)
+	var noon_col := Color(1.0, 0.97, 0.90)
+	var dawn_col := Color(1.0, 0.72, 0.42)
+	sun.light_color = noon_col.lerp(dawn_col, warmth)
+	sun.shadow_enabled = true
 
 	var env := environment.environment as Environment
 	if env == null:
 		return
-	# Keep ambient low and cool so the warm key light reads as sunlight rather
-	# than as one of three equally bright lights.
-	env.ambient_light_energy = 0.42 + day * 0.16
-	env.ambient_light_color = Color(0.54, 0.58, 0.66).lerp(Color(0.62, 0.66, 0.72), day)
-	env.fog_light_color = Color(0.70, 0.82, 0.96).lerp(Color(1.0, 0.76, 0.58), clampf(dusk, 0.0, 1.0) * 0.55)
+
+	# --- ambient -----------------------------------------------------------
+	# Fill light goes cool and dim under a warm sun - that cool-shadow/warm-light
+	# contrast is most of the "anime morning" read. At noon it is neutral-bright.
+	var amb_warm := Color(0.46, 0.42, 0.44)
+	var amb_noon := Color(0.60, 0.65, 0.74)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = amb_noon.lerp(amb_warm, warmth)
+	env.ambient_light_energy = lerpf(0.58, 0.40, warmth)
+
+	# --- fog ---------------------------------------------------------------
+	# Fog carries the sun's colour, which is what makes distant hills read as
+	# warm-lit rather than grey haze.
+	env.fog_light_color = Color(0.66, 0.79, 0.92).lerp(Color(0.98, 0.80, 0.62), warmth)
+	env.fog_density = lerpf(0.00022, 0.00040, warmth)
+	env.fog_aerial_perspective = lerpf(0.24, 0.38, warmth)
+
+	# --- sky ---------------------------------------------------------------
+	# Dawn sky is a soft peach near the horizon with a deeper blue overhead;
+	# midday is the clean strong blue we had.
+	var sky := env.sky
+	if sky != null and sky.sky_material is ProceduralSkyMaterial:
+		var mat := sky.sky_material as ProceduralSkyMaterial
+		mat.sky_top_color = Color(0.20, 0.40, 0.74).lerp(Color(0.28, 0.36, 0.62), warmth)
+		mat.sky_horizon_color = Color(0.68, 0.85, 0.96).lerp(Color(0.98, 0.78, 0.62), warmth)
+		mat.ground_horizon_color = mat.sky_horizon_color
+		mat.ground_bottom_color = Color(0.20, 0.26, 0.22).lerp(Color(0.28, 0.24, 0.22), warmth)
+
+	# --- grade -------------------------------------------------------------
+	# A touch warmer and slightly more saturated as the sun drops. This is the
+	# cheap version of a colour-grade LUT and it sells the time of day more than
+	# any single light tweak.
+	if env.adjustment_enabled:
+		env.adjustment_saturation = lerpf(1.16, 1.26, warmth)
+		env.adjustment_contrast = lerpf(1.06, 1.12, warmth)
+		env.adjustment_brightness = lerpf(1.0, 0.98, warmth)
+
 
 
 func _build_lake() -> void:

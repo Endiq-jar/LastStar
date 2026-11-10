@@ -31,6 +31,7 @@ var _editor_slot := -1
 var _open := false
 var _slot_press: Dictionary = {}
 var _slot_held: Dictionary = {}
+var _slot_repeat: Dictionary = {}
 var _visible_pos := Vector2.ZERO
 var _hidden_pos := Vector2.ZERO
 
@@ -162,21 +163,36 @@ func _on_slot_input(ev: InputEvent, i: int, hold: Timer) -> void:
 		return
 
 	if pressed:
+		# Fire immediately on press rather than on release: waiting for the
+		# finger to lift made every cast feel laggy. Holding opens the editor
+		# instead, so the repeat is suppressed while the hold timer runs.
 		_slot_press[i] = true
 		_slot_held[i] = false
+		_cast_slot(i)
 		hold.start()
 	elif is_release:
 		hold.stop()
-		var was_press: bool = _slot_press.get(i, false)
-		var was_held: bool = _slot_held.get(i, false)
 		_slot_press[i] = false
-		if was_press and not was_held:
-			_cast_slot(i)
 
 
 func _on_slot_hold(i: int) -> void:
+	if _slot_held.get(i, false):
+		return
 	_slot_held[i] = true
 	_open_editor(i)
+
+
+func _process(_delta: float) -> void:
+	# Hold-to-repeat casting: while a slot is held (and the editor has not opened
+	# instead) cast again once a second. Cooldowns still gate the actual cast,
+	# so a held button simply re-casts at whatever rate the spell allows.
+	for i in range(_slots.size()):
+		if not _slot_press.get(i, false) or _slot_held.get(i, false):
+			continue
+		_slot_repeat[i] = float(_slot_repeat.get(i, 0.0)) + _delta
+		if float(_slot_repeat[i]) >= 1.0:
+			_slot_repeat[i] = 0.0
+			_cast_slot(i)
 
 
 func _on_book_input(ev: InputEvent) -> void:

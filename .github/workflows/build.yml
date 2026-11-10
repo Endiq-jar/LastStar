@@ -33,10 +33,10 @@ jobs:
     name: Import + headless boot
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Cache Godot editor
-        uses: actions/cache@v4
+        uses: actions/cache@v4.3.0
         with:
           path: /opt/godot
           key: godot-editor-${{ env.GODOT_RELEASE }}-linux
@@ -259,7 +259,7 @@ jobs:
 
       - name: Upload render screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: render-probe
           path: |
@@ -274,16 +274,16 @@ jobs:
     needs: [verify]
     # Even if verify's optional visual probe is unhappy, ship the APK.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Cache Godot editor + export templates
-        uses: actions/cache@v4
+        uses: actions/cache@v4.3.0
         with:
           path: |
             /opt/godot
@@ -457,7 +457,7 @@ jobs:
 
       - name: Upload export diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: android-export-log
           path: /tmp/export.log
@@ -478,7 +478,7 @@ jobs:
             | grep -E "^(package|application-label|sdkVersion|targetSdkVersion|native-code)" || true
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: LastStar-android
           path: build/android/LastStar.apk
@@ -536,10 +536,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Cache Godot editor + export templates
-        uses: actions/cache@v4
+        uses: actions/cache@v4.3.0
         with:
           path: |
             /opt/godot
@@ -573,22 +573,26 @@ jobs:
           /opt/godot/godot --headless --editor --quit-after 400
           test -d .godot
 
-      - name: Export Linux + Windows
+      - name: Export Linux + Windows (x64 and x32)
         run: |
           set -euo pipefail
-          mkdir -p build/linux build/windows
+          mkdir -p build/linux build/windows build/windows32
           /opt/godot/godot --headless --verbose --export-release "Linux" "build/linux/${EXPORT_NAME}.x86_64"
           /opt/godot/godot --headless --verbose --export-release "Windows Desktop" "build/windows/${EXPORT_NAME}.exe"
+          # The 32-bit export uses the same Godot template set but a separate
+          # preset (Windows Desktop 32) so both binaries ship side by side.
+          /opt/godot/godot --headless --verbose --export-release "Windows Desktop 32" "build/windows32/${EXPORT_NAME}.exe"
           chmod +x build/linux/${EXPORT_NAME}.x86_64
-          ls -lh build/linux build/windows
+          ls -lh build/linux build/windows build/windows32
 
       - name: Upload desktop builds
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: LastStar-desktop
           path: |
             build/linux/**
             build/windows/**
+            build/windows32/**
           if-no-files-found: error
 
   release:
@@ -597,7 +601,7 @@ jobs:
     needs: [android, desktop]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: dist
 
@@ -612,6 +616,7 @@ jobs:
             * `LastStar.apk` — native Android build (arm64-v8a).
             * `linux/` — Linux x86_64 desktop build.
             * `windows/` — Windows x86_64 desktop build.
+            * `windows32/` — Windows x86 (32-bit) desktop build.
           files: |
             dist/LastStar-android/LastStar.apk
             dist/LastStar-desktop/**

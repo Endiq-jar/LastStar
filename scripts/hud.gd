@@ -184,21 +184,24 @@ func _build() -> void:
 	actions.add_theme_constant_override("separation", 12)
 	root.add_child(actions)
 
+	# Fires on press, repeats while held (see scripts/hold_button.gd). Godot's
+	# `pressed` signal only fires on release, which felt like input lag on a
+	# phone.
 	var jump_btn := _action_button("Jump", Color(0.55, 0.9, 1.0), Vector2(84, 84), "jump")
-	jump_btn.pressed.connect(_press_jump)
 	actions.add_child(jump_btn)
+	HoldButton.bind(jump_btn, _press_jump)
 
 	_skill_button = _action_button("Skill", Color(0.5, 0.95, 0.75), Vector2(100, 100), "skill")
-	_skill_button.pressed.connect(func(): _emit_action("skill"))
 	actions.add_child(_skill_button)
+	HoldButton.bind(_skill_button, func(): _emit_action("skill"))
 
 	var attack_btn := _action_button("Slash", Color(1.0, 0.8, 0.45), Vector2(118, 118), "attack")
-	attack_btn.pressed.connect(func(): _emit_action("attack"))
 	actions.add_child(attack_btn)
+	HoldButton.bind(attack_btn, func(): _emit_action("attack"))
 
 	_burst_button = _action_button("Burst", Color(1.0, 0.72, 0.4), Vector2(100, 100), "burst")
-	_burst_button.pressed.connect(func(): _emit_action("burst"))
 	actions.add_child(_burst_button)
+	HoldButton.bind(_burst_button, func(): _emit_action("burst"))
 
 	# ---- toast ----------------------------------------------------------
 	_toast = Label.new()
@@ -419,10 +422,11 @@ func _action_button(text: String, color: Color, size: Vector2, icon_name: String
 
 
 func _press_jump() -> void:
-	# Hold for a few frames so "jump" counts as pressed, then release.
+	# A one-frame pulse. The player reads Input.is_action_just_pressed("jump"),
+	# so a longer hold would be consumed on the next frame anyway; holding the
+	# button repeats this through HoldButton.
 	Input.action_press("jump")
-	await get_tree().create_timer(0.12).timeout
-	Input.action_release("jump")
+	Input.action_release.call_deferred("jump")
 
 
 func _emit_action(action: String) -> void:

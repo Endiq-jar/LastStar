@@ -9,6 +9,8 @@ const TREE_COUNT := 170
 const PINE_COUNT := 130
 const ROCK_COUNT := 100
 const FLOWER_COUNT := 300
+const LOG_COUNT := 46
+const PEBBLE_COUNT := 900
 const SPREAD := 330.0
 
 var _time := 0.0
@@ -29,6 +31,8 @@ func _ready() -> void:
 	_spawn_pines(terrain)
 	_spawn_rocks(terrain)
 	_spawn_flowers(terrain)
+	_spawn_fallen_logs(terrain)
+	_spawn_pebbles(terrain)
 
 
 func _toon(color: Color, rim: float = 0.3) -> ShaderMaterial:
@@ -196,6 +200,91 @@ func _spawn_pines(terrain: Node) -> void:
 			cone.material_override = mat
 			cone.position.y = 2.2 + layer * 0.78
 			pine.add_child(cone)
+
+
+func _spawn_fallen_logs(terrain: Node) -> void:
+	## Dead trunks lying in the meadow. Logs are the cheapest possible detail
+	## that still makes a hillside feel *lived in* - they read as depth cues,
+	## they break the grass silhouette, and a player can see they were placed.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 771
+	var spots := _pick(terrain, rng, 3.0, 70.0, 0.9, LOG_COUNT)
+	if spots.is_empty():
+		return
+	var bark := _toon(Color(0.34, 0.26, 0.20), 0.18)
+	var moss := _toon(Color(0.30, 0.42, 0.22), 0.20)
+
+	var root := Node3D.new()
+	root.name = "FallenLogs"
+	add_child(root)
+	_scatter_roots.append(root)
+
+	for p in spots:
+		var log_len := rng.randf_range(2.6, 6.5)
+		var log_r := rng.randf_range(0.18, 0.34)
+		var trunk := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = log_r * rng.randf_range(0.75, 0.95)
+		cyl.bottom_radius = log_r
+		cyl.height = log_len
+		cyl.radial_segments = 8
+		cyl.rings = 1
+		trunk.mesh = cyl
+		trunk.material_override = bark
+		# Lie it down, then give it a random heading.
+		var yaw := rng.randf() * TAU
+		var tilt := rng.randf_range(-0.12, 0.12)
+		var b := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, PI * 0.5 + tilt)
+		trunk.transform = Transform3D(b, p + Vector3(0, log_r * 0.85, 0))
+		root.add_child(trunk)
+
+		# A mossy cap on some logs, so they are not all identical.
+		if rng.randf() < 0.55:
+			var cap := MeshInstance3D.new()
+			var capcyl := CylinderMesh.new()
+			capcyl.top_radius = log_r * 0.55
+			capcyl.bottom_radius = log_r * 0.8
+			capcyl.height = log_len * rng.randf_range(0.5, 0.85)
+			capcyl.radial_segments = 6
+			cap.mesh = capcyl
+			cap.material_override = moss
+			cap.transform = Transform3D(b, p + Vector3(0, log_r * 1.35, 0) + b.z * 0.02)
+			root.add_child(cap)
+
+
+func _spawn_pebbles(terrain: Node) -> void:
+	## Scattered small stones. One MultiMesh, so a thousand of them cost one
+	## draw call; at ground level they are what stops the grass carpet looking
+	## like a flat texture painted on the hill.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 977
+	var spots := _pick(terrain, rng, 1.2, 90.0, 1.0, PEBBLE_COUNT)
+	if spots.is_empty():
+		return
+
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.16
+	sphere.height = 0.22
+	sphere.radial_segments = 6
+	sphere.rings = 3
+
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = sphere
+	multimesh.instance_count = spots.size()
+	for i in range(spots.size()):
+		var p: Vector3 = spots[i]
+		var s := rng.randf_range(0.5, 1.6)
+		var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(
+			Vector3(s, s * rng.randf_range(0.5, 0.9), s))
+		multimesh.set_instance_transform(i, Transform3D(b, p + Vector3(0, 0.04 * s, 0)))
+
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "Pebbles"
+	mmi.multimesh = multimesh
+	mmi.material_override = _toon(Color(0.58, 0.57, 0.56), 0.25)
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
 
 
 func _spawn_rocks(terrain: Node) -> void:

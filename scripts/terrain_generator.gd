@@ -105,6 +105,17 @@ func is_underwater(x: float, z: float) -> bool:
 	return get_height_at(x, z) < SEA_LEVEL
 
 
+## Load a terrain texture, falling back to procedural noise if the file is
+## missing so the world still builds in a stripped checkout.
+func _load_tex(path: String) -> Texture2D:
+	if ResourceLoader.exists(path):
+		var t := load(path)
+		if t is Texture2D:
+			return t as Texture2D
+	push_warning("LastStar: missing terrain texture " + path)
+	return _make_noise_tex(101, 0.055, 512)
+
+
 func _make_noise_tex(seed_v: int, freq: float, size: int, as_normal: bool = false, bump: float = 8.0) -> NoiseTexture2D:
 	var n := FastNoiseLite.new()
 	n.seed = seed_v
@@ -130,10 +141,13 @@ func _terrain_material() -> ShaderMaterial:
 	m.shader = load("res://shaders/terrain_anime.gdshader")
 	# Painterly noise textures stand in for hand-painted layers. They are
 	# procedural so the project stays asset-light and fully MIT-safe.
-	m.set_shader_parameter("meadow_tex", _make_noise_tex(101, 0.055, 512))
-	m.set_shader_parameter("rock_tex", _make_noise_tex(202, 0.035, 512))
-	m.set_shader_parameter("sand_tex", _make_noise_tex(303, 0.09, 256))
-	m.set_shader_parameter("macro_tex", _make_noise_tex(404, 0.012, 512))
+	# Hand-painted, seamlessly tiling textures (textures/terrain/*.png), sampled
+	# triplanar by the shader. These replace the procedural noise that made
+	# every surface read as grey static up close.
+	m.set_shader_parameter("meadow_tex", _load_tex("res://textures/terrain/meadow.png"))
+	m.set_shader_parameter("rock_tex", _load_tex("res://textures/terrain/rock.png"))
+	m.set_shader_parameter("sand_tex", _load_tex("res://textures/terrain/sand.png"))
+	m.set_shader_parameter("macro_tex", _load_tex("res://textures/terrain/macro.png"))
 	m.set_shader_parameter("water_level", SEA_LEVEL)
 	m.set_shader_parameter("rock_height", 96.0)
 	m.set_shader_parameter("snow_height", 128.0)

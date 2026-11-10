@@ -60,18 +60,29 @@ void fragment() {
 	// texture only adds a faint brush grain on top.
 	float dry = smoothstep(0.35, 0.75, patch);
 
-	// Meadow: two greens, broken up by the soft macro patches.
+	// Detail from the painted textures, scaled to a painterly size rather than
+	// a photographic one. tri() picks the best projection per surface so cliffs
+	// do not stretch the meadow.
+	vec3 meadow_detail = tri(meadow_tex, v_world, wn, uv_scale);
+	vec3 rock_detail = tri(rock_tex, v_world, wn, uv_scale * 0.62);
+	vec3 sand_detail = tri(sand_tex, v_world, wn, uv_scale * 1.25);
+
+	// Meadow: two greens, broken up by the soft macro patches, modulated by the
+	// painted detail (kept subtle so the flat anime bands still dominate).
 	vec3 grass = mix(meadow_deep.rgb, meadow_tint.rgb, 0.35 + patch * 0.65);
+	grass *= mix(vec3(1.0), meadow_detail * 1.35, 0.55);
 	// A little golden meadow mixed in, the way open-world grass reads.
 	grass = mix(grass, vec3(0.52, 0.56, 0.24), dry * 0.14);
 
 	// Rock: warm grey, cooler in shadowed bands.
 	vec3 rock_col = rock_tint.rgb * mix(0.66, 1.0, patch);
+	rock_col *= mix(vec3(1.0), rock_detail * 1.30, 0.50);
 
 	// Height bands: sand at the shoreline, meadow in the valley, rock up high.
 	float shore = 1.0 - smoothstep(water_level + 0.4, water_level + 2.6, h);
 	float highland = smoothstep(rock_height * 0.78, rock_height * 1.35, h);
-	vec3 col = mix(grass, sand_tint.rgb, shore);
+	vec3 sand_col = sand_tint.rgb * mix(vec3(1.0), sand_detail * 1.25, 0.45);
+	vec3 col = mix(grass, sand_col, shore);
 	col = mix(col, rock_col, highland * 0.9);
 
 	// Slope: grass gives way to rock then bare cliff faces, banded so hillsides
@@ -91,9 +102,6 @@ void fragment() {
 	float wet = 1.0 - smoothstep(water_level, water_level + wet_band, h);
 	col = mix(col, col * vec3(0.62, 0.68, 0.78), wet * 0.55);
 
-	// A very faint brush grain, not a visible pattern.
-	float grain = texture(meadow_tex, v_world.xz * uv_scale).r;
-	col *= 0.94 + grain * 0.12;
 
 	ALBEDO = col;
 	ROUGHNESS = mix(0.92, 0.24, wet);

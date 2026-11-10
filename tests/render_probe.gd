@@ -143,6 +143,30 @@ func _run() -> void:
 			_log("INFO" if pct > 99.0 else "FAIL",
 				"terrain normals face up: %.1f%% of %d sampled" % [pct, checked])
 
+	# --- environment dressing ----------------------------------------------
+	# Logs and pebbles are what stop the grass reading as a flat painted
+	# texture. Assert they actually spawned rather than silently picking zero
+	# valid spots.
+	for needed in ["Vegetation/FallenLogs", "Vegetation/Pebbles"]:
+		var node := world.get_node_or_null(needed)
+		_log("INFO" if node != null else "FAIL",
+			"%s = %s" % [needed, "present" if node != null else "MISSING"])
+	var veg := world.get_node_or_null("Vegetation")
+	if veg != null:
+		var logs := veg.get_node_or_null("FallenLogs")
+		var pebbles := veg.get_node_or_null("Pebbles")
+		var log_n := logs.get_child_count() if logs != null else 0
+		var peb_n := 0
+		if pebbles is MultiMeshInstance3D and (pebbles as MultiMeshInstance3D).multimesh != null:
+			peb_n = (pebbles as MultiMeshInstance3D).multimesh.instance_count
+		_log("INFO", "scatter: %d log meshes, %d pebbles" % [log_n, peb_n])
+
+	# --- terrain textures ---------------------------------------------------
+	for tex_name in ["meadow", "rock", "sand", "macro"]:
+		var path := "res://textures/terrain/%s.png" % tex_name
+		_log("INFO" if ResourceLoader.exists(path) else "FAIL",
+			"terrain texture %s %s" % [tex_name, "loaded" if ResourceLoader.exists(path) else "MISSING"])
+
 	# --- grass field --------------------------------------------------------
 	var grass := world.get_node_or_null("GrassField")
 	if grass == null:
