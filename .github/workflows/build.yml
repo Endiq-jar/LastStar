@@ -117,6 +117,28 @@ jobs:
           fi
           echo "World booted cleanly."
 
+      - name: Structural probe (headless, no GPU required)
+        # The terrain winding bug produced a mesh with vertices, a collision
+        # shape with faces, and a framebuffer full of sky - it passed every
+        # check we had. These assertions are pure CPU work (normals, physics
+        # ray, player height) so they run headlessly and reliably gate the APK.
+        run: |
+          set -uo pipefail
+          if /opt/godot/godot --headless --path . --quit-after 900 \
+               res://tests/render_probe.tscn > /tmp/structure.log 2>&1 ; then
+            :
+          fi
+          grep -E "^PROBE_" /tmp/structure.log || {
+            echo "::error::structural probe produced no result"
+            tail -40 /tmp/structure.log
+            exit 1
+          }
+          grep -E "^PROBE_FAIL" /tmp/structure.log && {
+            echo "::error::structural probe failed (see PROBE_FAIL lines above)"
+            exit 1
+          }
+          echo "Structural checks passed."
+
       - name: Render probe (real framebuffer screenshot)
         # Never let the visual probe block the APK: a hung software-GL context
         # must not cost players their build. It reports, it does not gate.
