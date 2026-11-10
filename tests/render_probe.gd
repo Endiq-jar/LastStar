@@ -86,6 +86,18 @@ func _run() -> void:
 	_log("INFO" if players.size() == 1 else "FAIL",
 		"player nodes in group = %d" % players.size())
 
+	# --- terrain collision diagnostics -------------------------------------
+	var tbody := world.get_node_or_null("Terrain/TerrainBody") as StaticBody3D
+	if tbody == null:
+		_log("FAIL", "Terrain/TerrainBody missing - nothing to stand on")
+	else:
+		var faces := 0
+		for c in tbody.get_children():
+			if c is CollisionShape3D and c.shape is ConcavePolygonShape3D:
+				faces = (c.shape as ConcavePolygonShape3D).get_faces().size()
+		_log("INFO", "terrain body layer=%d shapes=%d face_verts=%d" % [
+			tbody.collision_layer, tbody.get_child_count(), faces])
+
 	# The player must be standing on the ground, not falling through the world.
 	if players.size() > 0:
 		var pl := players[0] as Node3D
