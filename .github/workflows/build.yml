@@ -218,12 +218,14 @@ jobs:
 
           # And embed the frame itself: one base64 line that survives anywhere,
           # unlike an artifact on blob storage.
-          if [ -f /tmp/shots/world.png ]; then
-            python3 tools/embed_shot.py /tmp/shots/world.png | \
-              while IFS= read -r line; do echo "::notice::$line"; done
-          else
-            echo "::notice::no screenshot file was produced"
-          fi
+          for SHOT in /tmp/probe/world.png /tmp/probe/world_alt.png; do
+            if [ -f "$SHOT" ]; then
+              python3 tools/embed_shot.py "$SHOT" | \
+                while IFS= read -r line; do echo "::notice::$line"; done
+            else
+              echo "::notice::no screenshot at $SHOT"
+            fi
+          done
 
       - name: Upload render screenshots
         if: always()
