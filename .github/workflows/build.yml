@@ -122,22 +122,31 @@ jobs:
         # shape with faces, and a framebuffer full of sky - it passed every
         # check we had. These assertions are pure CPU work (normals, physics
         # ray, player height) so they run headlessly and reliably gate the APK.
+        #
+        # No --quit-after here: in headless the main loop is unthrottled, so a
+        # frame budget can expire in well under a second and kill the probe
+        # before it reports. The probe quits itself; `timeout` is the backstop.
         run: |
           set -uo pipefail
-          if /opt/godot/godot --headless --path . --quit-after 900 \
-               res://tests/render_probe.tscn > /tmp/structure.log 2>&1 ; then
-            :
-          fi
+          timeout -k 10 300 /opt/godot/godot --headless --path . \
+            res://tests/render_probe.tscn > /tmp/structure.log 2>&1 || true
+          echo "--- structural probe log (tail) ---"
+          tail -25 /tmp/structure.log | while IFS= read -r line; do
+            echo "::notice::$line"
+          done
           grep -E "^PROBE_" /tmp/structure.log || {
             echo "::error::structural probe produced no result"
-            tail -40 /tmp/structure.log
             exit 1
           }
-          grep -E "^PROBE_FAIL" /tmp/structure.log && {
-            echo "::error::structural probe failed (see PROBE_FAIL lines above)"
+          if grep -qE "^PROBE_RESULT: PASS" /tmp/structure.log; then
+            echo "Structural checks passed."
+          else
+            grep -E "^PROBE_FAIL" /tmp/structure.log | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            echo "::error::structural probe failed"
             exit 1
-          }
-          echo "Structural checks passed."
+          fi
 
       - name: Render probe (real framebuffer screenshot)
         # Never let the visual probe block the APK: a hung software-GL context
