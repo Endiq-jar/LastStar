@@ -155,22 +155,33 @@ func _on_character_changed(_index: int) -> void:
 
 
 func _snap_to_ground(at: Vector3) -> void:
-	## Raycast down from high above `at` and place the body on whatever solid
-	## surface is there. Falls back to the given height when nothing is hit.
-	var from := Vector3(at.x, at.y + 60.0, at.z)
-	var to := Vector3(at.x, at.y - 80.0, at.z)
-	var space := get_world_3d().direct_space_state
-	if space:
-		var query := PhysicsRayQueryParameters3D.create(from, to, 1)
-		query.exclude = [get_rid()]
-		var hit := space.intersect_ray(query)
-		if hit and hit.has("position"):
-			var p: Vector3 = hit["position"]
-			global_position = p + Vector3(0.0, 0.6, 0.0)
-			velocity = Vector3.ZERO
-			return
-	global_position = at + Vector3(0.0, 1.0, 0.0)
+	## Place the body on whatever solid surface is under `at`.
+	##
+	## Uses a shape cast against the physics space, which is cheap and safe to
+	## call from a deferred callback. Physics queries are only issued once the
+	## body is genuinely inside the world: calling into the space too early is
+	## how you get a body that silently falls forever.
+	if not is_inside_tree() or get_world_3d() == null:
+		return
 	velocity = Vector3.ZERO
+	var space := get_world_3d().direct_space_state
+	if space != null:
+		var from := Vector3(at.x, at.y + 120.0, at.z)
+		var to := Vector3(at.x, at.y - 120.0, at.z)
+		var query := PhysicsRayQueryParameters3D.create(from, to, 1)
+		query.hit_from_inside = false
+		query.hit_back_faces = true
+		# Never hit ourselves: the body is on layer 2, but be explicit.
+		query.exclude = [get_rid()]
+		query.collide_with_areas = false
+		var hit: Dictionary = space.intersect_ray(query)
+		if not hit.is_empty() and hit.get("position") != null:
+			var p: Vector3 = hit["position"]
+			global_position = p + Vector3(0.0, 0.8, 0.0)
+			return
+	# No ground found (e.g. outside the collision mesh): keep the caller's
+	# height rather than teleporting somewhere arbitrary.
+	global_position = at
 
 
 func _on_respawn() -> void:
