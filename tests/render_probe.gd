@@ -101,6 +101,24 @@ func _run() -> void:
 	_log("INFO" if players.size() == 1 else "FAIL",
 		"player nodes in group = %d" % players.size())
 
+	# --- every script compiles ---------------------------------------------
+	# Load each GDScript through the real compiler. This catches the class of
+	# error that only Godot rejects (type inference on lazily-typed properties,
+	# preload cycles) and names the offending file instead of leaving us with
+	# "Failed to load hud.gd".
+	var script_failures := PackedStringArray()
+	var checked := 0
+	for dir_path in ["res://scripts", "res://tests"]:
+		for f in _gd_files(dir_path):
+			checked += 1
+			if load(f) == null:
+				script_failures.append(f)
+	if script_failures.is_empty():
+		_log("INFO", "all %d scripts compile" % checked)
+	else:
+		for f in script_failures:
+			_log("FAIL", "script failed to compile: %s" % f)
+
 	# --- terrain orientation ------------------------------------------------
 	# The terrain winding used to be inverted, which is invisible to every other
 	# check here: the mesh still has vertices, the collision shape still has
@@ -302,3 +320,21 @@ func _finish(fails: int) -> void:
 	print("PROBE_END")
 	await get_tree().process_frame
 	get_tree().quit(0 if fails == 0 else 1)
+
+
+func _gd_files(dir_path: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return out
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		var full := dir_path.path_join(entry)
+		if dir.current_is_dir():
+			out.append_array(_gd_files(full))
+		elif entry.ends_with(".gd"):
+			out.append(full)
+		entry = dir.get_next()
+	dir.list_dir_end()
+	return out
