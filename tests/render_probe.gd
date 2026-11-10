@@ -22,6 +22,13 @@ func _log(kind: String, msg: String) -> void:
 
 
 func _ready() -> void:
+	# Never touch the tree from _ready(): while a node propagates READY its parent
+	# has `blocked > 0`, and add_child() to it fails with "Parent node is busy
+	# setting up children". Defer to an idle frame so the world really boots.
+	_run.call_deferred()
+
+
+func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	var out_dir := "/tmp/probe"
 	for a in args:
