@@ -344,6 +344,25 @@ func _run() -> void:
 			_log("INFO", "alt view mean_luma=%.3f nonblack=%.1f%% colours=%d" % [
 				s2["luma"], s2["nonblack"] * 100.0, s2["colours"]])
 
+	# --- clear combat VFX before the beauty frame --------------------------
+	# The gameplay capture caught a burst mid-cast: an 18 m transparent light
+	# pillar directly behind the player, which is what the tall cyan wedge in the
+	# frame was. VFX tweens are driven by the tree, so once the world is paused
+	# they never finish and the pillar stays on screen forever. Free every
+	# transient effect node rather than waiting for a tween that will not run.
+	for fx_node in world.find_children("*", "MeshInstance3D", true, false):
+		var fx_mi := fx_node as MeshInstance3D
+		var mat := fx_mi.material_override
+		if mat is StandardMaterial3D:
+			var sm := mat as StandardMaterial3D
+			# Unshaded emissive geometry is only ever VFX or a crystal.
+			if sm.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED and sm.emission_enabled:
+				if fx_mi.get_parent() != null and fx_mi.get_parent().name.begins_with("@"):
+					fx_mi.get_parent().queue_free()
+				elif fx_mi.name.begins_with("@"):
+					fx_mi.queue_free()
+	await get_tree().process_frame
+
 	# --- environment beauty shot -------------------------------------------
 	# A fixed, wide vantage point over the valley. The gameplay camera is a
 	# close third-person shoulder view, which is useless for judging terrain,
@@ -358,15 +377,18 @@ func _run() -> void:
 	# third. The old framing sat in the middle of a slope at eye level with the
 	# horizon dead centre, which is the least flattering composition possible -
 	# it showed neither the valley nor the sky.
-	var eye := Vector3(-150.0, 0.0, -168.0)
+	# Chosen so the grass field (which follows the player, radius 130 m) is still
+	# in frame: the previous vantage sat just outside it, so the beauty shot had
+	# no foreground grass at all and the slope read as bare green geometry.
+	var eye := Vector3(-70.0, 0.0, -70.0)
 	var terrain_node := world.get_node_or_null("Terrain")
 	if terrain_node != null and terrain_node.has_method("get_height_at"):
-		eye.y = terrain_node.get_height_at(eye.x, eye.z) + 18.0
+		eye.y = terrain_node.get_height_at(eye.x, eye.z) + 30.0
 	else:
 		eye.y = 40.0
 	beauty.global_position = eye
 	# Look slightly down-valley and just under the horizon, toward the lake.
-	beauty.look_at(Vector3(120.0, eye.y - 6.0, 150.0), Vector3.UP)
+	beauty.look_at(Vector3(40.0, eye.y - 24.0, 90.0), Vector3.UP)
 
 	# Push the sun to a warm low morning for the beauty frame so the shot shows
 	# the graded palette rather than whatever time the world happened to boot at.
@@ -379,6 +401,7 @@ func _run() -> void:
 	if img3:
 		img3.save_png(out_dir.path_join("world_wide.png"))
 		_check_blob(img3, "wide")
+		_report_palette(img3, "wide")
 		var s3 := _analyse(img3)
 		_log("INFO", "wide view mean_luma=%.3f nonblack=%.1f%% colours=%d sky=%.1f%%" % [
 			s3["luma"], s3["nonblack"] * 100.0, s3["colours"], s3["sky"] * 100.0])
@@ -388,6 +411,53 @@ func _run() -> void:
 			_log("WARN", "wide view is overexposed (mean luma %.2f)" % s3["luma"])
 
 	_finish(_fail)
+
+
+func _report_palette(img: Image, label: String) -> void:
+	## Print hue/saturation for a few fixed sample points so the colour grade can
+	## be checked as numbers instead of by eye. The neon-green problem that took
+	## several render cycles to pin down was a saturation of 0.99 at hue 92 - a
+	## value that a single measurement would have exposed immediately.
+	var w := img.get_width()
+	var h := img.get_height()
+	var pts := {
+		"foreground": Vector2i(int(w * 0.28), int(h * 0.86)),
+		"meadow": Vector2i(int(w * 0.52), int(h * 0.62)),
+		"far hill": Vector2i(int(w * 0.66), int(h * 0.44)),
+		"horizon": Vector2i(int(w * 0.80), int(h * 0.30)),
+	}
+	var parts: Array[String] = []
+	var worst := 0.0
+	for key in pts.keys():
+		var c := img.get_pixel(pts[key].x, pts[key].y)
+		var hsv := Color(c.r, c.g, c.b).hsv  # Godot exposes hsv directly
+		parts.append("%s h=%3.0f s=%.2f v=%.2f" % [key, hsv.h * 360.0, hsv.s, hsv.v])
+		if key != "horizon":
+			worst = maxf(worst, hsv.s)
+	_log("INFO", "%s palette: %s" % [label, ", ".join(parts)])
+	# Face validity for "is this neon": count pixels that are almost pure hue -
+	# saturation above 0.90 with a mid or high value. A realistic stylised frame
+	# sits far below 15%; the neon-green versions of this render were well over
+	# 60%, because a warm sun on a blue-poor green albedo clipped the blue channel
+	# to zero across the entire hillside.
+	var hot := 0
+	var counted := 0
+	var step := maxi(1, int(img.get_width() / 120.0))
+	for y in range(0, img.get_height(), step):
+		for x in range(0, img.get_width(), step):
+			counted += 1
+			var c2 := img.get_pixel(x, y)
+			var hsv2 := Color(c2.r, c2.g, c2.b).hsv
+			if hsv2.s > 0.90 and hsv2.v > 0.30:
+				hot += 1
+	if counted > 0:
+		var frac := float(hot) / float(counted)
+		_log("INFO", "%s saturated pixels (s>0.90, v>0.30) = %.1f%%" % [label, frac * 100.0])
+		if frac > 0.35:
+			_log("WARN", "%s is %.0f%% near-pure hue - the frame reads as neon rather than painted" % [
+				label, frac * 100.0])
+	if worst > 0.92:
+		_log("WARN", "%s has a near-pure sample (saturation %.2f) - the grade is clipping a channel" % [label, worst])
 
 
 func _check_blob(img: Image, label: String) -> void:

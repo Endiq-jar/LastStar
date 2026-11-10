@@ -38,9 +38,9 @@ func _ready() -> void:
 	var glow := StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	glow.emission_enabled = true
-	glow.emission = Color(0.55, 0.9, 1.0)
+	glow.emission = Color(0.38, 0.72, 0.95)
 	glow.emission_energy_multiplier = 1.4
-	glow.albedo_color = Color(0.62, 0.88, 1.0)
+	glow.albedo_color = Color(0.50, 0.76, 0.95)
 
 	# Plinth
 	var base := MeshInstance3D.new()
@@ -91,9 +91,9 @@ func _ready() -> void:
 		var wm := StandardMaterial3D.new()
 		wm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		wm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		wm.albedo_color = Color(0.55, 0.9, 1.0, 0.45)
+		wm.albedo_color = Color(0.45, 0.72, 0.90, 0.38)
 		wm.emission_enabled = true
-		wm.emission = Color(0.5, 0.88, 1.0)
+		wm.emission = Color(0.34, 0.62, 0.85)
 		wm.emission_energy_multiplier = 1.6
 		wm.cull_mode = BaseMaterial3D.CULL_DISABLED
 		wing.material_override = wm

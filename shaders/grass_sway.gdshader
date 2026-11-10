@@ -19,9 +19,14 @@ render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 // plus a bright sun is what produced the neon lime carpet that made the valley
 // look like a golf course. Real Genshin grass albedo sits around 0.12-0.22
 // luminance and lets the key light take it up.
-uniform vec4 grass_color : source_color = vec4(0.15, 0.27, 0.11, 1.0);
-uniform vec4 grass_tip : source_color = vec4(0.40, 0.56, 0.21, 1.0);
-uniform vec4 dry_color : source_color = vec4(0.38, 0.40, 0.19, 1.0);
+// Note the blue channel. A green albedo of (0.15, 0.27, 0.11) looks reasonable
+// on paper, but a warm low sun plus a warm grade multiplies blue by ~0.4, and
+// blue was already the weakest channel - so the lit result landed at rgb(82,163,9),
+// a pure hue-92 lime with no blue left in it at all. Keeping blue at roughly half
+// of green survives the warm light and reads as the soft green of lit grass.
+uniform vec4 grass_color : source_color = vec4(0.15, 0.26, 0.14, 1.0);
+uniform vec4 grass_tip : source_color = vec4(0.38, 0.52, 0.26, 1.0);
+uniform vec4 dry_color : source_color = vec4(0.36, 0.38, 0.22, 1.0);
 uniform float wind_strength : hint_range(0.0, 1.0) = 0.22;
 uniform float wind_speed : hint_range(0.0, 4.0) = 1.4;
 uniform vec2 wind_dir = vec2(0.85, 0.35);

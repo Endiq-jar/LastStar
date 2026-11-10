@@ -251,31 +251,37 @@ func apply_quality() -> void:
 	# --- glow / ambient occlusion / AA -------------------------------------
 	# SSAO is a Vulkan-renderer feature; setting it on OpenGL is a no-op and
 	# only risks confusing the state when switching renderers.
+	#
+	# Note that the colour grade is NOT set here any more. It used to be, which
+	# meant apply_quality() and the day/night pass both wrote
+	# adjustment_saturation/contrast and the last writer won: at the default tier
+	# saturation was forced to 1.22 and contrast to 1.10 behind the day pass's
+	# back. Saturation at that level is what pushed every already-saturated green
+	# the last few percent into a clipped, channel-starved neon. The grade lives
+	# in exactly one place now - _grade_env(), called from the day pass.
 	match tier:
 		1:
 			env.glow_enabled = false
 			env.ssao_enabled = false
-			env.adjustment_saturation = 1.05
 			_env_msaa(RenderingServer.VIEWPORT_MSAA_DISABLED)
 		2:
 			env.glow_enabled = true
-			env.glow_intensity = 0.32
+			env.glow_intensity = 0.30
 			env.glow_hdr_threshold = 1.25
 			env.ssao_enabled = not compat
 			if not compat:
 				env.ssao_radius = 1.4
 				env.ssao_intensity = 1.6
-			env.adjustment_saturation = 1.24
-			env.adjustment_contrast = 1.08
 			_env_msaa(RenderingServer.VIEWPORT_MSAA_4X if not compat else RenderingServer.VIEWPORT_MSAA_DISABLED)
 		_:
 			env.glow_enabled = true
 			env.glow_intensity = 0.26 if not compat else 0.22
-			env.glow_hdr_threshold = 1.30
+			env.glow_hdr_threshold = 1.35
 			env.ssao_enabled = false
-			env.adjustment_saturation = 1.22
-			env.adjustment_contrast = 1.10
 			_env_msaa(RenderingServer.VIEWPORT_MSAA_2X if not compat else RenderingServer.VIEWPORT_MSAA_DISABLED)
+	# Re-apply the grade so a tier change never leaves the frame at whatever
+	# saturation it happened to be using.
+	_grade_env(env)
 
 
 func _env_msaa(mode: RenderingServer.ViewportMSAA) -> void:
@@ -312,12 +318,12 @@ func _setup_environment() -> void:
 	# pale mint no matter how the light energies were tuned. A muted, slightly
 	# warm ambient keeps grass green and lets the sun do the colouring.
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_energy = 0.55
-	env.ambient_light_color = Color(0.58, 0.62, 0.68)
+	env.ambient_light_energy = 1.35
+	env.ambient_light_color = Color(0.57, 0.66, 0.82)
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	# Sky ambient alone can dip to near-black once the sun is low; this floor
 	# guarantees every surface always receives usable light.
-	env.ambient_light_sky_contribution = 0.35
+	env.ambient_light_sky_contribution = 0.45
 
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 1.02
@@ -350,6 +356,7 @@ func _setup_environment() -> void:
 	env.adjustment_saturation = 1.10
 
 	environment.environment = env
+	_grade_env(env)
 
 	sun.light_color = Color(1.0, 0.95, 0.86)
 	# Matches the daytime value the day/night pass computes.
@@ -414,14 +421,19 @@ func _update_time_of_day() -> void:
 
 	# 1.0 at the warmest (dawn/dusk), 0.0 at high noon.
 	var low_sun := 1.0 - clampf((elevation - 2.0) / 22.0, 0.0, 1.0)
-	var warmth := pow(clampf(low_sun, 0.0, 1.0), 1.25)
+	# Capped below 1.0. A fully amber key (1.0, 0.66, 0.36) multiplies blue by a
+	# third, and every green surface in the world is already blue-poor - the
+	# result was that the whole meadow collapsed onto hue 92 with a blue channel
+	# of 9 out of 255. Holding warmth at 0.72 keeps a clearly warm morning key
+	# while leaving enough blue in the light for greens to stay greens.
+	var warmth := pow(clampf(low_sun, 0.0, 1.0), 1.25) * 0.72
 
 	# --- key light ---------------------------------------------------------
 	# Energy peaks slightly *below* noon: a low sun rakes across the hills, and
 	# brightening it keeps the lit faces punchy while the shadows stay long.
-	sun.light_energy = lerpf(1.32, 1.72, warmth)
-	var noon_col := Color(1.0, 0.95, 0.87)
-	var dawn_col := Color(1.0, 0.66, 0.36)
+	sun.light_energy = lerpf(1.28, 1.60, warmth)
+	var noon_col := Color(1.0, 0.96, 0.89)
+	var dawn_col := Color(1.0, 0.72, 0.46)
 	sun.light_color = noon_col.lerp(dawn_col, warmth)
 	sun.shadow_enabled = true
 
@@ -435,11 +447,16 @@ func _update_time_of_day() -> void:
 	# a raking key is how you get the crushed, muddy shadow side that made the
 	# hillsides look like dark green felt. Sky-blue fill keeps shade readable and
 	# makes the greens look like they are lit by an open sky.
-	var amb_warm := Color(0.50, 0.56, 0.72)
-	var amb_noon := Color(0.58, 0.66, 0.80)
+	var amb_warm := Color(0.50, 0.58, 0.76)
+	var amb_noon := Color(0.57, 0.66, 0.82)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = amb_noon.lerp(amb_warm, warmth)
-	env.ambient_light_energy = lerpf(0.92, 0.84, warmth)
+	# Higher than it looks like it should be, deliberately. In this renderer the
+	# terminator on the meadow falls off fast, and at 0.84 the shaded half of
+	# every hill sat at rgb(0,38,0) - near black, which is what made the terrain
+	# read as a dark green felt wedge rather than grass in shade. Shade in a
+	# stylised world is a colour, not an absence of one.
+	env.ambient_light_energy = lerpf(1.35, 1.15, warmth)
 
 	# --- fog ---------------------------------------------------------------
 	# Fog carries the sun's colour, which is what makes distant hills read as
@@ -463,14 +480,25 @@ func _update_time_of_day() -> void:
 		mat.ground_horizon_color = mat.sky_horizon_color
 		mat.ground_bottom_color = Color(0.20, 0.26, 0.22).lerp(Color(0.28, 0.24, 0.22), warmth)
 
-	# --- grade -------------------------------------------------------------
-	# A touch warmer and slightly more saturated as the sun drops. This is the
-	# cheap version of a colour-grade LUT and it sells the time of day more than
-	# any single light tweak.
-	if env.adjustment_enabled:
-		env.adjustment_saturation = lerpf(1.10, 1.22, warmth)
-		env.adjustment_contrast = lerpf(1.09, 1.14, warmth)
-		env.adjustment_brightness = lerpf(1.0, 1.02, warmth)
+	_grade_env(env, warmth)
+
+
+func _grade_env(env: Environment, warmth: float = 0.5) -> void:
+	## The one and only place the colour grade is written.
+	##
+	## Contrast pulls the frame together and the grade warms slightly as the sun
+	## drops, but saturation stays close to 1.0. Pushing it up - which is the
+	## obvious "make it pop" move, and was what this did - clips the most
+	## saturated surface in the frame (the meadow) while leaving everything else
+	## untouched, so the greens go neon and the rock does not change at all. Any
+	## extra saturation has to come from the albedo, which this project already
+	## has plenty of.
+	if env == null:
+		return
+	env.adjustment_enabled = true
+	env.adjustment_saturation = lerpf(1.04, 1.12, warmth)
+	env.adjustment_contrast = lerpf(1.08, 1.13, warmth)
+	env.adjustment_brightness = lerpf(1.0, 1.02, warmth)
 
 
 
@@ -498,9 +526,13 @@ func _build_spawn_glade() -> void:
 	var glow := StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	glow.emission_enabled = true
-	glow.emission = Color(0.55, 0.95, 0.9)
-	glow.emission_energy_multiplier = 2.2
-	glow.albedo_color = Color(0.7, 1.0, 0.95)
+	# Emission colours that are already at 0.9-1.0 in a channel have nowhere to go
+	# once multiplied by an energy above 1: they clip, and the result reads as a
+	# flat white wedge rather than a glow. Kept under 1.0 with a modest energy so
+	# glow picks up the excess instead of the tonemapper flattening it.
+	glow.emission = Color(0.40, 0.86, 0.80)
+	glow.emission_energy_multiplier = 1.25
+	glow.albedo_color = Color(0.55, 0.86, 0.82)
 
 	var disc := MeshInstance3D.new()
 	var cylinder := CylinderMesh.new()

@@ -13,7 +13,11 @@ static func _unshaded(color: Color, energy: float = 3.0, additive: bool = false)
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
 	m.emission_enabled = true
-	m.emission = color
+	# Emission is clamped well below 1.0 per channel. Passing the requested
+	# energy straight through meant every effect that asked for 3-4x clipped to
+	# pure white, so all element colours came out identical and the VFX read as
+	# flat white shards. Glow supplies the brightness; the colour has to survive.
+	m.emission = Color(minf(color.r, 0.85), minf(color.g, 0.85), minf(color.b, 0.85))
 	m.emission_energy_multiplier = energy
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA

@@ -10,8 +10,8 @@ uniform sampler2D rock_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D sand_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 
-uniform vec4 meadow_tint : source_color = vec4(0.30, 0.47, 0.21, 1.0);
-uniform vec4 meadow_deep : source_color = vec4(0.14, 0.29, 0.14, 1.0);
+uniform vec4 meadow_tint : source_color = vec4(0.28, 0.45, 0.20, 1.0);
+uniform vec4 meadow_deep : source_color = vec4(0.13, 0.27, 0.13, 1.0);
 uniform vec4 rock_tint : source_color = vec4(0.42, 0.41, 0.44, 1.0);
 uniform vec4 sand_tint : source_color = vec4(0.74, 0.68, 0.52, 1.0);
 uniform vec4 shadow_tint : source_color = vec4(0.68, 0.72, 0.95, 1.0);
@@ -62,31 +62,46 @@ void fragment() {
 	// which at distance turned every mountain into a wall of fine-grained
 	// static. Now the large-scale `patch` value picks the colour and the
 	// texture only adds a faint brush grain on top.
-	float dry = smoothstep(0.45, 0.92, patch);
+	float dry = smoothstep(0.55, 1.0, patch);
 
 	// Detail from the painted textures, scaled to a painterly size rather than
 	// a photographic one. tri() picks the best projection per surface so cliffs
 	// do not stretch the meadow.
+	//
+	// Only the *luminance* of these is used, never their colour, and it is
+	// centred on 1.0 so it modulates rather than tints. Multiplying the albedo
+	// by the raw texture was the main source of the neon: the painted greens are
+	// blue-poor (blue channel around 0.16), so squaring them into an already
+	// blue-poor meadow albedo drove blue near zero and left a pure, saturated
+	// green with nothing to hold it back. Luminance detail keeps the texture's
+	// brushwork - the variation in value that reads as painted - without
+	// touching the hue the lighting depends on.
 	vec3 meadow_detail = tri(meadow_tex, v_world, wn, uv_scale);
 	vec3 rock_detail = tri(rock_tex, v_world, wn, uv_scale * 0.62);
 	vec3 sand_detail = tri(sand_tex, v_world, wn, uv_scale * 1.25);
+	float meadow_l = dot(meadow_detail, vec3(0.2126, 0.7152, 0.0722));
+	float rock_l = dot(rock_detail, vec3(0.2126, 0.7152, 0.0722));
+	float sand_l = dot(sand_detail, vec3(0.2126, 0.7152, 0.0722));
 
 	// Meadow: two greens, broken up by the soft macro patches, modulated by the
 	// painted detail (kept subtle so the flat anime bands still dominate).
 	vec3 grass = mix(meadow_deep.rgb, meadow_tint.rgb, 0.35 + patch * 0.65);
-	grass *= mix(vec3(1.0), meadow_detail * 1.35, 0.55);
+	grass *= mix(1.0, meadow_l * 1.9, 0.45);
 	// A little golden meadow mixed in, the way open-world grass reads. Kept
 	// low: push this and the hillsides turn acid yellow-green.
-	grass = mix(grass, vec3(0.46, 0.44, 0.20), dry * 0.10);
+	// The dry blend is nearly as weak as it can be while still breaking up the
+	// field. At 0.10 with a lighter yellow it painted large acid-yellow blotches
+	// across the meadow that read as camo, not as sun-bleached grass.
+	grass = mix(grass, vec3(0.34, 0.36, 0.19), dry * 0.06);
 
 	// Rock: warm grey, cooler in shadowed bands.
 	vec3 rock_col = rock_tint.rgb * mix(0.66, 1.0, patch);
-	rock_col *= mix(vec3(1.0), rock_detail * 1.30, 0.50);
+	rock_col *= mix(1.0, rock_l * 1.9, 0.42);
 
 	// Height bands: sand at the shoreline, meadow in the valley, rock up high.
 	float shore = 1.0 - smoothstep(water_level + 0.4, water_level + 2.6, h);
 	float highland = smoothstep(rock_height * 0.78, rock_height * 1.35, h);
-	vec3 sand_col = sand_tint.rgb * mix(vec3(1.0), sand_detail * 1.25, 0.45);
+	vec3 sand_col = sand_tint.rgb * mix(1.0, sand_l * 1.9, 0.38);
 	vec3 col = mix(grass, sand_col, shore);
 	col = mix(col, rock_col, highland * 0.9);
 
@@ -117,9 +132,12 @@ void fragment() {
 	// the distance to the camera on every renderer without extra uniforms.
 	float cam_dist = length(VERTEX);
 	float haze = smoothstep(haze_begin, haze_end, cam_dist);
+	// Mute toward luminance AND darken. Muting alone kept the far ridge as bright
+	// as the near hill, so it read as a flat green wall behind the valley instead
+	// of receding into atmosphere; the depth cue is mostly the value drop.
 	float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
-	vec3 hazed = mix(vec3(luma), col, 0.55) * vec3(0.92, 0.95, 1.06);
-	col = mix(col, hazed, haze * 0.92);
+	vec3 hazed = mix(vec3(luma), col, 0.58) * vec3(0.86, 0.92, 1.10);
+	col = mix(col, hazed, haze * 0.95);
 
 	ALBEDO = col;
 	ROUGHNESS = mix(0.92, 0.24, wet);
