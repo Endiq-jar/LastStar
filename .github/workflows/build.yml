@@ -86,6 +86,9 @@ jobs:
           grep -cE "^CHECK_OK" /tmp/compile.log | while IFS= read -r n; do
             echo "::notice::compiled $n scripts"
           done
+          head -12 /tmp/compile.log | while IFS= read -r line; do
+            echo "::notice::log| $line"
+          done
           grep -E "^CHECK_ROOT|^CHECK_WARN" /tmp/compile.log | \
             while IFS= read -r line; do echo "::notice::$line"; done
           grep -cE "SCRIPT ERROR" /tmp/compile.log | while IFS= read -r n; do
