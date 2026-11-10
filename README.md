@@ -23,6 +23,7 @@ produces an installable APK on every push.
 
 | System | Details |
 |---|---|
+| **Renderer** | OpenGL ES 3.0 (Compatibility) — runs on every Android device since 2013, including PowerVR GPUs like the Helio P95 where the Vulkan path black-screens |
 | **Anime terrain** | 900 m procedural valley, 144² heightfield, custom `terrain_anime` shader: painterly banded meadow, slope-aware rock, wet shoreline and snow caps |
 | **Cel shading** | `anime_toon.gdshader` — world-space two-band ramp, cool tinted shadows, warm rim light, anime specular band + inverted-hull outline pass |
 | **Party of three** | Sora (Anemo, sword), Ember (Pyro, catalyst), Volt (Electro, bow). Switch instantly with **T** or the portrait row |
@@ -86,6 +87,10 @@ The game is written so it **cannot** show a black screen with only the HUD:
   view comes out black,
 * **Pause menu → "Repair view"** rebuilds the camera, environment and lights on
   demand, and quality tiers are reversible and remembered in `user://video.cfg`.
+* an automatic tuner samples real frame time on startup and drops to the
+  Performance tier on weak hardware, and vegetation beyond ~190 m is culled.
+* the world bootstrap contains **no coroutines and no GPU readbacks** — both
+  could wedge the main loop on software/GL drivers.
 
 CI enforces all of it: `tests/render_probe.tscn` actually renders the world under
 Xvfb, screenshots the framebuffer and measures mean luminance, non-black coverage
