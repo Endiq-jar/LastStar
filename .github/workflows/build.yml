@@ -232,6 +232,30 @@ jobs:
           python3 tools/shot_summary.py /tmp/probe/world.png /tmp/probe/world_alt.png \
             >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Publish screenshots to the repo
+        if: always()
+        # Artifacts live on blob storage that some environments cannot reach and
+        # annotations are capped, so the only channel that reliably carries the
+        # rendered frame out of a runner is a committed file. Kept small and on
+        # a throwaway branch so the main branch history stays clean.
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/shots_out
+          cp /tmp/probe/world.png /tmp/shots_out/world.png 2>/dev/null || true
+          cp /tmp/probe/world_alt.png /tmp/shots_out/world_alt.png 2>/dev/null || true
+          ls -la /tmp/shots_out || true
+          cd /tmp/shots_out
+          git init -q -b screenshots
+          git config user.name "LastStar CI"
+          git config user.email "ci@laststar.local"
+          git add -A
+          git commit -q -m "render: $(date -u +%FT%TZ) ${GITHUB_SHA:0:7}" || echo "nothing to commit"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -f origin screenshots
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload render screenshots
         if: always()
         uses: actions/upload-artifact@v4
