@@ -117,6 +117,28 @@ jobs:
           fi
           echo "World booted cleanly."
 
+      - name: Compile every script (including test scenes)
+        # Booting the world headlessly only compiles the scripts the world
+        # reaches. A type error in tests/render_probe.gd therefore used to sail
+        # through this job and only fail in the probe step, as a wall of
+        # "Parse Error" lines with no PROBE_RESULT - a full CI cycle for a
+        # one-line mistake. tools/compile_check.gd loads and instantiates every
+        # script in scripts/ and tests/, which forces the engine to compile it.
+        run: |
+          set -uo pipefail
+          /opt/godot/godot --headless --path . --script res://tools/compile_check.gd \
+            > /tmp/compile.log 2>&1 || true
+          grep -E "COMPILE_(FAIL|ERROR)|COMPILED:" /tmp/compile.log || true
+          if grep -qE "COMPILE_FAIL|COMPILE_ERROR" /tmp/compile.log; then
+            grep -E "COMPILE_FAIL|COMPILE_ERROR" /tmp/compile.log | head -20 \
+              | while IFS= read -r line; do echo "::error title=Compile::$line"; done
+            echo "::error::one or more scripts failed to compile"
+            exit 1
+          fi
+          grep -qE "COMPILED: [0-9]+ scripts, 0 failed|COMPILED: 0 errors" /tmp/compile.log \
+            || { echo "::error::compile check did not report a result"; tail -20 /tmp/compile.log; exit 1; }
+          grep -E "COMPILED:" /tmp/compile.log
+
       - name: Structural probe (headless, no GPU required)
         # The terrain winding bug produced a mesh with vertices, a collision
         # shape with faces, and a framebuffer full of sky - it passed every
@@ -135,7 +157,13 @@ jobs:
             echo "::notice::$line"
           done
           grep -E "^PROBE_" /tmp/structure.log || {
-            echo "::error::structural probe produced no result"
+            # The probe scene itself failed to load or compile. Surface the
+            # reason here instead of "produced no result", which says nothing
+            # about what actually went wrong.
+            echo "::error::structural probe produced no result - it did not load"
+            grep -E "Parse Error|SCRIPT ERROR|Failed to load|Cannot open" /tmp/structure.log | head -20 \
+              | while IFS= read -r line; do echo "::error title=Probe::$line"; done
+            tail -30 /tmp/structure.log
             exit 1
           }
           if grep -qE "^PROBE_RESULT: PASS" /tmp/structure.log; then

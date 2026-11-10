@@ -430,10 +430,10 @@ func _report_palette(img: Image, label: String) -> void:
 	var worst := 0.0
 	for key in pts.keys():
 		var c := img.get_pixel(pts[key].x, pts[key].y)
-		var hsv := Color(c.r, c.g, c.b).hsv  # Godot exposes hsv directly
-		parts.append("%s h=%3.0f s=%.2f v=%.2f" % [key, hsv.h * 360.0, hsv.s, hsv.v])
+		var hsv := _hsv_of(c)
+		parts.append("%s h=%3.0f s=%.2f v=%.2f" % [key, hsv.x * 360.0, hsv.y, hsv.z])
 		if key != "horizon":
-			worst = maxf(worst, hsv.s)
+			worst = maxf(worst, hsv.y)
 	_log("INFO", "%s palette: %s" % [label, ", ".join(parts)])
 	# Face validity for "is this neon": count pixels that are almost pure hue -
 	# saturation above 0.90 with a mid or high value. A realistic stylised frame
@@ -447,8 +447,8 @@ func _report_palette(img: Image, label: String) -> void:
 		for x in range(0, img.get_width(), step):
 			counted += 1
 			var c2 := img.get_pixel(x, y)
-			var hsv2 := Color(c2.r, c2.g, c2.b).hsv
-			if hsv2.s > 0.90 and hsv2.v > 0.30:
+			var hsv2 := _hsv_of(c2)
+			if hsv2.y > 0.90 and hsv2.z > 0.30:
 				hot += 1
 	if counted > 0:
 		var frac := float(hot) / float(counted)
@@ -458,6 +458,27 @@ func _report_palette(img: Image, label: String) -> void:
 				label, frac * 100.0])
 	if worst > 0.92:
 		_log("WARN", "%s has a near-pure sample (saturation %.2f) - the grade is clipping a channel" % [label, worst])
+
+
+func _hsv_of(c: Color) -> Vector3:
+	## Hue in 0..1, then saturation, then value. Godot has no HSV accessor on
+	## Color (there is a `from_hsv` constructor, but no getter), so this converts
+	## by hand.
+	var mx := maxf(c.r, maxf(c.g, c.b))
+	var mn := minf(c.r, minf(c.g, c.b))
+	var delta := mx - mn
+	var h := 0.0
+	if delta > 0.00001:
+		if mx == c.r:
+			h = fmod((c.g - c.b) / delta, 6.0) / 6.0
+		elif mx == c.g:
+			h = ((c.b - c.r) / delta + 2.0) / 6.0
+		else:
+			h = ((c.r - c.g) / delta + 4.0) / 6.0
+		if h < 0.0:
+			h += 1.0
+	var sat := 0.0 if mx <= 0.0 else delta / mx
+	return Vector3(h, sat, mx)
 
 
 func _check_blob(img: Image, label: String) -> void:
