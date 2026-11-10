@@ -259,8 +259,8 @@ func apply_quality() -> void:
 			_env_msaa(RenderingServer.VIEWPORT_MSAA_DISABLED)
 		2:
 			env.glow_enabled = true
-			env.glow_intensity = 0.7
-			env.glow_hdr_threshold = 1.0
+			env.glow_intensity = 0.32
+			env.glow_hdr_threshold = 1.25
 			env.ssao_enabled = not compat
 			if not compat:
 				env.ssao_radius = 1.4
@@ -270,11 +270,11 @@ func apply_quality() -> void:
 			_env_msaa(RenderingServer.VIEWPORT_MSAA_4X if not compat else RenderingServer.VIEWPORT_MSAA_DISABLED)
 		_:
 			env.glow_enabled = true
-			env.glow_intensity = 0.55 if not compat else 0.45
-			env.glow_hdr_threshold = 1.1
+			env.glow_intensity = 0.26 if not compat else 0.22
+			env.glow_hdr_threshold = 1.30
 			env.ssao_enabled = false
-			env.adjustment_saturation = 1.15
-			env.adjustment_contrast = 1.05
+			env.adjustment_saturation = 1.22
+			env.adjustment_contrast = 1.10
 			_env_msaa(RenderingServer.VIEWPORT_MSAA_2X if not compat else RenderingServer.VIEWPORT_MSAA_DISABLED)
 
 
@@ -307,29 +307,36 @@ func _setup_environment() -> void:
 	# a sun at up to 1.80 energy. Three bright lights stacked is what washed the
 	# whole world to pale mint. An anime look wants a modest ambient and a
 	# strong, contrasty key light instead.
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.42
-	env.ambient_light_color = Color(0.62, 0.74, 1.0)
+	# Sky-sourced ambient inherits the full brightness of a very blue sky, which
+	# tints every green surface toward cyan - that is why the valley read as
+	# pale mint no matter how the light energies were tuned. A muted, slightly
+	# warm ambient keeps grass green and lets the sun do the colouring.
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_energy = 0.55
+	env.ambient_light_color = Color(0.58, 0.62, 0.68)
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	# Sky ambient alone can dip to near-black once the sun is low; this floor
 	# guarantees every surface always receives usable light.
-	env.ambient_light_sky_contribution = 0.85
+	env.ambient_light_sky_contribution = 0.35
 
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 1.02
 	env.tonemap_white = 2.4
 
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.76, 0.88, 0.97)
-	env.fog_density = 0.0009
-	env.fog_aerial_perspective = 0.65
+	env.fog_light_color = Color(0.62, 0.76, 0.88)
+	env.fog_density = 0.0006
+	# Aerial perspective at 0.65 blended every distant hillside straight into
+	# the pale sky, which is why the range looked like white noise rather than
+	# mountains. Keep only enough for depth separation.
+	env.fog_aerial_perspective = 0.30
 	env.fog_sky_affect = 0.18
 	env.fog_depth_begin = 220.0
 	env.fog_depth_end = 900.0
 	env.fog_depth_curve = 0.75
 
 	env.glow_enabled = true
-	env.glow_intensity = 0.55
+	env.glow_intensity = 0.28
 	env.glow_strength = 1.0
 	env.glow_bloom = 0.05
 	env.glow_hdr_threshold = 1.1
@@ -397,8 +404,8 @@ func _update_time_of_day() -> void:
 		return
 	# Keep ambient low and cool so the warm key light reads as sunlight rather
 	# than as one of three equally bright lights.
-	env.ambient_light_energy = 0.34 + day * 0.20
-	env.ambient_light_color = Color(0.52, 0.64, 0.95).lerp(Color(0.68, 0.80, 1.0), day)
+	env.ambient_light_energy = 0.42 + day * 0.16
+	env.ambient_light_color = Color(0.54, 0.58, 0.66).lerp(Color(0.62, 0.66, 0.72), day)
 	env.fog_light_color = Color(0.70, 0.82, 0.96).lerp(Color(1.0, 0.76, 0.58), clampf(dusk, 0.0, 1.0) * 0.55)
 
 
