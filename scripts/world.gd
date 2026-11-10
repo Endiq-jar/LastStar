@@ -26,6 +26,11 @@ var _day_speed: float = 0.0055
 var _time := 0.0
 ## True once _ready() finished wiring the environment, sun and player.
 var _built := false
+## Rolling frame-time probe used to auto-pick a quality tier on weak hardware.
+var _perf_frames := 0
+var _perf_warmup := 45
+var _perf_accum := 0.0
+var _perf_done := false
 
 
 func _ready() -> void:
@@ -72,6 +77,28 @@ func _ready() -> void:
 	_built = true
 	_ensure_camera.call_deferred()
 	_watch_render()
+	_autotune_performance()
+
+
+func _autotune_performance() -> void:
+	## Phones like the Oppo F19 Pro (Helio P95 / PowerVR GM9446) can render this
+	## world but not with every effect on. Measure the real frame time for a
+	## second of gameplay and drop to the Performance tier automatically if we
+	## are missing frames - better a smooth, simpler world than a pretty slideshow.
+	await get_tree().create_timer(1.0).timeout
+	if _perf_done:
+		return
+	_perf_done = true
+	var measured := _perf_frames - _perf_warmup
+	if measured < 20:
+		return
+	var avg_ms := (_perf_accum / float(measured)) * 1000.0
+	print("LastStar: average frame time %.1f ms over %d frames" % [avg_ms, measured])
+	# Below ~24 fps on this hardware, shed effects instead of stuttering.
+	if avg_ms > 42.0 and Game.quality_tier != 1:
+		Game.set_quality_tier(1)
+		apply_quality()
+		Game.toast.emit("Performance mode enabled for smooth play")
 
 
 func _watch_render() -> void:
@@ -165,53 +192,72 @@ func _ensure_camera() -> void:
 
 
 
+func _is_compatibility() -> bool:
+	## True on the OpenGL ES 3.0 renderer (what Android ships with).
+	return str(ProjectSettings.get_setting("rendering/renderer/rendering_method")) == "gl_compatibility"
+
+
 func apply_quality() -> void:
 	## 0 Balanced · 1 Performance · 2 High. Lets the same APK scale from a
-	## budget phone to a flagship without shipping two builds. Every tier
-	## restores what it changes, so cycling through them is lossless.
+	## budget phone to a flagship. Every tier restores what it changes, so
+	## cycling through them is lossless, and tiers never enable a feature the
+	## active renderer does not implement (SSAO does not exist on OpenGL).
 	var tier := Game.quality_tier
+	var compat := _is_compatibility()
 	var env := environment.environment as Environment
 	var veg := get_node_or_null("Vegetation")
 
 	# --- shadows -----------------------------------------------------------
 	if tier == 1:
 		sun.shadow_enabled = false
-		RenderingServer.directional_shadow_atlas_set_size(1024, true)
-		sun.directional_shadow_max_distance = 140.0
+		sun.directional_shadow_max_distance = 120.0
+	elif compat:
+		# Compatibility shadows are cheap but not free; keep the radius short.
+		sun.shadow_enabled = true
+		sun.directional_shadow_max_distance = 110.0 if tier == 0 else 150.0
 	else:
 		sun.shadow_enabled = true
-		RenderingServer.directional_shadow_atlas_set_size(2048, true)
 		sun.directional_shadow_max_distance = 260.0 if tier == 2 else 190.0
 
-	# --- vegetation (always visible except on the lowest tier) -------------
+	# --- vegetation ---------------------------------------------------------
 	if veg:
 		veg.visible = tier != 1
 
 	if env == null:
 		return
-	# --- glow / AO / AA -----------------------------------------------------
+
+	# --- glow / ambient occlusion / AA -------------------------------------
+	# SSAO is a Vulkan-renderer feature; setting it on OpenGL is a no-op and
+	# only risks confusing the state when switching renderers.
 	match tier:
 		1:
-			env.glow_intensity = 0.35
+			env.glow_enabled = false
 			env.ssao_enabled = false
 			env.adjustment_saturation = 1.05
-			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), RenderingServer.VIEWPORT_MSAA_DISABLED)
+			_env_msaa(RenderingServer.VIEWPORT_MSAA_DISABLED)
 		2:
+			env.glow_enabled = true
 			env.glow_intensity = 0.7
 			env.glow_hdr_threshold = 1.0
-			env.ssao_enabled = true
-			env.ssao_radius = 1.4
-			env.ssao_intensity = 1.6
+			env.ssao_enabled = not compat
+			if not compat:
+				env.ssao_radius = 1.4
+				env.ssao_intensity = 1.6
 			env.adjustment_saturation = 1.24
 			env.adjustment_contrast = 1.08
-			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), RenderingServer.VIEWPORT_MSAA_4X)
+			_env_msaa(RenderingServer.VIEWPORT_MSAA_4X if not compat else RenderingServer.VIEWPORT_MSAA_DISABLED)
 		_:
-			env.glow_intensity = 0.55
+			env.glow_enabled = true
+			env.glow_intensity = 0.55 if not compat else 0.45
 			env.glow_hdr_threshold = 1.1
 			env.ssao_enabled = false
 			env.adjustment_saturation = 1.15
 			env.adjustment_contrast = 1.05
-			RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), RenderingServer.VIEWPORT_MSAA_2X)
+			_env_msaa(RenderingServer.VIEWPORT_MSAA_2X if not compat else RenderingServer.VIEWPORT_MSAA_DISABLED)
+
+
+func _env_msaa(mode: RenderingServer.ViewportMSAA) -> void:
+	RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), mode)
 
 
 func _setup_environment() -> void:
@@ -286,6 +332,11 @@ func _process(delta: float) -> void:
 		return
 	_day_time = fposmod(_day_time + delta * _day_speed, 1.0)
 	_update_time_of_day()
+	# Skip the first frames: shader compilation makes them meaningless.
+	if not _perf_done and _perf_frames < 400:
+		_perf_frames += 1
+		if _perf_frames > _perf_warmup:
+			_perf_accum += delta
 
 
 func _update_time_of_day() -> void:

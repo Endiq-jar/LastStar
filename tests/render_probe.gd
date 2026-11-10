@@ -75,6 +75,13 @@ func _run() -> void:
 		_log("INFO", "camera=%s pos=%s fov=%.1f near=%.3f far=%.1f" % [
 			cam.get_path(), str(cam.global_position), cam.fov, cam.near, cam.far])
 
+	# Which renderer actually came up? Comparing this against what the APK ships
+	# is what would have caught the Vulkan/PowerVR black screen immediately.
+	var runtime_method := str(ProjectSettings.get_setting("rendering/renderer/rendering_method"))
+	if DisplayServer.get_name() != "headless":
+		_log("INFO", "renderer=%s (project method %s)" % [
+			RenderingServer.get_video_adapter_name(), runtime_method])
+
 	var players := get_tree().get_nodes_in_group("player")
 	_log("INFO" if players.size() == 1 else "FAIL",
 		"player nodes in group = %d" % players.size())

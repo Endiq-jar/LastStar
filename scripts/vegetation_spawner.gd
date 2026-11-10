@@ -15,6 +15,10 @@ const SPREAD := 330.0
 var _grass_meshes: Array[MultiMeshInstance3D] = []
 var _time := 0.0
 var _player: Node3D
+## Distance culling for the heavy scatter groups (see _process).
+var _scatter_roots: Array[Node3D] = []
+var _cull_timer := 0.0
+const CULL_NEAR := 190.0
 
 
 func _ready() -> void:
@@ -40,6 +44,32 @@ func _toon(color: Color, rim: float = 0.3) -> ShaderMaterial:
 	m.set_shader_parameter("spec_energy", 0.18)
 	m.set_shader_parameter("diffuse_energy", 1.0)
 	return m
+
+
+func _process(delta: float) -> void:
+	## Cheap distance culling. Each tree/rock/flower is its own draw call, so on
+	## a mid-range phone the far half of the valley is mostly wasted fill rate.
+	## Hiding the instance groups the player has left behind keeps the frame
+	## budget for what is actually on screen.
+	_cull_timer -= delta
+	if _cull_timer > 0.0:
+		return
+	_cull_timer = 0.5
+	if _player == null or not is_instance_valid(_player):
+		_player = get_tree().get_first_node_in_group("player") as Node3D
+	if _player == null:
+		return
+	var origin := _player.global_position
+	for group in _scatter_roots:
+		if group == null or not is_instance_valid(group):
+			continue
+		for item in group.get_children():
+			if item is Node3D:
+				var n := item as Node3D
+				n.visible = n.global_position.distance_to(origin) < CULL_NEAR
+	for mmi in _grass_meshes:
+		if mmi != null and is_instance_valid(mmi):
+			mmi.visible = _player.global_position.distance_to(mmi.global_position) < CULL_NEAR * 1.4
 
 
 func _pick(terrain: Node, rng: RandomNumberGenerator, min_h: float, max_h: float, max_slope: float, count: int, avoid_lake: bool = true) -> Array[Vector3]:
@@ -74,6 +104,7 @@ func _spawn_round_trees(terrain: Node) -> void:
 	var root := Node3D.new()
 	root.name = "Broadleaf"
 	add_child(root)
+	_scatter_roots.append(root)
 
 	for i in range(spots.size()):
 		var tree := Node3D.new()
@@ -134,6 +165,7 @@ func _spawn_pines(terrain: Node) -> void:
 	var root := Node3D.new()
 	root.name = "Pines"
 	add_child(root)
+	_scatter_roots.append(root)
 
 	for i in range(spots.size()):
 		var pine := Node3D.new()
@@ -176,6 +208,7 @@ func _spawn_rocks(terrain: Node) -> void:
 	var root := Node3D.new()
 	root.name = "Rocks"
 	add_child(root)
+	_scatter_roots.append(root)
 	for p in spots:
 		var rock := MeshInstance3D.new()
 		var sphere := SphereMesh.new()
@@ -204,6 +237,7 @@ func _spawn_flowers(terrain: Node) -> void:
 	var root := Node3D.new()
 	root.name = "Flowers"
 	add_child(root)
+	_scatter_roots.append(root)
 	for i in range(spots.size()):
 		var flower := Node3D.new()
 		flower.position = spots[i]

@@ -329,6 +329,13 @@ func quality_name() -> String:
 	return QUALITY_NAMES[clampi(quality_tier, 0, QUALITY_NAMES.size() - 1)]
 
 
+func set_quality_tier(tier: int) -> void:
+	## Public setter used by the automatic performance tuner.
+	quality_tier = clampi(tier, 0, QUALITY_NAMES.size() - 1)
+	_save_quality()
+	quality_changed.emit(quality_tier)
+
+
 func cycle_quality() -> void:
 	quality_tier = (quality_tier + 1) % QUALITY_NAMES.size()
 	_save_quality()
