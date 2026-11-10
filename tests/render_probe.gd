@@ -159,9 +159,14 @@ func _run() -> void:
 			var mmi := child as MultiMeshInstance3D
 			if mmi == null or mmi.multimesh == null:
 				continue
-			if mmi.multimesh.instance_count > 0:
+			# instance_count reads back through the renderer, which is a dummy
+			# server in --headless - guard the whole read.
+			var n := 0
+			if mmi.multimesh.instance_count >= 0:
+				n = mmi.multimesh.instance_count
+			if n > 0:
 				populated += 1
-			nearest = maxi(nearest, mmi.multimesh.instance_count)
+			nearest = maxi(nearest, n)
 		_log("INFO", "grass chunks populated=%d/%d, largest=%d" % [
 			populated, chunks, nearest])
 
