@@ -4,7 +4,11 @@ extends CanvasLayer
 ## and the victory banner.
 
 const TOUCH := preload("res://scripts/touch_controls.gd")
-const SpellWheel := preload("res://scripts/spell_wheel.gd")
+## Loaded at runtime rather than preloaded: a preload that fails to resolve
+## reports only "could not resolve script" against *this* file, which hides the
+## real error inside the wheel. load() keeps the failure local and survivable -
+## the HUD still works if the spell wheel is broken.
+const SPELL_WHEEL_PATH := "res://scripts/spell_wheel.gd"
 
 var _spell_wheel: Control
 var _quest_label: Label
@@ -47,7 +51,8 @@ func _attach_wander() -> void:
 	## Poll a few frames for it rather than depending on scene-tree ordering.
 	for i in range(180):
 		if Game.wander != null:
-			_spell_wheel.call("setup", Game.wander)
+			if _spell_wheel != null:
+				_spell_wheel.call("setup", Game.wander)
 			return
 		await get_tree().process_frame
 	push_warning("LastStar: no Wander spellbook appeared - the spell wheel is inert")
@@ -124,9 +129,14 @@ func _build() -> void:
 	# ---- bottom-left: the Wander spell wheel ---------------------------
 	# (The old party-swap strip used to live here. Party switching is on the
 	# keyboard/T key and the pause menu; the thumb corner belongs to spells.)
-	_spell_wheel = SpellWheel.new()
-	_spell_wheel.name = "SpellWheel"
-	root.add_child(_spell_wheel)
+	var wheel_script := load(SPELL_WHEEL_PATH)
+	if wheel_script != null:
+		_spell_wheel = wheel_script.new()
+	else:
+		push_error("LastStar: could not load " + SPELL_WHEEL_PATH)
+	if _spell_wheel != null:
+		_spell_wheel.name = "SpellWheel"
+		root.add_child(_spell_wheel)
 
 	# ---- bottom-center: stamina + burst energy -------------------------
 	var bottom_center := VBoxContainer.new()
