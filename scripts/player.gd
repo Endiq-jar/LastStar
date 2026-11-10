@@ -38,6 +38,10 @@ var _gliding := false
 var _anim_phase := 0.0
 var _idle_time := 0.0
 var _stamina_regen_hold := 0.0
+## The character's spellbook (scripts/wander.gd). Created once and shared with
+## the HUD so the wheel and the caster always agree on slots and cooldowns.
+var wander: RefCounted
+
 ## How far above the surface a snapped body starts. The physics engine treats a
 ## body that begins a frame intersecting geometry as "already handled" and can
 ## slide it straight through the mesh.
@@ -72,12 +76,23 @@ func _ready() -> void:
 	# never leave the player (and the viewport) without a camera.
 	_build_camera()
 	_build_rig()
+	_make_wander()
 	Game.respawned.connect(_on_respawn)
+	Game.spell_cast.connect(_on_spell_cast)
 	Game.character_changed.connect(_on_character_changed)
 	Game.game_won.connect(_on_game_won)
 	if not Game.is_mobile():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	await get_tree().process_frame
+
+
+func _make_wander() -> void:
+	var script := load("res://scripts/wander.gd")
+	if script == null:
+		push_warning("LastStar: wander.gd did not load - spells are unavailable")
+		return
+	wander = script.new()
+	Game.wander = wander
 
 
 func _build_rig() -> void:
@@ -286,6 +301,8 @@ func _physics_process(delta: float) -> void:
 
 	_attack_cd = maxf(0.0, _attack_cd - delta)
 	_skill_cd = maxf(0.0, _skill_cd - delta)
+	if wander != null:
+		wander.tick(delta)
 	_combo_reset = maxf(0.0, _combo_reset - delta)
 	if _combo_reset <= 0.0:
 		_attack_combo = 0
@@ -538,6 +555,71 @@ func _do_burst() -> void:
 		if d < 11.0 and enemy.has_method("take_hit"):
 			enemy.take_hit(float(data["attack"]) * 3.2, element_id, Vector3.ZERO)
 	Game.toast.emit("%s!" % data["burst_name"])
+
+
+func _on_spell_cast(id: String, data: Dictionary) -> void:
+	## Perform a Wander spell. The wheel has already checked Light and cooldown
+	## and started the timer, so this only has to make the effect happen.
+	if data.is_empty() or Game.is_paused:
+		return
+	var forward := get_forward()
+	var origin: Vector3 = global_position + Vector3(0.0, 1.1, 0.0)
+	var power: float = float(data.get("power", 1.0)) * float(Game.character()["attack"])
+	# Mastery makes spells hit harder, the way levelling a skill does.
+	var mastery := 1.0
+	if wander != null:
+		mastery = 1.0 + float(wander.level_of(id) - 1) * 0.06
+	power *= mastery
+	var element := int(data.get("element", 0))
+	var color: Color = data.get("color", Game.character()["color"])
+	var radius := float(data.get("radius", 0.0))
+	var reach := float(data.get("range", 0.0))
+
+	FX.element_burst(get_parent(), origin + forward * 1.4, color, element)
+	FX.ring_burst(get_parent(), origin, color, 1.4)
+
+	# Spatial spells relocate the caster instead of dealing damage.
+	if id == "tide_step":
+		var dest := global_position + forward * minf(reach, 14.0)
+		var terrain := _terrain()
+		if terrain != null:
+			dest.y = terrain.get_height_at(dest.x, dest.z) + SPAWN_CLEARANCE
+		global_position = dest
+		velocity = Vector3.ZERO
+		FX.sparkle(get_parent(), dest + Vector3(0, 1.0, 0), color)
+		return
+
+	var hit_point: Vector3 = origin + forward * maxf(reach, 2.5)
+	var hit_any := false
+	for enemy in get_tree().get_nodes_in_group("enemy"):
+		if not is_instance_valid(enemy):
+			continue
+		var target := enemy as Node3D
+		if target == null:
+			continue
+		var to_enemy: Vector3 = target.global_position - origin
+		var dist := to_enemy.length()
+		# Cone in front of the caster, widened for area spells.
+		var aim := to_enemy.normalized().dot(forward)
+		var in_cone := aim > 0.45
+		var in_area := radius > 0.0 and dist < radius
+		var along := dist < maxf(reach, radius)
+		if (in_cone and along) or in_area:
+			if enemy.has_method("take_hit"):
+				enemy.take_hit(power, element, forward)
+				hit_any = true
+				hit_point = target.global_position
+
+	FX.hit_flash(get_parent(), hit_point, color)
+	if hit_any:
+		Game.add_energy(3.0)
+
+	# Swing the left arm so casting reads on the character model.
+	var arm := _rig_part("arm_l")
+	if arm != null:
+		arm.rotation.x = -2.2
+		var tw := create_tween()
+		tw.tween_property(arm, "rotation:x", 0.2, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _plunge_impact() -> void:

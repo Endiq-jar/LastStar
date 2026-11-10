@@ -14,6 +14,8 @@ signal toast(text: String)
 signal waypoint_changed(name: String)
 signal game_won()
 signal respawned()
+## Emitted when the player casts a Wander spell. player.gd performs the effect.
+signal spell_cast(id: String, data: Dictionary)
 
 const TOTAL_SIGILS := 12
 const MAX_STAMINA := 100.0
@@ -119,6 +121,10 @@ const QUALITY_NAMES := ["Balanced", "Performance", "High"]
 var water_level: float = 1.2
 var lake_center: Vector2 = Vector2(48.0, 52.0)
 var lake_radius: float = 92.0
+
+## The player's spellbook (scripts/wander.gd), set once the player spawns so the
+## HUD can read slots and cooldowns without reaching into the scene tree.
+var wander: RefCounted
 
 ## Touch joystick vector, written by the mobile HUD each frame.
 var touch_move: Vector2 = Vector2.ZERO

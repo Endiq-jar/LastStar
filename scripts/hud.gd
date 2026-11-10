@@ -4,9 +4,9 @@ extends CanvasLayer
 ## and the victory banner.
 
 const TOUCH := preload("res://scripts/touch_controls.gd")
+const SpellWheel := preload("res://scripts/spell_wheel.gd")
 
-var _party_buttons: Array[Button] = []
-var _party_hp: Array[ProgressBar] = []
+var _spell_wheel: Control
 var _quest_label: Label
 var _compass: Label
 var _stamina: ProgressBar
@@ -35,10 +35,22 @@ func _ready() -> void:
 	_on_sigils_changed(Game.sigils_collected, Game.TOTAL_SIGILS)
 	_on_quest_changed(Game.quest_text)
 	_update_quality_label()
+	_attach_wander.call_deferred()
 	if Game.is_mobile():
 		var touch = TOUCH.new()
 		touch.name = "TouchControls"
 		add_child(touch)
+
+
+func _attach_wander() -> void:
+	## The HUD is built before the player, so the spellbook does not exist yet.
+	## Poll a few frames for it rather than depending on scene-tree ordering.
+	for i in range(180):
+		if Game.wander != null:
+			_spell_wheel.call("setup", Game.wander)
+			return
+		await get_tree().process_frame
+	push_warning("LastStar: no Wander spellbook appeared - the spell wheel is inert")
 
 
 func _build() -> void:
@@ -109,74 +121,12 @@ func _build() -> void:
 	pause_btn.pressed.connect(_pause)
 	top_right.add_child(pause_btn)
 
-	# ---- bottom-left: party strip ---------------------------------------
-	var party := HBoxContainer.new()
-	party.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	party.offset_left = 22
-	party.offset_top = -128
-	party.offset_right = 22 + 330
-	party.offset_bottom = -20
-	party.add_theme_constant_override("separation", 10)
-	root.add_child(party)
-
-	for i in range(Game.PARTY.size()):
-		var data: Dictionary = Game.PARTY[i]
-		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(96, 96)
-		btn.tooltip_text = str(data["name"])
-		btn.flat = true
-		party.add_child(btn)
-
-		var panel := PanelContainer.new()
-		panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		var sb := StyleBoxFlat.new()
-		var col: Color = data["color"]
-		sb.bg_color = Color(0.06, 0.10, 0.16, 0.78)
-		sb.border_width_left = 2
-		sb.border_width_top = 2
-		sb.border_width_right = 2
-		sb.border_width_bottom = 2
-		sb.border_color = Color(col.r, col.g, col.b, 0.85)
-		sb.corner_radius_top_left = 12
-		sb.corner_radius_top_right = 12
-		sb.corner_radius_bottom_left = 12
-		sb.corner_radius_bottom_right = 12
-		panel.add_theme_stylebox_override("panel", sb)
-		btn.add_child(panel)
-
-		var v := VBoxContainer.new()
-		v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		v.add_theme_constant_override("separation", 1)
-		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		panel.add_child(v)
-
-		var element := Label.new()
-		element.text = str(data["element"])
-		element.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		element.add_theme_font_size_override("font_size", 13)
-		element.add_theme_color_override("font_color", col)
-		v.add_child(element)
-
-		var name_label := Label.new()
-		name_label.text = str(data["name"])
-		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		name_label.add_theme_font_size_override("font_size", 15)
-		name_label.add_theme_color_override("font_color", Color(1, 1, 1))
-		v.add_child(name_label)
-
-		var hp := ProgressBar.new()
-		hp.max_value = float(data["max_hp"])
-		hp.value = hp.max_value
-		hp.custom_minimum_size = Vector2(0, 8)
-		hp.show_percentage = false
-		hp.add_theme_stylebox_override("background", _bar_bg())
-		hp.add_theme_stylebox_override("fill", _bar_fill(Color(0.45, 0.92, 0.6)))
-		v.add_child(hp)
-
-		var idx := i
-		btn.pressed.connect(func(): Game.switch_character(idx))
-		_party_buttons.append(btn)
-		_party_hp.append(hp)
+	# ---- bottom-left: the Wander spell wheel ---------------------------
+	# (The old party-swap strip used to live here. Party switching is on the
+	# keyboard/T key and the pause menu; the thumb corner belongs to spells.)
+	_spell_wheel = SpellWheel.new()
+	_spell_wheel.name = "SpellWheel"
+	root.add_child(_spell_wheel)
 
 	# ---- bottom-center: stamina + burst energy -------------------------
 	var bottom_center := VBoxContainer.new()
@@ -224,19 +174,19 @@ func _build() -> void:
 	actions.add_theme_constant_override("separation", 12)
 	root.add_child(actions)
 
-	var jump_btn := _action_button("Jump", Color(0.55, 0.9, 1.0), Vector2(80, 80))
+	var jump_btn := _action_button("Jump", Color(0.55, 0.9, 1.0), Vector2(84, 84), "jump")
 	jump_btn.pressed.connect(_press_jump)
 	actions.add_child(jump_btn)
 
-	_skill_button = _action_button("Skill", Color(0.5, 0.95, 0.75), Vector2(98, 98))
+	_skill_button = _action_button("Skill", Color(0.5, 0.95, 0.75), Vector2(100, 100), "skill")
 	_skill_button.pressed.connect(func(): _emit_action("skill"))
 	actions.add_child(_skill_button)
 
-	var attack_btn := _action_button("Slash", Color(1.0, 0.8, 0.45), Vector2(116, 116))
+	var attack_btn := _action_button("Slash", Color(1.0, 0.8, 0.45), Vector2(118, 118), "attack")
 	attack_btn.pressed.connect(func(): _emit_action("attack"))
 	actions.add_child(attack_btn)
 
-	_burst_button = _action_button("Burst", Color(1.0, 0.72, 0.4), Vector2(98, 98))
+	_burst_button = _action_button("Burst", Color(1.0, 0.72, 0.4), Vector2(100, 100), "burst")
 	_burst_button.pressed.connect(func(): _emit_action("burst"))
 	actions.add_child(_burst_button)
 
@@ -390,8 +340,20 @@ func _round_button(text: String, size: Vector2) -> Button:
 	return b
 
 
-func _action_button(text: String, color: Color, size: Vector2) -> Button:
-	var b := _round_button(text, size)
+func _icon_texture(icon_name: String) -> Texture2D:
+	if icon_name == "":
+		return null
+	var path := "res://icons/actions/%s.png" % icon_name
+	if ResourceLoader.exists(path):
+		return load(path) as Texture2D
+	return null
+
+
+## A round action button with a drawn icon plus a small caption underneath.
+## Text-only buttons read poorly on a phone: an icon is recognisable at a glance
+## while a word has to be read every time.
+func _action_button(text: String, color: Color, size: Vector2, icon_name: String = "") -> Button:
+	var b := _round_button("", size)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(color.r * 0.18, color.g * 0.2, color.b * 0.24, 0.82)
 	sb.border_width_left = 2
@@ -410,6 +372,39 @@ func _action_button(text: String, color: Color, size: Vector2) -> Button:
 	b.add_theme_stylebox_override("hover", hov)
 	b.add_theme_stylebox_override("pressed", hov)
 	b.add_theme_font_size_override("font_size", 17)
+
+	var tex := _icon_texture(icon_name)
+	if tex != null:
+		var pic := TextureRect.new()
+		pic.texture = tex
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Icon fills the disc; the caption sits in the lower third.
+		pic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var pad := size.x * 0.16
+		pic.offset_left = pad
+		pic.offset_top = pad * 0.7
+		pic.offset_right = -pad
+		pic.offset_bottom = -pad
+		b.add_child(pic)
+
+		if text != "":
+			var cap := Label.new()
+			cap.text = text
+			cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			cap.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+			cap.add_theme_font_size_override("font_size", maxi(11, int(size.x * 0.15)))
+			cap.add_theme_color_override("font_color", Color(1, 1, 1, 0.92))
+			cap.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+			cap.add_theme_constant_override("shadow_offset_x", 1)
+			cap.add_theme_constant_override("shadow_offset_y", 1)
+			cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cap.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+			cap.offset_top = -maxi(16, int(size.y * 0.26))
+			b.add_child(cap)
+	else:
+		b.text = text
 	return b
 
 
@@ -520,16 +515,10 @@ func _update_compass() -> void:
 
 
 func _refresh_stats() -> void:
-	if _party_hp.size() != Game.PARTY.size():
-		return
-	for i in range(_party_hp.size()):
-		var hp := _party_hp[i]
-		hp.max_value = float(Game.PARTY[i]["max_hp"])
-		hp.value = Game.health[i] if i < Game.health.size() else hp.max_value
-	for i in range(_party_buttons.size()):
-		var active := i == Game.party_index
-		_party_buttons[i].scale = Vector2.ONE * (1.05 if active else 1.0)
-		_party_buttons[i].modulate = Color(1, 1, 1, 1.0 if active else 0.74)
+	# Party HP lives in the pause menu and the character sheet now that the
+	# bottom-left strip is the spell wheel. Keep the quality label in sync here
+	# since stats_changed fires on every energy/stamina change.
+	_update_quality_label()
 
 
 func _on_character_changed(_i: int) -> void:

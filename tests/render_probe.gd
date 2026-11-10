@@ -125,6 +125,35 @@ func _run() -> void:
 			_log("INFO" if pct > 99.0 else "FAIL",
 				"terrain normals face up: %.1f%% of %d sampled" % [pct, checked])
 
+	# --- spellbook / spell wheel -------------------------------------------
+	var w = Game.wander
+	if w == null:
+		_log("FAIL", "Game.wander is null - the spell wheel has no spellbook")
+	else:
+		var known: int = w.levels.size()
+		_log("INFO" if known >= 3 else "FAIL",
+			"wander spells known=%d slots=%s" % [known, str(w.slots)])
+		var wheel := world.get_node_or_null("HUD/Root/SpellWheel")
+		if wheel == null:
+			_log("FAIL", "HUD/SpellWheel missing - no spell buttons on screen")
+		else:
+			_log("INFO", "spell wheel present (%d slots)" % w.MAX_SLOTS)
+		# Cast path: spend Light, start a cooldown, land a hit.
+		var first_id: String = w.equipped_at(0)
+		if first_id == "":
+			_log("FAIL", "slot 1 is empty - the wheel would show nothing to cast")
+		elif not w.known(first_id):
+			_log("FAIL", "slot 1 holds %s which the player has not learned" % first_id)
+		else:
+			var cd: float = float(w.spell(first_id)["cooldown"])
+			w.begin_cast(first_id)
+			_log("INFO" if w.cooldown_left(first_id) > 0.0 else "FAIL",
+				"casting %s started a %.1fs cooldown (left %.2f)" % [
+					first_id, cd, w.cooldown_left(first_id)])
+			w.tick(cd + 0.1)
+			_log("INFO" if w.cooldown_left(first_id) <= 0.0 else "FAIL",
+				"cooldown expired after ticking")
+
 	# --- terrain collision diagnostics -------------------------------------
 	var tbody := world.get_node_or_null("Terrain/TerrainBody") as StaticBody3D
 	if tbody == null:
