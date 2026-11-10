@@ -10,8 +10,8 @@ uniform sampler2D rock_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D sand_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 
-uniform vec4 meadow_tint : source_color = vec4(0.38, 0.62, 0.28, 1.0);
-uniform vec4 meadow_deep : source_color = vec4(0.20, 0.42, 0.20, 1.0);
+uniform vec4 meadow_tint : source_color = vec4(0.30, 0.47, 0.21, 1.0);
+uniform vec4 meadow_deep : source_color = vec4(0.14, 0.29, 0.14, 1.0);
 uniform vec4 rock_tint : source_color = vec4(0.42, 0.41, 0.44, 1.0);
 uniform vec4 sand_tint : source_color = vec4(0.74, 0.68, 0.52, 1.0);
 uniform vec4 shadow_tint : source_color = vec4(0.68, 0.72, 0.95, 1.0);
@@ -25,6 +25,9 @@ uniform float slope_cliff : hint_range(0.0, 1.0) = 0.52;
 uniform float water_level : hint_range(-20.0, 40.0) = 1.0;
 uniform float wet_band : hint_range(0.5, 24.0) = 5.0;
 uniform float band_softness : hint_range(0.0, 0.3) = 0.055;
+// Distance (metres) over which albedo starts to mute toward atmospheric haze.
+uniform float haze_begin : hint_range(0.0, 600.0) = 130.0;
+uniform float haze_end : hint_range(0.0, 900.0) = 620.0;
 
 varying vec3 v_world;
 varying vec3 v_world_normal;
@@ -45,20 +48,21 @@ void fragment() {
 	float slope = 1.0 - clamp(wn.y, 0.0, 1.0);
 	float h = v_world.y;
 
-	// Painterly posterization: quantize large-scale variation into soft bands
-	// so distant hillsides read as hand-painted planes instead of noise.
+	// Large-scale variation for the meadow colour. This used to be hard
+	// quantized into bands for a "hand-painted planes" look; at the scale it
+	// was running at, those bands were 20-40 m blocks, which read as giant
+	// green camouflage patches rather than brushwork. A gently curved smooth
+	// value gives the same painterly breakup without the blocky edges.
 	float macro = texture(macro_tex, v_world.xz * macro_scale).r;
 	float macro2 = texture(macro_tex, v_world.xz * macro_scale * 3.1 + vec2(0.37, 0.11)).r;
-	float patch = macro * 0.65 + macro2 * 0.35;
-	patch = floor(patch / max(band_softness, 0.001)) * band_softness;
-	patch = clamp(patch, 0.0, 1.0);
+	float patch = smoothstep(0.12, 0.88, macro * 0.65 + macro2 * 0.35);
 
 	// Anime terrain is painted in flat planes, not textured noise. The old
 	// version multiplied triplanar noise at uv_scale 0.055 over everything,
 	// which at distance turned every mountain into a wall of fine-grained
 	// static. Now the large-scale `patch` value picks the colour and the
 	// texture only adds a faint brush grain on top.
-	float dry = smoothstep(0.35, 0.75, patch);
+	float dry = smoothstep(0.45, 0.92, patch);
 
 	// Detail from the painted textures, scaled to a painterly size rather than
 	// a photographic one. tri() picks the best projection per surface so cliffs
@@ -71,8 +75,9 @@ void fragment() {
 	// painted detail (kept subtle so the flat anime bands still dominate).
 	vec3 grass = mix(meadow_deep.rgb, meadow_tint.rgb, 0.35 + patch * 0.65);
 	grass *= mix(vec3(1.0), meadow_detail * 1.35, 0.55);
-	// A little golden meadow mixed in, the way open-world grass reads.
-	grass = mix(grass, vec3(0.52, 0.56, 0.24), dry * 0.14);
+	// A little golden meadow mixed in, the way open-world grass reads. Kept
+	// low: push this and the hillsides turn acid yellow-green.
+	grass = mix(grass, vec3(0.46, 0.44, 0.20), dry * 0.10);
 
 	// Rock: warm grey, cooler in shadowed bands.
 	vec3 rock_col = rock_tint.rgb * mix(0.66, 1.0, patch);
@@ -96,12 +101,25 @@ void fragment() {
 	// not a noise texture.
 	float snow = smoothstep(snow_height - 14.0, snow_height + 20.0, h);
 	snow *= 1.0 - smoothstep(0.42, 0.62, slope);
-	col = mix(col, vec3(0.84, 0.88, 0.95), snow * 0.88);
+	col = mix(col, vec3(0.72, 0.77, 0.87), snow * 0.85);
 
 	// Wet band near the shore: darker + glossier.
 	float wet = 1.0 - smoothstep(water_level, water_level + wet_band, h);
 	col = mix(col, col * vec3(0.62, 0.68, 0.78), wet * 0.55);
 
+	// --- aerial perspective -------------------------------------------------
+	// The problem with doing this with fog only is that fog multiplies the
+	// *lighting*, so a saturated albedo still arrives as a saturated colour and
+	// the far ranges turned into neon green cut-outs against the sky. Muting the
+	// albedo with distance (toward its own luminance, nudged cool) is what a
+	// painter does, and it is what makes the depth read.
+	// In the fragment stage VERTEX is the view-space position, so its length is
+	// the distance to the camera on every renderer without extra uniforms.
+	float cam_dist = length(VERTEX);
+	float haze = smoothstep(haze_begin, haze_end, cam_dist);
+	float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+	vec3 hazed = mix(vec3(luma), col, 0.55) * vec3(0.92, 0.95, 1.06);
+	col = mix(col, hazed, haze * 0.92);
 
 	ALBEDO = col;
 	ROUGHNESS = mix(0.92, 0.24, wet);

@@ -15,13 +15,18 @@ static func _toon(color: Color, rim: float = 0.35) -> ShaderMaterial:
 	m.set_shader_parameter("albedo_color", color)
 	m.set_shader_parameter("shadow_tint", Color(0.62, 0.66, 0.92))
 	m.set_shader_parameter("rim_color", Color(1.0, 0.95, 0.84))
-	m.set_shader_parameter("rim_strength", rim)
-	m.set_shader_parameter("diffuse_energy", 1.05)
-	m.set_shader_parameter("spec_energy", 0.45)
+	# Rim and spec used to run at 0.7-0.8 strength with a 0.45 spec energy; on a
+	# build made mostly of spheres every one of them picked up a broad highlight
+	# plus a full rim ring, and the accumulated radiance washed the character out
+	# to a white blob. The shader clamps these now, and the values fed in are
+	# deliberately restrained.
+	m.set_shader_parameter("rim_strength", minf(rim, 0.45))
+	m.set_shader_parameter("diffuse_energy", 1.0)
+	m.set_shader_parameter("spec_energy", 0.26)
 	return m
 
 
-static func _glow(color: Color, energy: float = 2.2) -> StandardMaterial3D:
+static func _glow(color: Color, energy: float = 1.5) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
 	m.emission_enabled = true
@@ -77,9 +82,9 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	var cape_col: Color = data["cape"]
 	var cape_mat := _toon(cape_col, 0.7)
 	var eye_col: Color = data["eye"]
-	var eye := _glow(eye_col, 1.4)
+	var eye := _glow(eye_col, 1.1)
 	var element_col: Color = data["color"]
-	var element_glow := _glow(element_col, 2.4)
+	var element_glow := _glow(element_col, 1.7)
 
 	var torso := Node3D.new()
 	torso.name = "Torso"
@@ -292,7 +297,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 
 
 static func _build_weapon(anchor: Node3D, kind: String, glow: StandardMaterial3D, accent: ShaderMaterial) -> void:
-	var steel := _toon(Color(0.88, 0.90, 0.96), 0.8)
+	var steel := _toon(Color(0.78, 0.81, 0.88), 0.45)
 	match kind:
 		"sword":
 			var blade := BoxMesh.new()

@@ -288,15 +288,15 @@ func _setup_environment() -> void:
 
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.16, 0.42, 0.88)
-	sky_mat.sky_horizon_color = Color(0.74, 0.89, 1.0)
+	sky_mat.sky_top_color = Color(0.17, 0.36, 0.72)
+	sky_mat.sky_horizon_color = Color(0.62, 0.82, 0.97)
 	sky_mat.sky_curve = 0.11
-	sky_mat.sky_energy_multiplier = 1.25
+	sky_mat.sky_energy_multiplier = 1.15
 	# The ground half of a procedural sky is only seen below the horizon, but a
 	# pitch-black or blown-out value there shows up in reflections and fog, so
 	# keep it a soft hazy green-blue.
 	sky_mat.ground_bottom_color = Color(0.30, 0.44, 0.40)
-	sky_mat.ground_horizon_color = Color(0.80, 0.91, 0.97)
+	sky_mat.ground_horizon_color = Color(0.64, 0.78, 0.90)
 	sky_mat.ground_curve = 0.06
 	sky_mat.sun_angle_max = 26.0
 	sky_mat.sun_curve = 0.10
@@ -324,18 +324,18 @@ func _setup_environment() -> void:
 	env.tonemap_white = 2.4
 
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.58, 0.72, 0.84)
-	# Exponential fog at 0.0006 still laid a visible mint veil over the whole
-	# mid-ground. Depth fade is enough for scale; the colour is what sells it.
-	env.fog_density = 0.00022
-	# Aerial perspective at 0.65 blended every distant hillside straight into
-	# the pale sky, which is why the range looked like white noise rather than
-	# mountains. Keep only enough for depth separation.
-	env.fog_aerial_perspective = 0.30
-	env.fog_sky_affect = 0.18
-	env.fog_depth_begin = 220.0
-	env.fog_depth_end = 900.0
-	env.fog_depth_curve = 0.75
+	env.fog_light_color = Color(0.72, 0.80, 0.90)
+	# Depth-based fog, not exponential. Exponential fog is a uniform veil: it
+	# greys out the near hillside exactly as much as the far ridge, so nothing
+	# gains depth - the whole map just looks slightly dirty. A begin/end depth
+	# gradient stays at zero through the playable range and then ramps in, which
+	# is what separates the ridge layers the way a painted background does.
+	env.fog_density = 0.0
+	env.fog_depth_begin = 160.0
+	env.fog_depth_end = 780.0
+	env.fog_depth_curve = 1.35
+	env.fog_aerial_perspective = 0.55
+	env.fog_sky_affect = 0.10
 
 	env.glow_enabled = true
 	env.glow_intensity = 0.28
@@ -345,22 +345,23 @@ func _setup_environment() -> void:
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 
 	env.adjustment_enabled = true
-	env.adjustment_brightness = 1.04
-	env.adjustment_contrast = 1.05
-	env.adjustment_saturation = 1.15
+	env.adjustment_brightness = 1.0
+	env.adjustment_contrast = 1.09
+	env.adjustment_saturation = 1.10
 
 	environment.environment = env
 
 	sun.light_color = Color(1.0, 0.95, 0.86)
-	# Matches the daytime value the day/night pass computes (0.85-1.30).
-	sun.light_energy = 1.05
+	# Matches the daytime value the day/night pass computes.
+	sun.light_energy = 1.35
 	sun.light_angular_distance = 0.4
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.directional_shadow_max_distance = 190.0
-	sun.directional_shadow_split_1 = 0.16
+	sun.directional_shadow_max_distance = 220.0
+	sun.directional_shadow_split_1 = 0.13
+	sun.shadow_blur = 1.4
 	sun.light_specular = 0.8
-	sun.rotation_degrees = Vector3(-48, -38, 0)
+	sun.rotation_degrees = Vector3(-34, -52, 0)
 
 
 func _process(delta: float) -> void:
@@ -384,6 +385,15 @@ func _process(delta: float) -> void:
 				_autotune_performance()
 
 
+func _set_beauty_time(t: float) -> void:
+	## Freeze the clock at a given time of day. Used by the render probe so the
+	## beauty frame always shows the same graded lighting instead of whatever
+	## hour the boot happened to land on.
+	_day_speed = 0.0
+	_day_time = t
+	_update_time_of_day()
+
+
 func _update_time_of_day() -> void:
 	## A graded cycle: dawn -> warm morning -> noon -> golden afternoon -> dusk.
 	##
@@ -393,21 +403,25 @@ func _update_time_of_day() -> void:
 	## that shifts hue, and fog that picks up the sun's colour. Every one of
 	## those is driven from a single `warmth` value here.
 	var sun_angle: float = (_day_time - 0.25) * TAU
-	var elevation := sin(sun_angle) * 26.0 + 4.0
-	sun.rotation_degrees = Vector3(-clampf(elevation, -12.0, 72.0), -38.0, 0.0)
+	# Low and to the side. A sun 48 degrees up and 38 off-axis flattens the whole
+	# valley into evenly-lit green because almost every surface faces it; the
+	# long raking light that gives Genshin its shape only happens near the
+	# horizon. The cycle now spends most of its time in that band.
+	var elevation := sin(sun_angle) * 21.0 + 3.0
+	var azimuth := -58.0 + cos(sun_angle) * 14.0
+	sun.rotation_degrees = Vector3(-clampf(elevation, -10.0, 60.0), azimuth, 0.0)
 	sun.visible = true
 
-	var day := clampf(sin(sun_angle) * 0.5 + 0.6, 0.0, 1.0)
 	# 1.0 at the warmest (dawn/dusk), 0.0 at high noon.
-	var low_sun := 1.0 - clampf((elevation - 4.0) / 30.0, 0.0, 1.0)
-	var warmth := pow(clampf(low_sun, 0.0, 1.0), 1.6)
+	var low_sun := 1.0 - clampf((elevation - 2.0) / 22.0, 0.0, 1.0)
+	var warmth := pow(clampf(low_sun, 0.0, 1.0), 1.25)
 
 	# --- key light ---------------------------------------------------------
-	# Noon white-warm, low sun deep amber. Energy dips a little at the extremes
-	# so a raking sun does not clip the hillsides.
-	sun.light_energy = lerpf(0.78, 1.15, 1.0 - warmth)
-	var noon_col := Color(1.0, 0.97, 0.90)
-	var dawn_col := Color(1.0, 0.72, 0.42)
+	# Energy peaks slightly *below* noon: a low sun rakes across the hills, and
+	# brightening it keeps the lit faces punchy while the shadows stay long.
+	sun.light_energy = lerpf(1.32, 1.72, warmth)
+	var noon_col := Color(1.0, 0.95, 0.87)
+	var dawn_col := Color(1.0, 0.66, 0.36)
 	sun.light_color = noon_col.lerp(dawn_col, warmth)
 	sun.shadow_enabled = true
 
@@ -416,20 +430,26 @@ func _update_time_of_day() -> void:
 		return
 
 	# --- ambient -----------------------------------------------------------
-	# Fill light goes cool and dim under a warm sun - that cool-shadow/warm-light
-	# contrast is most of the "anime morning" read. At noon it is neutral-bright.
-	var amb_warm := Color(0.46, 0.42, 0.44)
-	var amb_noon := Color(0.60, 0.65, 0.74)
+	# Fill light goes cool under a warm sun - that cool-shadow/warm-light contrast
+	# is most of the "anime morning" read. It stays bright, though: dim fill plus
+	# a raking key is how you get the crushed, muddy shadow side that made the
+	# hillsides look like dark green felt. Sky-blue fill keeps shade readable and
+	# makes the greens look like they are lit by an open sky.
+	var amb_warm := Color(0.50, 0.56, 0.72)
+	var amb_noon := Color(0.58, 0.66, 0.80)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = amb_noon.lerp(amb_warm, warmth)
-	env.ambient_light_energy = lerpf(0.58, 0.40, warmth)
+	env.ambient_light_energy = lerpf(0.92, 0.84, warmth)
 
 	# --- fog ---------------------------------------------------------------
 	# Fog carries the sun's colour, which is what makes distant hills read as
-	# warm-lit rather than grey haze.
-	env.fog_light_color = Color(0.66, 0.79, 0.92).lerp(Color(0.98, 0.80, 0.62), warmth)
-	env.fog_density = lerpf(0.00022, 0.00040, warmth)
-	env.fog_aerial_perspective = lerpf(0.24, 0.38, warmth)
+	# warm-lit rather than grey haze. Pulled in tighter at the warm ends: morning
+	# haze pooling in the valley is a signature of the look.
+	env.fog_light_color = Color(0.78, 0.86, 0.95).lerp(Color(1.0, 0.82, 0.64), warmth)
+	env.fog_depth_begin = lerpf(190.0, 120.0, warmth)
+	env.fog_depth_end = lerpf(820.0, 640.0, warmth)
+	env.fog_depth_curve = lerpf(1.25, 1.55, warmth)
+	env.fog_aerial_perspective = lerpf(0.50, 0.62, warmth)
 
 	# --- sky ---------------------------------------------------------------
 	# Dawn sky is a soft peach near the horizon with a deeper blue overhead;
@@ -437,8 +457,9 @@ func _update_time_of_day() -> void:
 	var sky := env.sky
 	if sky != null and sky.sky_material is ProceduralSkyMaterial:
 		var mat := sky.sky_material as ProceduralSkyMaterial
-		mat.sky_top_color = Color(0.20, 0.40, 0.74).lerp(Color(0.28, 0.36, 0.62), warmth)
-		mat.sky_horizon_color = Color(0.68, 0.85, 0.96).lerp(Color(0.98, 0.78, 0.62), warmth)
+		mat.sky_top_color = Color(0.17, 0.36, 0.72).lerp(Color(0.24, 0.31, 0.56), warmth)
+		mat.sky_horizon_color = Color(0.62, 0.82, 0.97).lerp(Color(1.0, 0.74, 0.55), warmth)
+		mat.sky_energy_multiplier = lerpf(1.15, 1.0, warmth)
 		mat.ground_horizon_color = mat.sky_horizon_color
 		mat.ground_bottom_color = Color(0.20, 0.26, 0.22).lerp(Color(0.28, 0.24, 0.22), warmth)
 
@@ -447,9 +468,9 @@ func _update_time_of_day() -> void:
 	# cheap version of a colour-grade LUT and it sells the time of day more than
 	# any single light tweak.
 	if env.adjustment_enabled:
-		env.adjustment_saturation = lerpf(1.16, 1.26, warmth)
-		env.adjustment_contrast = lerpf(1.06, 1.12, warmth)
-		env.adjustment_brightness = lerpf(1.0, 0.98, warmth)
+		env.adjustment_saturation = lerpf(1.10, 1.22, warmth)
+		env.adjustment_contrast = lerpf(1.09, 1.14, warmth)
+		env.adjustment_brightness = lerpf(1.0, 1.02, warmth)
 
 
 
@@ -498,7 +519,7 @@ func _build_spawn_glade() -> void:
 	var sm := StandardMaterial3D.new()
 	# 0.82 albedo under a 1.3-energy sun clipped to white; these read as blank
 	# white slabs. A weathered grey stone matches the rock band on the terrain.
-	sm.albedo_color = Color(0.46, 0.47, 0.50)
+	sm.albedo_color = Color(0.44, 0.45, 0.49)
 	sm.roughness = 0.85
 	sm.metallic = 0.0
 	stone.material_override = sm
@@ -537,7 +558,7 @@ func _build_spawn_glade() -> void:
 
 func _scatter_landmarks() -> void:
 	var stone_mat := StandardMaterial3D.new()
-	stone_mat.albedo_color = Color(0.78, 0.8, 0.86)
+	stone_mat.albedo_color = Color(0.56, 0.58, 0.63)
 	stone_mat.roughness = 0.85
 
 	# Wind arches: tall broken gates that read like Genshin's ruins.

@@ -14,6 +14,9 @@ uniform float ramp_softness : hint_range(0.01, 0.6) = 0.09;
 uniform float diffuse_energy : hint_range(0.0, 2.0) = 1.0;
 uniform float spec_energy : hint_range(0.0, 2.0) = 0.55;
 uniform float spec_size : hint_range(0.0, 1.0) = 0.22;
+// Hard ceiling on how much the anime specular band may add. Without it a
+// sphere facing the sun sums the band over its whole visible area.
+uniform float spec_ceiling : hint_range(0.0, 1.0) = 0.32;
 uniform float rim_strength : hint_range(0.0, 2.0) = 0.35;
 uniform float rim_power : hint_range(1.0, 8.0) = 3.4;
 uniform float emission_boost : hint_range(0.0, 4.0) = 0.0;
@@ -43,16 +46,26 @@ void light() {
 	float warm = smoothstep(0.45, 0.95, ndl);
 	vec3 shadowed = ATTENUATION * LIGHT_COLOR * albedo_color.rgb * shadow_tint.rgb;
 	vec3 lit_col = ATTENUATION * LIGHT_COLOR * albedo_color.rgb;
-	DIFFUSE_LIGHT += mix(shadowed, lit_col, lit) * (0.72 + warm * 0.38) * diffuse_energy * 0.62;
+	DIFFUSE_LIGHT += mix(shadowed, lit_col, lit) * (0.68 + warm * 0.30) * diffuse_energy * 0.60;
 
 	// Anime specular band: a thin ring around the key direction.
 	float spec_ndl = smoothstep(1.0 - spec_size, 1.0 - spec_size * 0.35, ndl);
 	float ndv = clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0);
-	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * spec_ndl * spec_energy * (0.4 + ndv * 0.6);
+	float spec_amount = spec_ndl * spec_energy * (0.4 + ndv * 0.6);
+	// Fade the band out as the surface turns fully toward the light, so it reads
+	// as a highlight on the edge of the lit side rather than a disc on the front.
+	spec_amount *= 1.0 - smoothstep(0.90, 1.0, ndl);
+	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * min(spec_amount, spec_ceiling);
 
 	// Rim: bright edge facing away from the light, gives that "painted" pop.
-	vec3 world_n = normalize((VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	//
+	// Both terms are clamped. On a head-sized sphere facing the key light, ndl
+	// is ~1 across most of the visible surface, so the specular band covered the
+	// whole head, and the rim term multiplied by a 2.2-energy sun put the total
+	// radiance far over the tonemapper's knee. The result was a featureless white
+	// ball where the player's face should be - the single worst artefact in the
+	// render, and it made every character read as a blank mannequin.
 	float rim = pow(1.0 - max(ndv, 0.0), rim_power);
 	rim *= smoothstep(0.05, 0.45, 1.0 - ndl);
-	DIFFUSE_LIGHT += rim_color.rgb * LIGHT_COLOR * ATTENUATION * rim * rim_strength * 0.35;
+	DIFFUSE_LIGHT += rim_color.rgb * LIGHT_COLOR * ATTENUATION * rim * rim_strength * 0.22;
 }

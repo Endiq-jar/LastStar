@@ -143,6 +143,15 @@ func _run() -> void:
 			_log("INFO" if pct > 99.0 else "FAIL",
 				"terrain normals face up: %.1f%% of %d sampled" % [pct, checked])
 
+	# --- what is in front of the camera ------------------------------------
+	# An opaque, unshaded blob that covers a third of the gameplay frame has
+	# shown up twice now and both times the cause was guessed at from the PNG.
+	# This dumps the actual geometry inside the camera frustum (distance, size,
+	# material class and colour), so the next occurrence is identified from
+	# data instead of a visual hunch.
+	if cam:
+		_dump_frustum(cam, world)
+
 	# --- environment dressing ----------------------------------------------
 	# Logs and pebbles are what stop the grass reading as a flat painted
 	# texture. Assert they actually spawned rather than silently picking zero
@@ -306,6 +315,7 @@ func _run() -> void:
 		return
 	img.save_png(out_dir.path_join("world.png"))
 	var stats := _analyse(img)
+	_check_blob(img, "gameplay")
 	_log("INFO", "size=%dx%d mean_luma=%.3f nonblack=%.1f%% distinct_colours=%d sky_blue=%.1f%%" % [
 		img.get_width(), img.get_height(), stats["luma"],
 		stats["nonblack"] * 100.0, stats["colours"], stats["sky"] * 100.0])
@@ -343,20 +353,32 @@ func _run() -> void:
 	beauty.near = 0.1
 	beauty.far = 1200.0
 	world.add_child(beauty)
-	var eye := Vector3(-62.0, 0.0, -74.0)
+	# Positioned on a hillside looking along the valley toward the lake, with
+	# the ridge line near the upper third and foreground meadow in the bottom
+	# third. The old framing sat in the middle of a slope at eye level with the
+	# horizon dead centre, which is the least flattering composition possible -
+	# it showed neither the valley nor the sky.
+	var eye := Vector3(-150.0, 0.0, -168.0)
 	var terrain_node := world.get_node_or_null("Terrain")
 	if terrain_node != null and terrain_node.has_method("get_height_at"):
-		eye.y = terrain_node.get_height_at(eye.x, eye.z) + 26.0
+		eye.y = terrain_node.get_height_at(eye.x, eye.z) + 18.0
 	else:
 		eye.y = 40.0
 	beauty.global_position = eye
-	beauty.look_at(Vector3(30.0, eye.y - 14.0, 40.0), Vector3.UP)
+	# Look slightly down-valley and just under the horizon, toward the lake.
+	beauty.look_at(Vector3(120.0, eye.y - 6.0, 150.0), Vector3.UP)
+
+	# Push the sun to a warm low morning for the beauty frame so the shot shows
+	# the graded palette rather than whatever time the world happened to boot at.
+	if world.has_method("_set_beauty_time"):
+		world.call("_set_beauty_time", 0.302)
 	beauty.current = true
 	await get_tree().create_timer(0.5).timeout
 	await get_tree().process_frame
 	var img3 := get_viewport().get_texture().get_image()
 	if img3:
 		img3.save_png(out_dir.path_join("world_wide.png"))
+		_check_blob(img3, "wide")
 		var s3 := _analyse(img3)
 		_log("INFO", "wide view mean_luma=%.3f nonblack=%.1f%% colours=%d sky=%.1f%%" % [
 			s3["luma"], s3["nonblack"] * 100.0, s3["colours"], s3["sky"] * 100.0])
@@ -366,6 +388,95 @@ func _run() -> void:
 			_log("WARN", "wide view is overexposed (mean luma %.2f)" % s3["luma"])
 
 	_finish(_fail)
+
+
+func _check_blob(img: Image, label: String) -> void:
+	## Detect a large, opaque, pure-white region - the signature of an unshaded
+	## emissive surface parked in front of the camera. This artifact shipped
+	## twice because nothing was measuring it; a HUD button behind it in the PNG
+	## was the only clue. Bright sky and clouds are excluded by requiring the
+	## region to be clustered and near-pure white with all three channels
+	## saturated, which the sky (blue-dominant) and snow (cool-tinted) are not.
+	var w := img.get_width()
+	var h := img.get_height()
+	var step := maxi(1, int(w / 200.0))
+	var hot := 0
+	var total := 0
+	var min_x := w
+	var max_x := 0
+	var min_y := h
+	var max_y := 0
+	for y in range(0, h, step):
+		for x in range(0, w, step):
+			total += 1
+			var c := img.get_pixel(x, y)
+			if c.r > 0.97 and c.g > 0.97 and c.b > 0.95 and c.a > 0.5:
+				hot += 1
+				min_x = mini(min_x, x)
+				max_x = maxi(max_x, x)
+				min_y = mini(min_y, y)
+				max_y = maxi(max_y, y)
+	if total == 0:
+		return
+	var frac := float(hot) / float(total)
+	if frac > 0.06:
+		var box_w := max_x - min_x
+		var box_h := max_y - min_y
+		var fill := frac / maxf(0.0001, (float(box_w) / float(w)) * (float(box_h) / float(h)))
+		_log("FAIL", "%s frame is %.1f%% pure white in a %dx%d box (fill %.2f) - an unshaded emissive surface is covering the view" % [
+			label, frac * 100.0, box_w, box_h, fill])
+	else:
+		_log("INFO", "%s frame white-clip %.1f%%" % [label, frac * 100.0])
+
+
+func _dump_frustum(cam: Camera3D, world: Node) -> void:
+	var from := cam.global_position
+	var forward := -cam.global_transform.basis.z
+	var near_hits: Array[String] = []
+	for mi in world.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null or not m.is_visible_in_tree():
+			continue
+		var v := m.global_position - from
+		var dist := v.length()
+		if dist > 40.0:
+			continue
+		# In front of the camera and roughly inside the 70-degree cone.
+		if v.normalized().dot(forward) < 0.55:
+			continue
+		var aabb := m.global_transform * m.get_aabb()
+		var size := aabb.size.length()
+		if size < 0.6:
+			continue
+		var mat := m.material_override
+		var desc := "?"
+		if mat is ShaderMaterial:
+			var sm := mat as ShaderMaterial
+			var path := sm.shader.resource_path if sm.shader != null else "?"
+			desc = "ShaderMaterial(%s)" % path
+			var col = sm.get_shader_parameter("albedo_color")
+			if col is Color:
+				desc += " albedo=%s" % str(col)
+		elif mat is StandardMaterial3D:
+			var st := mat as StandardMaterial3D
+			desc = "Standard(unshaded=%s emission=%s energy=%.1f albedo=%s)" % [
+				str(st.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED),
+				str(st.emission_enabled),
+				st.emission_energy_multiplier,
+				str(st.albedo_color)]
+		elif mat == null:
+			desc = "no material_override (surface override: %s)" % str(m.get_surface_override_material(0))
+		near_hits.append("%s node=%s dist=%.1f size=%.1f %s" % [
+			str(m.get_path()).replace(str(world.get_path()) + "/", ""),
+			m.mesh.resource_path.get_file() if m.mesh.resource_path != "" else m.mesh.get_class(),
+			dist, size, desc])
+	if near_hits.is_empty():
+		_log("INFO", "frustum: nothing large within 40m in front of the camera")
+	else:
+		near_hits.sort()
+		_log("INFO", "frustum has %d large meshes within 40m:" % near_hits.size())
+		for i in range(mini(near_hits.size(), 12)):
+			_log("INFO", "  " + near_hits[i])
 
 
 func _analyse(img: Image) -> Dictionary:

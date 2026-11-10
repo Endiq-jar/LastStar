@@ -28,16 +28,19 @@ func _ready() -> void:
 
 	var stone := ShaderMaterial.new()
 	stone.shader = load("res://shaders/anime_toon.gdshader")
-	stone.set_shader_parameter("albedo_color", Color(0.86, 0.88, 0.94))
+	# 0.86 read as a blank white cut-out standing in the meadow; stone in this
+	# world sits around 0.5 and gets its brightness from the sun.
+	stone.set_shader_parameter("albedo_color", Color(0.52, 0.55, 0.62))
 	stone.set_shader_parameter("shadow_tint", Color(0.6, 0.66, 0.95))
-	stone.set_shader_parameter("rim_strength", 0.6)
+	stone.set_shader_parameter("rim_strength", 0.4)
+	stone.set_shader_parameter("spec_energy", 0.2)
 
 	var glow := StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	glow.emission_enabled = true
 	glow.emission = Color(0.55, 0.9, 1.0)
-	glow.emission_energy_multiplier = 2.6
-	glow.albedo_color = Color(0.7, 0.95, 1.0)
+	glow.emission_energy_multiplier = 1.4
+	glow.albedo_color = Color(0.62, 0.88, 1.0)
 
 	# Plinth
 	var base := MeshInstance3D.new()
