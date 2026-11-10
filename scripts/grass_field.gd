@@ -36,6 +36,13 @@ var _material: ShaderMaterial
 var _last_center := Vector2i(9999, 9999)
 var _build_budget := 3             ## chunks built per frame, to avoid hitches
 var _enabled := true
+## Diagnostics: why blades were rejected, so a density regression is explainable
+## instead of a mystery number.
+var _rej_water := 0
+var _rej_height := 0
+var _rej_slope := 0
+var _tried := 0
+var _tier_counts := {2600: 0, 1300: 0, 520: 0}
 
 
 func setup(terrain: Node, player: Node3D) -> void:
@@ -155,7 +162,6 @@ func _build_chunk(key: Vector2i) -> void:
 	elif dist <= 3.0:
 		count = BLADES_MID
 
-	print("GRASS_TIER key=%s center=%s dist=%.2f count=%d" % [key, center, dist, count])
 	var rng := RandomNumberGenerator.new()
 	# Deterministic per chunk: the meadow looks the same every time you return.
 	rng.seed = hash(Vector2i(key.x * 73856093, key.y * 19349663))
@@ -171,15 +177,19 @@ func _build_chunk(key: Vector2i) -> void:
 	var origin_z := float(key.y) * CHUNK_SIZE
 	# Taller blades further away hide the reduced density.
 	var height_scale := 1.0 + clampf(float(dist) * 0.06, 0.0, 0.35)
+	_tier_counts[count] = int(_tier_counts.get(count, 0)) + 1
 	for i in range(count):
+		_tried += 1
 		var x := origin_x + rng.randf() * CHUNK_SIZE
 		var z := origin_z + rng.randf() * CHUNK_SIZE
 		var h: float = _terrain.get_height_at(x, z)
 		# Grass grows on gentle ground above the shoreline, not on cliffs,
 		# not underwater and not on the high rock/snow bands.
 		if h > 58.0:
+			_rej_height += 1
 			continue
 		if _terrain.get_slope_at(x, z) > 0.52:
+			_rej_slope += 1
 			continue
 		# Exclude actual water, not a circle around it. The old blanket
 		# exclusion (lake_radius * 0.82 = 75 m from the lake centre) also
@@ -187,10 +197,12 @@ func _build_chunk(key: Vector2i) -> void:
 		# so the entire meadow around them was silently rejected and the field
 		# came out at a few thousand blades instead of tens of thousands.
 		if _terrain.is_underwater(x, z):
+			_rej_water += 1
 			continue
 		# Keep a small dry margin around the shoreline so blades do not poke
 		# through the water surface.
 		if h < SEA_MARGIN:
+			_rej_water += 1
 			continue
 		var s := rng.randf_range(0.75, 1.45) * height_scale
 		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s))
@@ -225,6 +237,13 @@ func blade_count() -> int:
 
 func chunk_count() -> int:
 	return _chunks.size()
+
+
+func diagnostics() -> String:
+	return "tried=%d water=%d height=%d slope=%d tiers(near/mid/far)=%d/%d/%d" % [
+		_tried, _rej_water, _rej_height, _rej_slope,
+		int(_tier_counts.get(2600, 0)), int(_tier_counts.get(1300, 0)),
+		int(_tier_counts.get(520, 0))]
 
 
 func set_enabled(on: bool) -> void:

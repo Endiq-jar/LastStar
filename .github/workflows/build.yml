@@ -134,14 +134,6 @@ jobs:
           tail -25 /tmp/structure.log | while IFS= read -r line; do
             echo "::notice::$line"
           done
-          # Targeted greps: the tail is far too short to catch per-chunk debug
-          # lines printed while the world was still being built.
-          grep -E "GRASS_TIER" /tmp/structure.log | head -12 | while IFS= read -r line; do
-            echo "::notice::dbg| $line"
-          done
-          grep -c "GRASS_TIER" /tmp/structure.log | while IFS= read -r n; do
-            echo "::notice::grass chunk builds logged: $n"
-          done
           grep -E "^PROBE_" /tmp/structure.log || {
             echo "::error::structural probe produced no result"
             exit 1

@@ -169,6 +169,7 @@ func _run() -> void:
 			nearest = maxi(nearest, n)
 		_log("INFO", "grass chunks populated=%d/%d, largest=%d" % [
 			populated, chunks, nearest])
+		_log("INFO", "grass diagnostics: %s" % str(grass.call("diagnostics")))
 
 	# --- spellbook / spell wheel -------------------------------------------
 	var w: Wander = Game.wander
