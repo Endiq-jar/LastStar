@@ -12,8 +12,8 @@ uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_e
 
 uniform vec4 meadow_tint : source_color = vec4(0.38, 0.62, 0.28, 1.0);
 uniform vec4 meadow_deep : source_color = vec4(0.20, 0.42, 0.20, 1.0);
-uniform vec4 rock_tint : source_color = vec4(0.68, 0.66, 0.62, 1.0);
-uniform vec4 sand_tint : source_color = vec4(0.90, 0.83, 0.66, 1.0);
+uniform vec4 rock_tint : source_color = vec4(0.42, 0.41, 0.44, 1.0);
+uniform vec4 sand_tint : source_color = vec4(0.74, 0.68, 0.52, 1.0);
 uniform vec4 shadow_tint : source_color = vec4(0.68, 0.72, 0.95, 1.0);
 
 uniform float uv_scale : hint_range(0.002, 0.2) = 0.045;
@@ -66,11 +66,11 @@ void fragment() {
 	grass = mix(grass, vec3(0.62, 0.66, 0.28), dry * 0.22);
 
 	// Rock: warm grey, cooler in shadowed bands.
-	vec3 rock_col = rock_tint.rgb * mix(0.78, 1.06, patch);
+	vec3 rock_col = rock_tint.rgb * mix(0.66, 1.0, patch);
 
 	// Height bands: sand at the shoreline, meadow in the valley, rock up high.
 	float shore = 1.0 - smoothstep(water_level + 0.4, water_level + 2.6, h);
-	float highland = smoothstep(rock_height * 0.62, rock_height * 1.05, h);
+	float highland = smoothstep(rock_height * 0.78, rock_height * 1.35, h);
 	vec3 col = mix(grass, sand_tint.rgb, shore);
 	col = mix(col, rock_col, highland * 0.9);
 

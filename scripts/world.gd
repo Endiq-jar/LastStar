@@ -324,8 +324,10 @@ func _setup_environment() -> void:
 	env.tonemap_white = 2.4
 
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.62, 0.76, 0.88)
-	env.fog_density = 0.0006
+	env.fog_light_color = Color(0.58, 0.72, 0.84)
+	# Exponential fog at 0.0006 still laid a visible mint veil over the whole
+	# mid-ground. Depth fade is enough for scale; the colour is what sells it.
+	env.fog_density = 0.00022
 	# Aerial perspective at 0.65 blended every distant hillside straight into
 	# the pale sky, which is why the range looked like white noise rather than
 	# mountains. Keep only enough for depth separation.
@@ -387,7 +389,7 @@ func _update_time_of_day() -> void:
 	# loop and never drops so low that the valley goes unlit: an open-world game
 	# that spends a third of its time pitch black reads as "the screen is broken".
 	var sun_angle: float = (_day_time - 0.25) * TAU
-	var elevation := sin(sun_angle) * 42.0 - 6.0
+	var elevation := sin(sun_angle) * 26.0 + 4.0
 	sun.rotation_degrees = Vector3(-clampf(elevation, -12.0, 72.0), -38.0, 0.0)
 
 	var day := clampf(sin(sun_angle) * 0.5 + 0.6, 0.0, 1.0)
