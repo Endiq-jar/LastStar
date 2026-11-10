@@ -38,6 +38,11 @@ var _gliding := false
 var _anim_phase := 0.0
 var _idle_time := 0.0
 var _stamina_regen_hold := 0.0
+## How far above the surface a snapped body starts. The physics engine treats a
+## body that begins a frame intersecting geometry as "already handled" and can
+## slide it straight through the mesh.
+const SPAWN_CLEARANCE := 1.6
+
 var _attack_cd := 0.0
 var _skill_cd := 0.0
 var _attack_combo := 0
@@ -155,35 +160,74 @@ func _on_character_changed(_index: int) -> void:
 
 
 func _snap_to_ground(at: Vector3) -> void:
-	## Place the body on whatever solid surface is under `at`.
+	## Put the body safely ABOVE the ground at `at`.
 	##
-	## Uses a shape cast against the physics space, which is cheap and safe to
-	## call from a deferred callback. Physics queries are only issued once the
-	## body is genuinely inside the world: calling into the space too early is
-	## how you get a body that silently falls forever.
+	## Two independent sources of truth, because falling through the world is
+	## the single most disruptive bug this game can have:
+	##   1. the analytic height field (exact, always available, never queries
+	##      physics), used to hard-correct any position that ends up below it;
+	##   2. a long raycast against the real collision mesh, used when it works.
+	## A body must never be placed *on* the surface: the physics engine requires
+	## clearance or it starts the frame already overlapping and slides through.
 	if not is_inside_tree() or get_world_3d() == null:
 		return
 	velocity = Vector3.ZERO
-	# Explicit type: direct_space_state resolves lazily, so `:=` fails to infer
-	# it - a runtime parse error that would break ground snapping entirely.
+	var best := at
+	best.y = at.y + SPAWN_CLEARANCE
+
 	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
 	if space != null:
-		var from := Vector3(at.x, at.y + 120.0, at.z)
-		var to := Vector3(at.x, at.y - 120.0, at.z)
-		var query := PhysicsRayQueryParameters3D.create(from, to, 1)
+		var query := PhysicsRayQueryParameters3D.create(
+			Vector3(at.x, at.y + 220.0, at.z),
+			Vector3(at.x, at.y - 220.0, at.z), 1)
 		query.hit_from_inside = false
 		query.hit_back_faces = true
-		# Never hit ourselves: the body is on layer 2, but be explicit.
 		query.exclude = [get_rid()]
 		query.collide_with_areas = false
 		var hit: Dictionary = space.intersect_ray(query)
-		if not hit.is_empty() and hit.get("position") != null:
-			var p: Vector3 = hit["position"]
-			global_position = p + Vector3(0.0, 0.8, 0.0)
-			return
-	# No ground found (e.g. outside the collision mesh): keep the caller's
-	# height rather than teleporting somewhere arbitrary.
-	global_position = at
+		if not hit.is_empty():
+			best = hit["position"] + Vector3(0.0, SPAWN_CLEARANCE, 0.0)
+
+	# Final authority: never end up under the terrain, whatever the ray said.
+	var terrain := _terrain()
+	if terrain != null:
+		var ground_y: float = terrain.get_height_at(best.x, best.z)
+		if best.y < ground_y + SPAWN_CLEARANCE:
+			best.y = ground_y + SPAWN_CLEARANCE
+
+	global_position = best
+
+
+func _guard_world_bounds() -> void:
+	## Hard safety floor. The terrain is a 900 m concave mesh and the player is a
+	## capsule on it; if a single frame ever resolves badly (spawning inside the
+	## mesh, a stutter clipping the body through a seam, a device dropping a
+	## physics tick) the body would otherwise fall out of the world forever.
+	##
+	## This runs every physics frame and is deliberately cheap: one analytic
+	## height lookup with no physics query. Being lifted a little happens
+	## invisibly; falling for 60 seconds does not.
+	var terrain := _terrain()
+	if terrain == null:
+		return
+	const FLOOR_FORGIVENESS := 2.5
+	var ground_y: float = terrain.get_height_at(global_position.x, global_position.z)
+	if global_position.y < ground_y - FLOOR_FORGIVENESS:
+		global_position.y = ground_y + SPAWN_CLEARANCE
+		velocity.y = maxf(velocity.y, 0.0)
+		_gliding = false
+		_diving = false
+
+
+func _terrain() -> Node:
+	## The terrain generator lives as a sibling of the player under World.
+	var parent := get_parent()
+	if parent == null:
+		return null
+	var t := parent.get_node_or_null("Terrain")
+	if t != null and t.has_method("get_height_at"):
+		return t
+	return null
 
 
 func _on_respawn() -> void:
@@ -333,6 +377,8 @@ func _physics_process(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, 0.0, drag * delta * speed)
 
 	move_and_slide()
+
+	_guard_world_bounds()
 
 	# Falling out of the world? Return to the checkpoint.
 	if global_position.y < -60.0:

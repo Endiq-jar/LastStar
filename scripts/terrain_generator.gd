@@ -205,7 +205,21 @@ func _build_collision_shape() -> ConcavePolygonShape3D:
 			for v in [p00, p10, p01, p10, p11, p01]:
 				st.add_vertex(v)
 	var mesh := st.commit()
-	return mesh.create_trimesh_shape()
+	var shape: ConcavePolygonShape3D = mesh.create_trimesh_shape()
+	# Belt and braces: one-sided concave collision silently lets bodies fall
+	# straight through if a triangle is ever wound the wrong way. That is a
+	# catastrophic bug and completely invisible in the editor, so pay the small
+	# cost of two-sided collision and make it structurally impossible.
+	shape.set_backface_collision_enabled(true)
+	return shape
+
+
+## Turn an arbitrary point into one that is guaranteed to be above the ground.
+## The physics engine needs room between a body and the surface it starts on
+## (the body is not allowed to spawn intersecting), so callers add their own
+## clearance on top of this.
+func ground_point(x: float, z: float, clearance: float = 1.5) -> Vector3:
+	return Vector3(x, get_height_at(x, z) + clearance, z)
 
 
 ## Cheap nearest-vertex lookup used by props/particles that must not spike the

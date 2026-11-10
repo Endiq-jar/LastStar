@@ -647,8 +647,15 @@ func _spawn_player() -> void:
 	player.name = "Player"
 	player.set_script(PlayerScript)
 	# Start comfortably above the analytic surface; the player snaps itself onto
-	# the collision mesh on its first physics frame.
-	var spawn := Vector3(0.0, _height(0.0, 0.0) + 6.0, 6.0)
+	# the collision mesh on its first physics frame. Ask the terrain node itself
+	# for the height: _height() returns 0.0 if the terrain is not wired up yet,
+	# and spawning at y=0 on a valley floor at y=+22 buries the body underground.
+	var ground := 0.0
+	if terrain != null and terrain.has_method("get_height_at"):
+		ground = terrain.get_height_at(0.0, 6.0)
+	else:
+		ground = _height(0.0, 6.0)
+	var spawn := Vector3(0.0, ground + 6.0, 6.0)
 	player.position = spawn
 	add_child(player)
 
