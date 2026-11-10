@@ -101,8 +101,6 @@ func _run() -> void:
 	_log("INFO" if players.size() == 1 else "FAIL",
 		"player nodes in group = %d" % players.size())
 
-<<<<<<< HEAD
-=======
 	# --- terrain orientation ------------------------------------------------
 	# The terrain winding used to be inverted, which is invisible to every other
 	# check here: the mesh still has vertices, the collision shape still has
@@ -127,7 +125,6 @@ func _run() -> void:
 			_log("INFO" if pct > 99.0 else "FAIL",
 				"terrain normals face up: %.1f%% of %d sampled" % [pct, checked])
 
->>>>>>> 4665bbf (fix: terrain triangles were wound backwards - the world was upside down)
 	# --- terrain collision diagnostics -------------------------------------
 	var tbody := world.get_node_or_null("Terrain/TerrainBody") as StaticBody3D
 	if tbody == null:

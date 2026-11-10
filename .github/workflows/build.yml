@@ -54,6 +54,17 @@ jobs:
           fi
           /opt/godot/godot --version
 
+      - name: No leftover merge-conflict markers
+        # An unresolved conflict committed straight into the tree parses as a
+        # "VCS conflict marker" error and costs a whole CI cycle to find.
+        run: |
+          if grep -rIln -E '^(<<<<<<< |>>>>>>> |=======$)' \
+               --exclude-dir=.git --exclude-dir=.godot . ; then
+            echo "::error::merge-conflict markers committed to the tree"
+            exit 1
+          fi
+          echo "clean"
+
       - name: Android preset sanity
         run: |
           set -uo pipefail
