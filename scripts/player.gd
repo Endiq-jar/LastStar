@@ -171,7 +171,10 @@ func _build_contact_shadow() -> void:
 	_contact_shadow = MeshInstance3D.new()
 	_contact_shadow.name = "ContactShadow"
 	_contact_shadow.mesh = quad
-	_contact_shadow.rotation_degrees = Vector3(-90, 0, 0)
+	# NO rotation. PlaneMesh in Godot 4 lies in the XZ plane facing +Y already, so
+	# the -90 degrees about X that "seems obviously right" for a ground decal stands
+	# it bolt upright - edge-on to the camera, a one-pixel line, invisible. That is
+	# why the blob never appeared in a single frame after I added it.
 	_contact_shadow.position.y = 0.045
 	# Alpha blend, NOT multiply.
 	#
