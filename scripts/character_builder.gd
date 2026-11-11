@@ -153,20 +153,25 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	_outlined(head, skull, skin, Vector3.ZERO, 0.006)
 
 	# Anime eyes: two glowing planes with a dark outline plane behind.
+	#
+	# They sit well forward of the skull surface on purpose. The head is a 0.155
+	# sphere carrying an inverted-hull outline 0.006 thick, so the silhouette shell
+	# reaches z = -0.149 at the eye line - and these quads were at -0.145, i.e.
+	# *inside* it. The first face that rendered correctly was a completely blank
+	# skin oval: the eyes had been there the whole time, behind the outline hull.
 	for side in [-1.0, 1.0]:
 		var dark := QuadMesh.new()
-		dark.size = Vector2(0.086, 0.072)
-		var dm := _glow(Color(0.10, 0.09, 0.14), 0.0)
-		var d := _add(head, dark, dm, Vector3(0.058 * side, 0.005, -0.145))
-		d.rotation_degrees = Vector3(0, 0, 0)
+		dark.size = Vector2(0.090, 0.076)
+		var dm := _glow(Color(0.09, 0.07, 0.11), 0.0)
+		_add(head, dark, dm, Vector3(0.058 * side, 0.005, -0.156))
 
 		var iris := QuadMesh.new()
-		iris.size = Vector2(0.062, 0.058)
-		var i := _add(head, iris, eye, Vector3(0.058 * side, 0.004, -0.151))
+		iris.size = Vector2(0.066, 0.060)
+		_add(head, iris, eye, Vector3(0.058 * side, 0.004, -0.160))
 
 		var shine := QuadMesh.new()
-		shine.size = Vector2(0.016, 0.016)
-		_add(head, shine, _glow(Color(1, 1, 1), 1.2), Vector3(0.066 * side, 0.018, -0.155))
+		shine.size = Vector2(0.018, 0.018)
+		_add(head, shine, _glow(Color(1, 1, 1), 1.2), Vector3(0.066 * side, 0.019, -0.164))
 
 	# Hair: cap + bangs + side locks + long back.
 	var cap := SphereMesh.new()
