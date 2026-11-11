@@ -26,13 +26,13 @@ const CAM_DISTANCE := 5.0
 ## Chest height on a 1.8 m character. The frame is centred here, which leaves the
 ## full body in view above the HUD band at the bottom of the screen.
 const CAM_HEIGHT := 1.45
-## The camera aims slightly ABOVE the pivot. The spring arm places the camera
+## The camera aims ABOVE the pivot. The spring arm places the camera
 ## behind and above the pivot and the camera keeps the arm's orientation, so the
 ## frame is centred on wherever the arm points, not on the pivot. Tilting the
 ## camera up by this much pulls the character up from the bottom of the frame into
 ## the middle without moving the camera at all. The HUD's action bar occupies the
 ## bottom quarter of the screen, so a character centred on the pivot sits behind it.
-const CAM_AIM_LIFT := 0.30
+const CAM_AIM_LIFT := 1.05
 const CAM_SHOULDER := 0.45
 const MOUSE_SENS := 0.0026
 const STICK_SENS := 2.4
