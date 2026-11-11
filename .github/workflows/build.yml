@@ -149,6 +149,12 @@ jobs:
           timeout -k 10 240 /opt/godot/godot --headless --path . \
             res://tests/compile_check.tscn > /tmp/compile.log 2>&1 || true
           grep -E "^COMPILE_" /tmp/compile.log | tail -40 || true
+          # Surface the per-file verdict as annotations. Step logs live on blob
+          # storage and are not always fetchable, which left "it compiled" as an
+          # unverifiable claim - the shader count is the evidence.
+          echo "::notice title=compile::$(grep -c '^COMPILE_SHADER:' /tmp/compile.log) shaders compiled, $(grep -c '^COMPILE_TRY:' /tmp/compile.log) files checked"
+          grep -E "^COMPILE_SHADER:" /tmp/compile.log | head -12 \
+            | while IFS= read -r line; do echo "::notice title=shader::$line"; done
           # Shader compile failures do not stop the run either - Godot logs an
           # error and falls back to a default white material, which reads as an
           # art bug rather than a build failure. They are errors here.
