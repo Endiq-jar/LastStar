@@ -417,10 +417,17 @@ jobs:
           cp "$HOME/debug.jks" "$HOME/debug.keystore"
 
           # Assert the fingerprint so a rotated key fails loudly here rather than
-          # silently on a player's phone.
-          FP=$(keytool -list -v -keystore "$HOME/debug.keystore" -storepass android \
-                 -alias androiddebugkey | grep -m1 "SHA-256:" || true)
-          echo "::notice::Debug signing key $FP"
+          # silently on a player's phone. -storetype JKS is required: after the
+          # conversion above the file is a JKS, and keytool will otherwise guess.
+          FP=$(keytool -list -v -storetype JKS -keystore "$HOME/debug.keystore" \
+                 -storepass android -alias androiddebugkey | grep -m1 "SHA256:" || true)
+          echo "::notice::Debug signing key ${FP:-UNKNOWN}"
+          EXPECTED="1BE9CE30E62F7D024F9A100E98021556706AED47CDF331A461DF2A38768AB216"
+          GOT=$(echo "$FP" | tr -d ' ' | sed 's/.*SHA256://')
+          if [ -n "$GOT" ] && [ "$GOT" != "$EXPECTED" ]; then
+            echo "::error title=Signing key rotated::APK would not install over an existing copy. Expected $EXPECTED, got $GOT"
+            exit 1
+          fi
 
           mkdir -p "$HOME/.config/godot"
           SETTINGS="$HOME/.config/godot/editor_settings-4.3.tres"
