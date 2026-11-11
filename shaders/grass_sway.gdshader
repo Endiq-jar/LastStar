@@ -176,11 +176,24 @@ void fragment() {
 	// which is most of what makes wind-blown grass look alive. Small, because
 	// it stacks over every blade in the field.
 	BACKLIGHT = grass_tip.rgb * 0.14;
-	// Keep the shadow-facing side from going black. A plain multiple of base is
-	// useless here - base is around 0.15, so 0.02 of it is three thousandths of a
-	// stop on an 8-bit buffer. A small fixed term along with the colour keeps the
-	// field's darkest tufts above the terrain's shadow floor, so the meadow and
-	// the ground it stands on share one value range instead of splitting into a
-	// bright lawn floating over a black void.
-	EMISSION = base * 0.10 + vec3(0.014, 0.020, 0.012);
+	// Shadow fill, matched to the terrain.
+	//
+	// This was `base * 0.10 + 0.014` - a tenth of the albedo - while the terrain
+	// shader's own fill is around twice the albedo. The two surfaces were
+	// therefore lit on scales roughly twenty times apart, and that mismatch, not
+	// the terrain, is what the render probe has been reporting as
+	// "shadowed ground is reading as a hole" at a lit/dark ratio of 7.8x against
+	// its 1.8-3.0 target.
+	//
+	// The mistake in the original reasoning is visible in the old comment: it
+	// worried that a proportional term would be too small because "base is around
+	// 0.15, so 0.02 of it is three thousandths of a stop". That is true of
+	// 1.0/255 steps in the dark, but the fill is not competing with 8-bit
+	// quantisation - it is competing with the terrain next to it, which is being
+	// lifted by ~2x. A tenth of the albedo cannot meet a 2x lift from below.
+	//
+	// Matching the terrain's scale lets a blade and the ground under it land in
+	// one value range, which is what stops the meadow reading as a bright lawn
+	// floating over a void.
+	EMISSION = base * 1.95 + vec3(0.013, 0.019, 0.012);
 }

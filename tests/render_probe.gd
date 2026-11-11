@@ -376,8 +376,10 @@ func _run() -> void:
 		if float(ground["ratio"]) >= 4.0:
 			note = " (shadowed ground is reading as a hole)"
 		_log("INFO" if note == "" else "WARN",
-			"ground contrast lit=%.3f dark=%.3f ratio=%.1fx%s" % [
-				ground["lit"], ground["dark"], ground["ratio"], note])
+			"ground contrast lit=%.3f@(%s) dark=%.3f@(%s) ratio=%.1fx%s" % [
+				ground["lit"], ground["lit_at"],
+				ground["dark"], ground["dark_at"],
+				ground["ratio"], note])
 	else:
 		_log("INFO", "ground contrast: not measurable in this frame")
 	_check_blob(img, "gameplay")
@@ -1026,6 +1028,10 @@ func _measure_ground_ratio(img: Image) -> Dictionary:
 	var step := maxi(1, int(w / 220.0))
 	var lit := -1.0
 	var dark := 2.0
+	var lit_x := -1
+	var lit_y := -1
+	var dark_x := -1
+	var dark_y := -1
 	var count := 0
 	# Skip the HUD bands at the very top and bottom of the frame.
 	for y in range(int(h * 0.28), int(h * 0.82), step):
@@ -1042,12 +1048,33 @@ func _measure_ground_ratio(img: Image) -> Dictionary:
 			if c.g <= c.r + 0.04 or c.g <= c.b + 0.04:
 				continue
 			var l := c.get_luminance()
-			lit = maxf(lit, l)
-			dark = minf(dark, l)
+			if l > lit:
+				lit = l
+				lit_x = x
+				lit_y = y
+			if l < dark:
+				dark = l
+				dark_x = x
+				dark_y = y
 			count += 1
 	if count < 32 or dark <= 0.001 or lit <= 0.0:
-		return {"ratio": 0.0, "lit": lit, "dark": dark}
-	return {"ratio": lit / dark, "lit": lit, "dark": dark}
+		return {"ratio": 0.0, "lit": lit, "dark": dark,
+			"lit_at": "-", "dark_at": "-"}
+	# Report WHERE the darkest and brightest samples were.
+	#
+	# Without this the ratio is uninterpretable, and it was misread once exactly
+	# that way: the darkest "ground" pixels turned out to be at y=226-351, up in
+	# the tree line, and belonged to grass blades rather than terrain. Chasing the
+	# terrain shader for several rounds changed the terrain fill and moved this
+	# number by nothing at all, because the terrain was never what was dark.
+	return {
+		"ratio": lit / dark,
+		"lit": lit,
+		"dark": dark,
+		"lit_at": "%d,%d" % [lit_x, lit_y],
+		"dark_at": "%d,%d" % [dark_x, dark_y],
+	}
+
 
 
 func _finish(fails: int) -> void:
