@@ -33,7 +33,7 @@ uniform float water_level : hint_range(-20.0, 40.0) = 1.0;
 uniform float wet_band : hint_range(0.5, 24.0) = 5.0;
 uniform float band_softness : hint_range(0.0, 0.3) = 0.055;
 // Distance (metres) over which albedo starts to mute toward atmospheric haze.
-uniform float haze_begin : hint_range(0.0, 600.0) = 170.0;
+uniform float haze_begin : hint_range(0.0, 600.0) = 120.0;
 uniform float haze_end : hint_range(0.0, 900.0) = 700.0;
 
 varying vec3 v_world;
@@ -130,7 +130,7 @@ void fragment() {
 	// not a noise texture.
 	float snow = smoothstep(snow_height - 14.0, snow_height + 20.0, h);
 	snow *= 1.0 - smoothstep(0.42, 0.62, slope);
-	col = mix(col, vec3(0.615, 0.645, 0.715), snow * 0.82);
+	col = mix(col, vec3(0.615, 0.645, 0.715), snow * 0.74);
 
 	// Wet band near the shore: darker + glossier.
 	float wet = 1.0 - smoothstep(water_level, water_level + wet_band, h);
@@ -172,6 +172,19 @@ void fragment() {
 	col = max(col, vec3(0.055, 0.070, 0.050) * (0.6 + patch * 0.8));
 
 	ALBEDO = col;
+	// A flat painted-ambient lift.
+	//
+	// Only the terrain sits in shadow: the grass is drawn with shadows_disabled,
+	// so the meadow stayed bright while the slope underneath it went to a near
+	// black-green under the ridge's cast shadow. The result was a field hovering
+	// over a void, and a foreground three stops darker than the sunlit hills
+	// behind it - which is the opposite of how an anime background is painted,
+	// where shadow is a colour change and almost never a value collapse.
+	//
+	// This is emission rather than more ambient light on purpose: raising the
+	// environment's ambient also greys out the character's blacks, and the whole
+	// point of the repaint was to keep them black.
+	EMISSION = col * 0.13;
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);
