@@ -424,10 +424,16 @@ func _run() -> void:
 		# camera so the existing portrait.queue_free() takes it with it - freeing a
 		# node and then touching its handle is what crashed this probe before.
 		var portrait_key := DirectionalLight3D.new()
-		portrait_key.light_color = Color(1.0, 0.96, 0.90)
-		portrait_key.light_energy = 1.15
+		# Deliberately weak and off-axis. At 1.15 pointing straight down the lens it
+		# lit her like a flashgun: black cloth went pale pink, and the key also
+		# spilled onto the river valley behind her, lifting the whole frame into
+		# something that looked nothing like the game. A 30-degree key off the
+		# shoulder at 0.55 fills her face without flat-lighting her and without
+		# visibly touching the ground.
+		portrait_key.light_color = Color(1.0, 0.95, 0.88)
+		portrait_key.light_energy = 0.55
 		portrait_key.shadow_enabled = false
-		portrait_key.rotation_degrees = Vector3(-24.0, 0.0, 0.0)
+		portrait_key.rotation_degrees = Vector3(-32.0, 34.0, 0.0)
 		portrait.add_child(portrait_key)
 
 		# Report where her body actually lands on screen, in pixels. The close-up
