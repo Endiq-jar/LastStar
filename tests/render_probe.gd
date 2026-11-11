@@ -293,8 +293,23 @@ func _run() -> void:
 		if py < -5.0:
 			_log("FAIL", "player is below the world (y=%.1f) - terrain collision or spawn is broken" % py)
 		else:
-			_log("INFO", "player standing at y=%.1f (on_floor=%s)" % [
-				py, str(pl is CharacterBody3D and (pl as CharacterBody3D).is_on_floor())])
+			# Report the GAP between her soles and the rendered ground, in metres.
+			#
+			# "She looks like she is floating" has been reported on the device four
+			# times and every previous attempt to fix it changed something plausible
+			# without ever measuring it. The number that matters is the distance
+			# from the bottom of her boots to the surface under them, so print it
+			# rather than describing it.
+			var gnode := pl.get_parent()
+			var gap_text := "unknown"
+			if gnode != null:
+				var terr := gnode.get_node_or_null("Terrain")
+				if terr != null and terr.has_method("surface_height_at"):
+					var feet: float = py + 0.05
+					var ground: float = terr.surface_height_at(pl.global_position.x, pl.global_position.z)
+					gap_text = "%.3f m (feet y=%.2f, ground y=%.2f)" % [feet - ground, feet, ground]
+			_log("INFO", "player standing at y=%.1f (on_floor=%s), sole-to-ground gap %s" % [
+				py, str(pl is CharacterBody3D and (pl as CharacterBody3D).is_on_floor()), gap_text])
 
 	var wenv := world.get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if wenv == null or wenv.environment == null:
