@@ -256,7 +256,12 @@ void fragment() {
 	// band and the paint detail disappears. 1.05 puts the shadow at roughly
 	// rgb(70,110,66): clearly shadowed, clearly green, and still carrying the
 	// patches and grain. The value was picked by rendering both.
-	EMISSION = col * 1.05 + vec3(0.010);
+	// Measured between the two extremes rather than modelled: k=2.35 printed the
+	// shadow at green 156 (a mint wash with no detail left), k=1.05 at 60 (back
+	// to a dark shelf). The tonemap's toe is steep through this range, so the
+	// target of ~100 green sits nearer the middle than a linear read would
+	// suggest. k=1.75 renders it there and keeps the paint.
+	EMISSION = col * 1.75 + vec3(0.010);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);
