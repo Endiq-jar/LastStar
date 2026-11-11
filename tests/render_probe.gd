@@ -414,6 +414,21 @@ func _run() -> void:
 		portrait.global_position = focus + facing * 4.6 + Vector3(0.0, 0.45, 0.0)
 		portrait.look_at(focus, Vector3.UP)
 		portrait.current = true
+		# Portrait key light.
+		#
+		# The sun sits behind her right shoulder in the world, which is what makes
+		# the third-person view read - but it means a camera placed in front of her
+		# is looking at the shadow side, and the character reference frame came out
+		# so dark the face was barely legible. This is a review frame, not gameplay,
+		# so it gets its own key hung just off the lens. Parented to the portrait
+		# camera so the existing portrait.queue_free() takes it with it - freeing a
+		# node and then touching its handle is what crashed this probe before.
+		var portrait_key := DirectionalLight3D.new()
+		portrait_key.light_color = Color(1.0, 0.96, 0.90)
+		portrait_key.light_energy = 1.15
+		portrait_key.shadow_enabled = false
+		portrait_key.rotation_degrees = Vector3(-24.0, 0.0, 0.0)
+		portrait.add_child(portrait_key)
 
 		# Report where her body actually lands on screen, in pixels. The close-up
 		# has twice shown a figure far smaller than 1.95 m at 4.6 m would be, so

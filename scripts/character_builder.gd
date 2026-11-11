@@ -166,7 +166,9 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	# with the right material.
 	for side in [-1.0, 1.0]:
 		var dark := QuadMesh.new()
-		dark.size = Vector2(0.092, 0.078)
+		# Narrower than it was: at 0.092 the two backing quads nearly met over the
+		# bridge of her nose and read as a pair of spectacles.
+		dark.size = Vector2(0.078, 0.072)
 		var dm := _glow(Color(0.09, 0.07, 0.11), 0.0)
 		var d := _add(head, dark, dm, Vector3(0.058 * side, 0.005, -0.157))
 		d.rotation_degrees = Vector3(0.0, 180.0, 0.0)
@@ -180,6 +182,13 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		shine.size = Vector2(0.020, 0.020)
 		var sh := _add(head, shine, _glow(Color(1, 1, 1), 1.2), Vector3(0.066 * side, 0.020, -0.165))
 		sh.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+
+	# A small mouth. Without one the face is an eye mask on a blank oval, which is
+	# the difference between "anime girl" and "mannequin".
+	var mouth := QuadMesh.new()
+	mouth.size = Vector2(0.030, 0.012)
+	var m := _add(head, mouth, _glow(Color(0.55, 0.26, 0.30), 0.0), Vector3(0.0, -0.079, -0.158))
+	m.rotation_degrees = Vector3(0.0, 180.0, 0.0)
 
 	# Hair: cap + bangs + side locks + long back.
 	var cap := SphereMesh.new()
