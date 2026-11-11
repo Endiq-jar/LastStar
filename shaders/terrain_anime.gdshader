@@ -158,6 +158,11 @@ void fragment() {
 	vec3 hazed = mix(vec3(luma), col, 0.58) * vec3(0.86, 0.92, 1.10);
 	col = mix(col, hazed, haze * 0.95);
 
+	// Lift the darkest end. Whatever the light does, no terrain albedo in a
+	// stylised open world should be below about 0.06 or the ground turns into a
+	// black hole under the camera while the same grass two metres away is bright.
+	col = max(col, vec3(0.055, 0.070, 0.050) * (0.6 + patch * 0.8));
+
 	ALBEDO = col;
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;

@@ -86,11 +86,22 @@ void vertex() {
 	float cam_dist = length(origin - cam_origin);
 	// Also collapse blades standing on top of the character.
 	float player_dist = length(origin - player_origin);
+
+	// ...and blades standing BETWEEN the camera and the character. A radius around
+	// the player alone is not enough: the camera is 3.9 m back, so a tuft at, say,
+	// 2 m from her is nowhere near the clearing sphere and still sits directly in
+	// the sightline, covering her torso. Distance to the camera-to-player segment
+	// removes exactly the grass that would occlude her, in one smoothstep, and
+	// nothing else.
+	vec3 to_player = player_origin - cam_origin;
+	float seg_t = clamp(dot(origin - cam_origin, to_player) / max(dot(to_player, to_player), 0.0001), 0.0, 1.0);
+	float sightline_dist = length(origin - (cam_origin + to_player * seg_t));
 	// 0 right at the lens, 1 beyond near_clear. Collapsing the quad (rather than
 	// discarding) keeps the vertex count identical, so there is no branch
 	// divergence and no popping in the instance buffer.
 	v_cull = smoothstep(near_clear * 0.45, near_clear, cam_dist);
 	v_cull *= smoothstep(player_clear * 0.6, player_clear, player_dist);
+	v_cull *= smoothstep(0.30, 0.85, sightline_dist);
 	VERTEX *= v_cull;
 }
 
