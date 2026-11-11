@@ -603,6 +603,7 @@ func _run() -> void:
 		# blown to near-white. Flag it.
 		if s3["luma"] > 0.72:
 			_log("WARN", "wide view is overexposed (mean luma %.2f)" % s3["luma"])
+		_report_frame_cost(world)
 
 	_finish(_fail)
 
@@ -642,6 +643,38 @@ func _clear_frame(world: Node) -> void:
 				removed += 1
 	if removed > 0:
 		_log("INFO", "cleared %d transient/enemy nodes from the camera frame" % removed)
+
+
+## Report real rendering and scene cost for the wide frame.
+##
+## These come straight from the engine's own monitors, so they are measured
+## rather than estimated. The numbers to watch:
+##
+##   draw_calls  - total submitted draws. Vegetation batching took this from
+##                 roughly 1,600 for the scatter alone to about 15.
+##   objects     - drawable objects submitted.
+##   primitives  - triangles issued. Batched MultiMesh draws are much larger
+##                 single draws, so this should hold roughly steady while
+##                 draw_calls collapses; a big drop here means geometry was
+##                 actually removed, which is the thing we are NOT doing.
+##   nodes       - live scene-tree nodes. The old scatter alone was ~4,800
+##                 nodes (1,600 meshes plus their parents).
+##   video_mem   - texture and vertex buffer residency in MB.
+func _report_frame_cost(world: Node) -> void:
+	var dc := int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+	var objs := int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))
+	var prims := int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+	var nodes := int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
+	var vmem := Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0
+	var fps := Performance.get_monitor(Performance.TIME_FPS)
+	var proc := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+	var phys := Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+	_log("INFO", "PERF draw_calls=%d objects=%d primitives=%d nodes=%d video_mem=%.1fMB fps=%.0f process=%.2fms physics=%.2fms" % [
+		dc, objs, prims, nodes, vmem, fps, proc, phys])
+	if world != null and world.has_method("perf_census"):
+		var census: String = world.call("perf_census")
+		if census != "":
+			_log("INFO", "PERF %s" % census)
 
 
 func _report_palette(img: Image, label: String) -> void:

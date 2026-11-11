@@ -771,6 +771,39 @@ func _scatter_landmarks() -> void:
 		t.tween_property(fm, "emission_energy_multiplier", 3.4, 0.7)
 
 
+## Count what the world is actually asking the renderer to draw.
+##
+## Walks the live tree once (probe only, never per frame) and tallies drawable
+## nodes, how many of them are batched MultiMeshes and how many instances those
+## batches carry. This is the number that says whether vegetation batching
+## worked: the scatter used to be one node per prop, so `meshes` was ~1,600 and
+## `multimesh_instances` was 0.
+func perf_census() -> String:
+	var meshes := 0
+	var multimeshes := 0
+	var instances := 0
+	var lights := 0
+	var bodies := 0
+	var stack: Array[Node] = [self]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MultiMeshInstance3D:
+			multimeshes += 1
+			var mm := (n as MultiMeshInstance3D).multimesh
+			if mm != null:
+				instances += mm.instance_count
+		elif n is MeshInstance3D:
+			meshes += 1
+		if n is Light3D:
+			lights += 1
+		if n is StaticBody3D or n is CharacterBody3D or n is Area3D:
+			bodies += 1
+		for c in n.get_children():
+			stack.append(c)
+	return "census meshes=%d multimeshes=%d multimesh_instances=%d lights=%d bodies=%d" % [
+		meshes, multimeshes, instances, lights, bodies]
+
+
 func _spawn_waypoints() -> void:
 	var spots := [
 		{"name": "Starlit Shore", "pos": Vector3(0.0, 0.0, 0.0)},
