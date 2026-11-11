@@ -218,7 +218,12 @@ void fragment() {
 	// Lift the darkest end. Whatever the light does, no terrain albedo in a
 	// stylised open world should be below about 0.06 or the ground turns into a
 	// black hole under the camera while the same grass two metres away is bright.
-	col = max(col, vec3(0.055, 0.070, 0.050) * (0.6 + patch * 0.8));
+	// The albedo floor also has to clear the tonemap's toe. It was 0.055/0.07/0.05,
+	// which after the filmic curve is barely off black - and because the shadow
+	// fill is now proportional to this value, a near-zero albedo gives a near-zero
+	// fill. Raising it here is what gives the proportional fill something to
+	// multiply, so the darkest ground keeps its texture instead of flattening.
+	col = max(col, vec3(0.105, 0.130, 0.108) * (0.62 + patch * 0.78));
 
 	ALBEDO = col;
 	// A flat painted-ambient lift.
@@ -251,11 +256,20 @@ void fragment() {
 	// shadowed ground was arriving at 0.17 - a 4.7x ratio, which is what reads as
 	// a black hole. Painted shadow sits around a third of the lit value, so the
 	// floor has to be roughly twice what it was.
-	// Sized from the measurement, twice. At 0.105/0.140/0.125 the shadowed ground
-	// came back at rgb(31,59,44) against sunlit grass at rgb(198,198,128)... a 4x
-	// luminance ratio, still a hole. Painted shadow needs to land around 40% of
-	// the lit value, not 25%, so the floor roughly doubles again.
-	EMISSION = col * 0.20 + vec3(0.200, 0.245, 0.225);
+	// A fill proportional to the surface's own colour, plus a small constant.
+	//
+	// Two earlier versions of this were wrong in opposite directions. A constant
+	// floor alone lifted the shadow out of black but made it perfectly FLAT:
+	// measured rgb(62,90,73) across the entire lower third of the frame, every
+	// pixel identical, because a constant is by definition constant. Scaling by
+	// col alone is invisible where it matters, because on a slope facing away
+	// from the key the light term is already near zero.
+	//
+	// Proportional fill keeps the paint: shadow now carries the same patches,
+	// grain and fold darkening as the lit ground, just darker and cooler, which is
+	// exactly what painted shadow looks like. The small constant only stops the
+	// very darkest creases from going to pure black.
+	EMISSION = col * 0.42 + vec3(0.030, 0.038, 0.034);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);
