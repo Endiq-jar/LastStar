@@ -51,7 +51,7 @@ uniform vec3 cam_origin = vec3(0.0);
 // front of the lens covers the character entirely, and no amount of colour or
 // density tuning fixes that - only not drawing it there does.
 uniform vec3 player_origin = vec3(0.0);
-uniform float player_clear : hint_range(0.0, 3.0) = 1.50;
+uniform float player_clear : hint_range(0.0, 3.0) = 0.95;
 uniform sampler2D blade_tex : source_color, filter_linear_mipmap, repeat_disable;
 uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
 

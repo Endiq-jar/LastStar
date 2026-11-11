@@ -341,6 +341,16 @@ func _run() -> void:
 		return
 	img.save_png(out_dir.path_join("world.png"))
 	var stats := _analyse(img)
+	var ground := _measure_ground_ratio(img)
+	if float(ground["ratio"]) > 0.0:
+		var note := ""
+		if float(ground["ratio"]) >= 4.0:
+			note = " (shadowed ground is reading as a hole)"
+		_log("INFO" if note == "" else "WARN",
+			"ground contrast lit=%.3f dark=%.3f ratio=%.1fx%s" % [
+				ground["lit"], ground["dark"], ground["ratio"], note])
+	else:
+		_log("INFO", "ground contrast: not measurable in this frame")
 	_check_blob(img, "gameplay")
 	_log("INFO", "size=%dx%d mean_luma=%.3f nonblack=%.1f%% distinct_colours=%d sky_blue=%.1f%%" % [
 		img.get_width(), img.get_height(), stats["luma"],
@@ -936,6 +946,39 @@ func _analyse(img: Image) -> Dictionary:
 		"sky": float(sky) / float(maxi(total, 1)),
 		"colours": seen.size(),
 	}
+
+
+## Ground-vs-grass value ratio in the gameplay frame.
+##
+## This is the number that decides whether the world reads as a painted
+## landscape or as a bright lawn floating on a black shelf, and it has been the
+## recurring complaint about the render. Eyeballing it across four rounds of
+## screenshots produced four different wrong diagnoses, so measure it: the
+## brightest green patch of lit meadow against the darkest green patch that is
+## still large and flat (the shadowed ground).
+##
+## A ratio near 1.8-3.0 reads as soft shadow. Above ~4.0 the ground is a hole.
+func _measure_ground_ratio(img: Image) -> Dictionary:
+	var w := img.get_width()
+	var h := img.get_height()
+	var step := maxi(1, int(w / 220.0))
+	var lit := -1.0
+	var dark := 2.0
+	var count := 0
+	# Skip the HUD bands at the very top and bottom.
+	for y in range(int(h * 0.28), int(h * 0.82), step):
+		for x in range(0, w, step):
+			var c := img.get_pixel(x, y)
+			# Green-dominant ground only; this ignores sky, HUD and the character.
+			if c.g <= c.r + 0.04 or c.g <= c.b + 0.04:
+				continue
+			var l := c.get_luminance()
+			lit = maxf(lit, l)
+			dark = minf(dark, l)
+			count += 1
+	if count < 32 or dark <= 0.001 or lit <= 0.0:
+		return {"ratio": 0.0, "lit": lit, "dark": dark}
+	return {"ratio": lit / dark, "lit": lit, "dark": dark}
 
 
 func _finish(fails: int) -> void:

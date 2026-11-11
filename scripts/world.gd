@@ -378,12 +378,20 @@ func _setup_environment() -> void:
 	sun.light_color = Color(1.0, 0.95, 0.86)
 	# Matches the daytime value the day/night pass computes.
 	sun.light_energy = 1.35
-	sun.light_angular_distance = 0.4
+	# A wider angular diameter is the only thing that actually softens a
+	# directional shadow: shadow_blur only feathers the edge of a hard silhouette,
+	# and at 0.4 degrees the sun was effectively a point source, so the character
+	# cast a crisp black cut-out with razor edges. That is what made her look
+	# superimposed on the ground rather than standing on it. The real sun is about
+	# 0.53 degrees, but stylised open worlds exaggerate it considerably to get a
+	# soft contact shadow - 1.6 keeps the terminator readable and gives a shadow
+	# that fades out rather than ending.
+	sun.light_angular_distance = 1.6
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	sun.directional_shadow_max_distance = 220.0
 	sun.directional_shadow_split_1 = 0.13
-	sun.shadow_blur = 1.4
+	sun.shadow_blur = 2.2
 	sun.light_specular = 0.8
 	sun.rotation_degrees = Vector3(-34, -52, 0)
 

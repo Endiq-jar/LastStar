@@ -271,7 +271,11 @@ func _push_view_params() -> void:
 		# The player node's origin is at her feet; lift the clearing centre to her
 		# waist so the smoothstep removes grass around her body, not below it.
 		_material.set_shader_parameter("player_origin", _player.global_position + Vector3(0, 0.9, 0))
-		_material.set_shader_parameter("player_clear", 1.6)
+		# 1.6 m carved a 3.2 m circle of bare ground around her feet, which is the
+		# naked ring the character appears to be standing in the middle of. Only
+		# the character of the clearing is needed - enough that blades do not grow
+		# through her - and 0.95 m still leaves her boots and shins clear.
+		_material.set_shader_parameter("player_clear", 0.95)
 
 
 ## Total live blades, for the performance tuner and the probe.

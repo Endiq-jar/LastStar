@@ -227,7 +227,12 @@ void fragment() {
 	// floor of 0.03/0.04/0.06 still left the shadowed valley reading as a hole -
 	// rgb(3,30,20) in the wide frame, near-black and 0.90 saturated. Painted
 	// background shadow is a cool mid green, not an absence of light.
-	EMISSION = col * 0.14 + vec3(0.062, 0.082, 0.098);
+	// The constant is sized against the measured frame, not by eye: the sunlit
+	// meadow lands near 0.62 in the green channel after tonemapping and the
+	// shadowed ground was arriving at 0.17 - a 4.7x ratio, which is what reads as
+	// a black hole. Painted shadow sits around a third of the lit value, so the
+	// floor has to be roughly twice what it was.
+	EMISSION = col * 0.16 + vec3(0.105, 0.140, 0.125);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);

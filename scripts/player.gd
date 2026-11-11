@@ -71,6 +71,11 @@ var wander: Wander
 ## body that begins a frame intersecting geometry as "already handled" and can
 ## slide it straight through the mesh.
 const SPAWN_CLEARANCE := 1.6
+## Height of the character's soles in her own local space. Derived from
+## CharacterBuilder: leg origin 0.80, boot centre -0.55 from that, boot 0.40 tall,
+## so the sole is 0.80 - 0.55 - 0.20 = 0.05. The collision capsule's bottom is
+## pinned to this value so she stands ON the ground rather than 3 cm above it.
+const CHARACTER_SOLE_Y := 0.05
 
 var _attack_cd := 0.0
 var _skill_cd := 0.0
@@ -121,12 +126,25 @@ func _build_rig() -> void:
 	rig = CharacterBuilder.build(self, data)
 	element_id = int(data["element_id"])
 
+	# The capsule is the body's floor, and it has to be the SAME floor as her soles.
+	#
+	# A CapsuleShape3D's `height` is its total height including both caps, so a
+	# 1.72 capsule centred at y=0.88 puts its bottom at 0.88 - 0.86 = 0.02. Her
+	# soles are at 0.05 (leg at 0.80, boot at -0.55, boot 0.40 tall). The two never
+	# agreed, and rather than subtract 3 cm the number was eyeballed - the
+	# character has been resting on her ankles ever since, which is the floating
+	# step visible in every gameplay frame.
+	#
+	# Solved instead of guessed: the capsule is placed so its lowest point is
+	# exactly CHARACTER_SOLE_Y.
+	const CAPSULE_RADIUS := 0.32
+	const CAPSULE_HEIGHT := 1.72
 	var col := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
-	shape.radius = 0.32
-	shape.height = 1.72
+	shape.radius = CAPSULE_RADIUS
+	shape.height = CAPSULE_HEIGHT
 	col.shape = shape
-	col.position.y = 0.88
+	col.position.y = CHARACTER_SOLE_Y + CAPSULE_HEIGHT * 0.5
 	add_child(col)
 
 
