@@ -99,13 +99,7 @@ func _process(_delta: float) -> void:
 	# camera built-in in its vertex stage (those are fragment-only and using one
 	# is a compile error that silently white-materials the whole field), so the
 	# value comes from here.
-	var cam := get_viewport().get_camera_3d()
-	if cam != null and _material != null:
-		_material.set_shader_parameter("cam_origin", cam.global_position)
-		# Keep a small clearance around the character so the meadow never covers
-		# her. The player node's origin is at her feet, so lift the cull centre a
-		# little to sit at her waist.
-		_material.set_shader_parameter("player_origin", _player.global_position + Vector3(0, 0.7, 0))
+	_push_view_params()
 	var center := _chunk_of(_player.global_position)
 	if center != _last_center:
 		_last_center = center
@@ -234,12 +228,32 @@ func _build_chunk(key: Vector2i) -> void:
 	mmi.name = "Grass_%d_%d" % [key.x, key.y]
 	mmi.multimesh = multimesh
 	if _material != null:
+		_push_view_params()
 		mmi.material_override = _material
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mmi.visibility_range_end = 150.0
 	add_child(mmi)
 	_chunks[key] = mmi
 	chunk_built.emit(made.size())
+
+
+func _push_view_params() -> void:
+	## Hand the camera and character positions to the grass shader.
+	##
+	## Called from both _process and _build_chunk: chunks are built in a burst at
+	## startup (fill-the-ring), and those builds happen before the first _process,
+	## so relying on the per-frame push alone left the very first chunks drawing
+	## with the default uniforms - grass growing through the character.
+	if _material == null:
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam != null:
+		_material.set_shader_parameter("cam_origin", cam.global_position)
+	if _player != null:
+		# The player node's origin is at her feet; lift the clearing centre to her
+		# waist so the smoothstep removes grass around her body, not below it.
+		_material.set_shader_parameter("player_origin", _player.global_position + Vector3(0, 0.9, 0))
+		_material.set_shader_parameter("player_clear", 1.6)
 
 
 ## Total live blades, for the performance tuner and the probe.

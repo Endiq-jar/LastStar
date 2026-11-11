@@ -22,7 +22,7 @@ const TURN_SPEED := 13.0
 ## her head on screen) but the blades in front of her covered her completely.
 ## Genshin's own camera looks down at roughly 20 degrees from slightly further
 ## back, which clears the grass and shows the ground she is standing on.
-const CAM_DISTANCE := 5.0
+const CAM_DISTANCE := 3.9
 ## Chest height on a 1.8 m character. The frame is centred here, which leaves the
 ## full body in view above the HUD band at the bottom of the screen.
 const CAM_HEIGHT := 1.45
@@ -156,7 +156,11 @@ func _build_camera() -> void:
 
 	_camera = Camera3D.new()
 	_camera.rotation_degrees = Vector3(rad_to_deg(CAM_AIM_DROP), 0.0, 0.0)
-	_camera.fov = 62.0
+	# 54 degrees. At 62 with a 5 m arm the character occupied about 6% of the frame
+	# height and read as a speck on the hillside; a tighter lens at a closer
+	# distance is how third-person games make the character legible without
+	# cropping the landscape.
+	_camera.fov = 54.0
 	_camera.near = 0.05
 	_camera.far = 900.0
 	_camera.current = true
