@@ -69,6 +69,34 @@ def _strip(line):
     return "".join(out)
 
 
+def check_const_dict(path):
+    """A `const` Dictionary/Array in GDScript is immutable at runtime.
+
+    Writing into one is a parse error that only fires when the script loads, so
+    it passes gdparse and every static check and then takes down the whole game
+    on boot. This has already happened twice in this project.
+    """
+    problems = []
+    src = open(path, encoding="utf-8").read().split("\n")
+    consts = {}
+    for i, raw in enumerate(src, start=1):
+        line = _strip(raw)
+        m = re.match(r"\s*const\s+([A-Za-z_]\w*)\s*(?::\s*[\w\[\]]+)?\s*:?=\s*([\{\[])",
+                     line)
+        if m:
+            consts[m.group(1)] = i
+    if not consts:
+        return problems
+    for i, raw in enumerate(src, start=1):
+        line = _strip(raw)
+        for name, decl in consts.items():
+            if re.search(rf"\b{name}\s*\[[^\]]*\]\s*=[^=]", line) or \
+                    re.search(rf"\b{name}\s*\.\s*\w+\s*=[^=]", line):
+                problems.append(
+                    (i, f"const-container:{name}(line {decl})", raw.strip()))
+    return problems
+
+
 def scan(path):
     src = open(path, encoding="utf-8").read()
     raw = src.split("\n")
@@ -176,6 +204,7 @@ def main():
     bad = 0
     for path in sys.argv[1:]:
         probs = scan(path)
+        probs.extend(check_const_dict(path))
         # Collapse duplicates of the same name in the same file.
         seen = set()
         for line_no, name, text in probs:
@@ -183,7 +212,12 @@ def main():
             if key in seen:
                 continue
             seen.add(key)
-            print(f"{path}:{line_no}: '{name}' is used but not declared in scope")
+            if name.startswith("const-container:"):
+                detail = name[len("const-container:"):]
+                print(f"{path}:{line_no}: '{detail}' is a const container and "
+                      f"cannot be assigned into - use `static var`")
+            else:
+                print(f"{path}:{line_no}: '{name}' is used but not declared in scope")
             print(f"    {text}")
             bad += 1
     if bad:

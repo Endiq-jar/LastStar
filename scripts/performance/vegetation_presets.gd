@@ -19,7 +19,8 @@ const TEX_PEBBLES := "res://assets/environment/pebbles/pebbels.png"
 ## One shared material per species. Materials are shared deliberately: a
 ## ShaderMaterial per layer would recompile the shader, which is the stall that
 ## batching was meant to remove in the first place.
-const _materials: Dictionary = {}
+# static var, not const - see the note in vegetation_meshes.gd.
+static var _materials: Dictionary = {}
 
 
 static func material_for(species: String, wind_strength: float, tint: Color) -> ShaderMaterial:

@@ -132,7 +132,7 @@ jobs:
         # instance, once as a `fire_light` that no longer existed. Both cost a
         # full CI cycle to find. This catches the shape statically.
         run: |
-          python3 tools/undeclared.py scripts/*.gd
+          python3 tools/undeclared.py scripts/*.gd scripts/performance/*.gd tests/*.gd
 
       - name: Compile check (every script and shader, autoloads live)
         # Booting the world headlessly only compiles the scripts the world

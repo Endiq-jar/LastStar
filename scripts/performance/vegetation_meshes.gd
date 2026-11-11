@@ -10,7 +10,10 @@ extends RefCounted
 ## resource is shared by every chunk that uses it - which is what lets the
 ## renderer batch them.
 
-const _cache: Dictionary = {}
+# static var, not const: a const Dictionary in GDScript is immutable, and
+# assigning into it is a parse error ("Cannot assign a new value to a constant")
+# that only surfaces at script load.
+static var _cache: Dictionary = {}
 
 
 ## A single unit quad standing upright, centred on its origin.
