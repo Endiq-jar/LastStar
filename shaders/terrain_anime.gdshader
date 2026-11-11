@@ -115,7 +115,7 @@ void fragment() {
 	grass *= mix(1.0, meadow_fl * 1.7, 0.30);
 	// Weighted by distance: the fine grain is only visible up close, and applying
 	// it at range would just be noise under the haze.
-	grass *= mix(1.0, near_l * 1.7, 0.34 * (1.0 - smoothstep(18.0, 70.0, length(VERTEX))));
+	grass *= mix(1.0, near_l * 1.7, 0.52 * (1.0 - smoothstep(18.0, 70.0, length(VERTEX))));
 	// A little golden meadow mixed in, the way open-world grass reads. Kept
 	// low: push this and the hillsides turn acid yellow-green.
 	// The dry blend is nearly as weak as it can be while still breaking up the
@@ -130,6 +130,13 @@ void fragment() {
 	grass = mix(grass, grass * vec3(1.16, 1.09, 0.80), warm_patch * 0.55);
 	float cool_patch = smoothstep(0.62, 0.20, macro);
 	grass = mix(grass, grass * vec3(0.80, 0.94, 1.06), cool_patch * 0.40);
+	// A value break at the grass/patch scale. The near foreground is a single
+	// gentle slope, so the macro term barely varies across it and the ground
+	// reads as one flat wash however much fine grain sits on top. This is the
+	// brushstroke scale - 8 to 30 m - that a background painter uses to keep a
+	// large open area from going dead.
+	float brush = smoothstep(0.40, 0.62, texture(macro_tex, v_world.xz * 0.028).r);
+	grass *= mix(0.88, 1.10, brush);
 
 	// Rock: warm grey, cooler in shadowed bands.
 	vec3 rock_col = rock_tint.rgb * mix(0.66, 1.0, patch);
@@ -243,7 +250,13 @@ void fragment() {
 	// EMISSION is added after tonemapping-independent light accumulation, so a
 	// value of 0.22 here lands near 0.75 linear and prints as roughly half the
 	// sunlit value, which is where painted shadow belongs.
-	EMISSION = col * 2.35 + vec3(0.012);
+	// 2.35 got the foreground out of the hole - rgb(106,156,92) against sunlit
+	// grass - but overshot into a pale mint wash, flatter than the dark version
+	// because at that brightness the tonemap compresses everything into a narrow
+	// band and the paint detail disappears. 1.05 puts the shadow at roughly
+	// rgb(70,110,66): clearly shadowed, clearly green, and still carrying the
+	// patches and grain. The value was picked by rendering both.
+	EMISSION = col * 1.05 + vec3(0.010);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);
