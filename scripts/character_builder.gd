@@ -13,7 +13,7 @@ static func _toon(color: Color, rim: float = 0.35) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = TOON_SHADER
 	m.set_shader_parameter("albedo_color", color)
-	m.set_shader_parameter("shadow_tint", Color(0.62, 0.66, 0.92))
+	m.set_shader_parameter("shadow_tint", Color(0.46, 0.48, 0.70))
 	m.set_shader_parameter("rim_color", Color(1.0, 0.95, 0.84))
 	# Rim and spec used to run at 0.7-0.8 strength with a 0.45 spec energy; on a
 	# build made mostly of spheres every one of them picked up a broad highlight
@@ -126,7 +126,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	belt.top_radius = 0.21
 	belt.bottom_radius = 0.21
 	belt.height = 0.06
-	_add(torso, belt, _toon(Color(0.28, 0.24, 0.30)), Vector3(0, 0.99, 0))
+	_add(torso, belt, _toon(Color(0.09, 0.08, 0.10)), Vector3(0, 0.99, 0))
 	for side in [-1.0, 1.0]:
 		var panel := BoxMesh.new()
 		panel.size = Vector3(0.12, 0.34, 0.03)
@@ -242,7 +242,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 
 		var toe := BoxMesh.new()
 		toe.size = Vector3(0.13, 0.09, 0.24)
-		_add(leg, toe, _toon(Color(0.32, 0.28, 0.36)), Vector3(0, -0.75, -0.04))
+		_add(leg, toe, _toon(Color(0.11, 0.09, 0.12)), Vector3(0, -0.75, -0.04))
 		legs.append(leg)
 
 	# --- cape and glide wings --------------------------------------------
@@ -308,7 +308,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 
 
 static func _build_weapon(anchor: Node3D, kind: String, glow: StandardMaterial3D, accent: ShaderMaterial) -> void:
-	var steel := _toon(Color(0.78, 0.81, 0.88), 0.45)
+	var steel := _toon(Color(0.46, 0.47, 0.54), 0.45)
 	match kind:
 		"sword":
 			var blade := BoxMesh.new()
@@ -323,7 +323,7 @@ static func _build_weapon(anchor: Node3D, kind: String, glow: StandardMaterial3D
 			var grip := CapsuleMesh.new()
 			grip.radius = 0.024
 			grip.height = 0.16
-			_add(anchor, grip, _toon(Color(0.25, 0.22, 0.28)), Vector3(0, -0.14, 0))
+			_add(anchor, grip, _toon(Color(0.10, 0.08, 0.10)), Vector3(0, -0.14, 0))
 		"bow":
 			var frame := TorusMesh.new()
 			frame.inner_radius = 0.20

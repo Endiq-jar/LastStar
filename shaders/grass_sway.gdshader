@@ -25,9 +25,9 @@ render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 // blue was already the weakest channel - so the lit result landed at rgb(82,163,9),
 // a pure hue-92 lime with no blue left in it at all. Keeping blue at roughly half
 // of green survives the warm light and reads as the soft green of lit grass.
-uniform vec4 grass_color : source_color = vec4(0.15, 0.26, 0.14, 1.0);
-uniform vec4 grass_tip : source_color = vec4(0.38, 0.52, 0.26, 1.0);
-uniform vec4 dry_color : source_color = vec4(0.36, 0.38, 0.22, 1.0);
+uniform vec4 grass_color : source_color = vec4(0.115, 0.185, 0.102, 1.0);
+uniform vec4 grass_tip : source_color = vec4(0.30, 0.40, 0.205, 1.0);
+uniform vec4 dry_color : source_color = vec4(0.33, 0.32, 0.185, 1.0);
 uniform float wind_strength : hint_range(0.0, 1.0) = 0.22;
 uniform float wind_speed : hint_range(0.0, 4.0) = 1.4;
 uniform vec2 wind_dir = vec2(0.85, 0.35);
@@ -137,7 +137,7 @@ void fragment() {
 	// Fade to the meadow's own mid tone, not to a dark forest green - the field
 	// has to sit in the hillside, and the hillside is not dark.
 	float far_t = smoothstep(60.0, 140.0, dist);
-	col = mix(col, vec3(0.26, 0.34, 0.20), far_t * 0.45);
+	col = mix(col, vec3(0.205, 0.275, 0.165), far_t * 0.45);
 
 	// Dissolve before the streaming edge. Grass only exists in a 130 m radius
 	// around the player, and the shader was drawing right up to that boundary -

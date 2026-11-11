@@ -15,8 +15,8 @@ uniform sampler2D rock_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D sand_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 
-uniform vec4 meadow_tint : source_color = vec4(0.28, 0.45, 0.20, 1.0);
-uniform vec4 meadow_deep : source_color = vec4(0.13, 0.27, 0.13, 1.0);
+uniform vec4 meadow_tint : source_color = vec4(0.235, 0.335, 0.175, 1.0);
+uniform vec4 meadow_deep : source_color = vec4(0.115, 0.195, 0.115, 1.0);
 // Slightly warm grey. A neutral 0.42 grey under a cool sky turns every cliff the
 // same slate blue and the mountains lose all separation from the sky behind them.
 uniform vec4 rock_tint : source_color = vec4(0.40, 0.38, 0.36, 1.0);
@@ -130,7 +130,7 @@ void fragment() {
 	// not a noise texture.
 	float snow = smoothstep(snow_height - 14.0, snow_height + 20.0, h);
 	snow *= 1.0 - smoothstep(0.42, 0.62, slope);
-	col = mix(col, vec3(0.72, 0.77, 0.87), snow * 0.85);
+	col = mix(col, vec3(0.615, 0.645, 0.715), snow * 0.82);
 
 	// Wet band near the shore: darker + glossier.
 	float wet = 1.0 - smoothstep(water_level, water_level + wet_band, h);

@@ -30,16 +30,19 @@ const PARTY := [
 		"title": "Wandering Gale",
 		"element": "Anemo",
 		"element_id": 0,
-		"color": Color(0.42, 0.92, 0.78),
-		# 0.86 albedo under a 1.6-energy key clipped to a flat white blob with no
-		# shading left in it. Hair needs to be light, not at the top of the range.
-		"hair": Color(0.62, 0.71, 0.82),
-		"hair_tip": Color(0.42, 0.92, 0.78),
-		"outfit": Color(0.74, 0.80, 0.87),
-		"outfit_accent": Color(0.30, 0.72, 0.66),
-		"skin": Color(0.86, 0.72, 0.63),
-		"eye": Color(0.24, 0.78, 0.66),
-		"cape": Color(0.55, 0.95, 0.85),
+		"color": Color(0.92, 0.26, 0.24),
+		# Black and red, per the brief. The previous values (0.62-0.87 near-white
+		# blues) were an over-correction for clipping: I had chased the white-blob
+		# artefact by lifting every albedo toward 1.0, which is exactly backwards.
+		# A character reads as black-and-red because its albedos ARE dark, and the
+		# toon ramp supplies the separation between the lit and shadowed halves.
+		"hair": Color(0.13, 0.12, 0.16),
+		"hair_tip": Color(0.72, 0.15, 0.18),
+		"outfit": Color(0.14, 0.13, 0.17),
+		"outfit_accent": Color(0.66, 0.13, 0.16),
+		"skin": Color(0.88, 0.74, 0.66),
+		"eye": Color(0.95, 0.28, 0.24),
+		"cape": Color(0.52, 0.08, 0.12),
 		"weapon": "sword",
 		"max_hp": 1100.0,
 		"attack": 42.0,
@@ -56,8 +59,8 @@ const PARTY := [
 		"color": Color(1.0, 0.55, 0.32),
 		"hair": Color(0.55, 0.16, 0.12),
 		"hair_tip": Color(1.0, 0.62, 0.24),
-		"outfit": Color(0.80, 0.70, 0.62),
-		"outfit_accent": Color(0.78, 0.24, 0.18),
+		"outfit": Color(0.30, 0.20, 0.18),
+		"outfit_accent": Color(0.86, 0.30, 0.16),
 		"skin": Color(0.88, 0.71, 0.62),
 		"eye": Color(1.0, 0.62, 0.22),
 		"cape": Color(1.0, 0.46, 0.26),
@@ -77,7 +80,7 @@ const PARTY := [
 		"color": Color(0.75, 0.56, 1.0),
 		"hair": Color(0.29, 0.22, 0.42),
 		"hair_tip": Color(0.78, 0.56, 1.0),
-		"outfit": Color(0.70, 0.68, 0.82),
+		"outfit": Color(0.20, 0.18, 0.28),
 		"outfit_accent": Color(0.44, 0.28, 0.72),
 		"skin": Color(0.84, 0.70, 0.63),
 		"eye": Color(0.66, 0.44, 1.0),
