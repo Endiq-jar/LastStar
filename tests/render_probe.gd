@@ -488,9 +488,9 @@ func _run() -> void:
 	# the frame so the meadow occupies the lower half.
 	beauty.look_at(Vector3(70.0, eye.y - 12.0, 80.0), Vector3.UP)
 	# Rebuild the grass ring around this vantage so the shot has its own meadow.
-	var gf := world.get_node_or_null("GrassField")
-	if gf != null and gf.has_method("focus_at"):
-		gf.call("focus_at", eye)
+	var beauty_grass := world.get_node_or_null("GrassField")
+	if beauty_grass != null and beauty_grass.has_method("focus_at"):
+		beauty_grass.call("focus_at", eye)
 
 	# Push the sun to a warm low morning for the beauty frame so the shot shows
 	# the graded palette rather than whatever time the world happened to boot at.
