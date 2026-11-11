@@ -94,8 +94,18 @@ void vertex() {
 	// removes exactly the grass that would occlude her, in one smoothstep, and
 	// nothing else.
 	vec3 to_player = player_origin - cam_origin;
-	float seg_t = clamp(dot(origin - cam_origin, to_player) / max(dot(to_player, to_player), 0.0001), 0.0, 1.0);
-	float sightline_dist = length(origin - (cam_origin + to_player * seg_t));
+	// Measured from the middle of the blade, not from the root.
+	//
+	// Testing the root was clearing a huge bald apron across the foreground.
+	// The camera sits 1.45 m up and the sightline drops toward her waist, so
+	// the segment runs well above the ground it passes over; but a tuft whose
+	// ROOT is under that segment still counted as occluding it and was
+	// collapsed, even though the blade topped out half a metre below the line
+	// and could not have hidden anything. Sampling the blade's mid-height means
+	// only grass that actually crosses the sightline is cleared.
+	vec3 blade_mid = origin + vec3(0.0, height * 0.55, 0.0);
+	float seg_t = clamp(dot(blade_mid - cam_origin, to_player) / max(dot(to_player, to_player), 0.0001), 0.0, 1.0);
+	float sightline_dist = length(blade_mid - (cam_origin + to_player * seg_t));
 	// 0 right at the lens, 1 beyond near_clear. Collapsing the quad (rather than
 	// discarding) keeps the vertex count identical, so there is no branch
 	// divergence and no popping in the instance buffer.
@@ -106,7 +116,7 @@ void vertex() {
 	// the carves closer to the lens so the grass reaches further toward her.
 	v_cull = smoothstep(near_clear * 0.22, near_clear * 0.72, cam_dist);
 	v_cull *= smoothstep(player_clear * 0.6, player_clear, player_dist);
-	v_cull *= smoothstep(0.30, 0.85, sightline_dist);
+	v_cull *= smoothstep(0.16, 0.52, sightline_dist);
 	VERTEX *= v_cull;
 }
 
