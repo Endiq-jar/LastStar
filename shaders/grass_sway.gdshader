@@ -45,6 +45,13 @@ uniform float near_clear : hint_range(0.0, 12.0) = 2.6;
 // with a default white material. That produced a pale lavender meadow that read
 // as an art bug. A uniform works in both stages and is one float3 per frame.
 uniform vec3 cam_origin = vec3(0.0);
+// Centre of the character the camera follows, pushed in from grass_field.gd.
+// Blades inside this radius are culled so the player is never buried: with an
+// upright, metre-wide tuft rendered from a third-person camera, the meadow in
+// front of the lens covers the character entirely, and no amount of colour or
+// density tuning fixes that - only not drawing it there does.
+uniform vec3 player_origin = vec3(0.0);
+uniform float player_clear : hint_range(0.0, 3.0) = 0.85;
 uniform sampler2D blade_tex : source_color, filter_linear_mipmap, repeat_disable;
 uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
 
@@ -77,10 +84,13 @@ void vertex() {
 	// model space here and MODEL_MATRIX is the instance transform, so the world
 	// position of the tuft's base is MODEL_MATRIX[3].xyz, which is `origin`.
 	float cam_dist = length(origin - cam_origin);
+	// Also collapse blades standing on top of the character.
+	float player_dist = length(origin - player_origin);
 	// 0 right at the lens, 1 beyond near_clear. Collapsing the quad (rather than
 	// discarding) keeps the vertex count identical, so there is no branch
 	// divergence and no popping in the instance buffer.
 	v_cull = smoothstep(near_clear * 0.45, near_clear, cam_dist);
+	v_cull *= smoothstep(player_clear * 0.6, player_clear, player_dist);
 	VERTEX *= v_cull;
 }
 

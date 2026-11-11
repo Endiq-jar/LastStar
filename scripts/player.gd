@@ -14,8 +14,16 @@ const DOUBLE_JUMP_VELOCITY := 7.4
 const GLIDE_FALL := -2.0
 const GRAVITY_SCALE := 1.35
 const TURN_SPEED := 13.0
-const CAM_DISTANCE := 4.2
-const CAM_HEIGHT := 2.05
+## Camera distance and aim height.
+##
+## The camera used to sit 4.2 m back at 2.05 m with a -0.18 rad pitch, which is
+## nearly level with the meadow. In a field of upright grass that put every tuft
+## between the lens and the character: she rendered correctly (the probe reported
+## her head on screen) but the blades in front of her covered her completely.
+## Genshin's own camera looks down at roughly 20 degrees from slightly further
+## back, which clears the grass and shows the ground she is standing on.
+const CAM_DISTANCE := 5.0
+const CAM_HEIGHT := 2.15
 const CAM_SHOULDER := 0.45
 const MOUSE_SENS := 0.0026
 const STICK_SENS := 2.4
@@ -28,8 +36,8 @@ var element_id: int = 0
 
 var _yaw: float = 0.0
 var _target_yaw: float = 0.0
-var _pitch: float = -0.18
-var _target_pitch: float = -0.18
+var _pitch: float = -0.34
+var _target_pitch: float = -0.34
 var _pivot: Node3D
 var _spring: SpringArm3D
 var _camera: Camera3D

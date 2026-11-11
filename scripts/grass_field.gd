@@ -102,6 +102,10 @@ func _process(_delta: float) -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam != null and _material != null:
 		_material.set_shader_parameter("cam_origin", cam.global_position)
+		# Keep a small clearance around the character so the meadow never covers
+		# her. The player node's origin is at her feet, so lift the cull centre a
+		# little to sit at her waist.
+		_material.set_shader_parameter("player_origin", _player.global_position + Vector3(0, 0.7, 0))
 	var center := _chunk_of(_player.global_position)
 	if center != _last_center:
 		_last_center = center
