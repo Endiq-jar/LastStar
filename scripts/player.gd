@@ -57,6 +57,7 @@ var _pitch: float = -0.18
 var _target_pitch: float = -0.18
 var _pivot: Node3D
 var _spring: SpringArm3D
+var _contact_shadow: MeshInstance3D
 var _camera: Camera3D
 var _double_jump_used := false
 var _gliding := false
@@ -146,6 +147,57 @@ func _build_rig() -> void:
 	col.shape = shape
 	col.position.y = CHARACTER_SOLE_Y + CAPSULE_HEIGHT * 0.5
 	add_child(col)
+
+	_build_contact_shadow()
+
+
+## A soft blob shadow under her feet.
+##
+## Measured cause: the probe reports a sole-to-ground gap of -0.07 m, i.e. she is
+## already slightly INTO the ground, and she still reads as hovering. The float is
+## not a placement error, it is the absence of a contact shadow - a character with
+## no shadow cue under her feet separates from the ground no matter how precisely
+## she is placed on it. That is why four earlier attempts at moving her up and
+## down never changed the impression.
+##
+## This replaces shadow-map casting for the character. A real cast shadow at the
+## compatibility renderer's resolution is a spiky, acne-ridden blob that looks
+## worse than none; a gradient decal is smooth, costs one quad, and is the
+## standard solution in this art style.
+func _build_contact_shadow() -> void:
+	var quad := PlaneMesh.new()
+	quad.size = Vector2(1.45, 1.45)
+	_contact_shadow = MeshInstance3D.new()
+	_contact_shadow.name = "ContactShadow"
+	_contact_shadow.mesh = quad
+	_contact_shadow.rotation_degrees = Vector3(-90, 0, 0)
+	_contact_shadow.position.y = 0.045
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_MUL
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_texture = _shadow_texture()
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	_contact_shadow.material_override = mat
+	# It is decoration: never let it write depth or be picked up by the probe's
+	# "what is near the camera" pass as a suspicious unshaded object.
+	_contact_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_contact_shadow)
+
+
+func _shadow_texture() -> Texture2D:
+	## A radial falloff, soft at the rim and darkest at the centre, generated once.
+	var size := 64
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	for y in range(size):
+		for x in range(size):
+			var uv := Vector2(float(x) + 0.5, float(y) + 0.5) / float(size) * 2.0 - Vector2.ONE
+			var d := clampf(uv.length(), 0.0, 1.0)
+			# Smooth, and never fully black: a hard black disc reads as a hole.
+			var a := (1.0 - smoothstep(0.0, 1.0, d)) * 0.55
+			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a))
+	return ImageTexture.create_from_image(img)
 
 
 func _build_camera() -> void:

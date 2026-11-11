@@ -232,7 +232,11 @@ void fragment() {
 	// shadowed ground was arriving at 0.17 - a 4.7x ratio, which is what reads as
 	// a black hole. Painted shadow sits around a third of the lit value, so the
 	// floor has to be roughly twice what it was.
-	EMISSION = col * 0.16 + vec3(0.105, 0.140, 0.125);
+	// Sized from the measurement, twice. At 0.105/0.140/0.125 the shadowed ground
+	// came back at rgb(31,59,44) against sunlit grass at rgb(198,198,128)... a 4x
+	// luminance ratio, still a hole. Painted shadow needs to land around 40% of
+	// the lit value, not 25%, so the floor roughly doubles again.
+	EMISSION = col * 0.20 + vec3(0.200, 0.245, 0.225);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);

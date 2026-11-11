@@ -60,11 +60,17 @@ static func _no_shadow(mi: MeshInstance3D) -> MeshInstance3D:
 	return mi
 
 
-## A structural body part: casts a real shadow so the character is anchored to
-## the ground. Only the main silhouette pieces use this (head, torso, skirt,
-## thighs, boots, cape surface), not the decorations stacked on top of them.
+## A structural body part. Deliberately does NOT cast into the shadow map.
+##
+## Casting was added to anchor her to the ground, but on the compatibility
+## renderer at this shadow-map resolution a 2 m character produces a spiky,
+## acne-ridden silhouette rather than a contact shadow - and the parts that make
+## up her outline (the inverted-hull shells) are inflated copies of the same
+## meshes, so they double the cast geometry. The anchoring job is done by an
+## explicit blob shadow under her feet instead (see Player._build_contact_shadow),
+## which is both cheaper and softer, and is what this art style actually uses.
 static func _body(mi: MeshInstance3D) -> MeshInstance3D:
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
 
 
