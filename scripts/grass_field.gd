@@ -20,9 +20,9 @@ const VIEW_CHUNKS := 5            ## radius, in chunks (5 * 26 = 130 m)
 ## blotches of green on bare ground rather than a carpet. Roughly doubled to close
 ## that up. The far tiers stay cheap because each tuft there covers more screen
 ## area.
-const BLADES_NEAR := 6200         ## instances in a chunk adjacent to the player
-const BLADES_MID := 2600
-const BLADES_FAR := 900
+const BLADES_NEAR := 9000         ## instances in a chunk adjacent to the player
+const BLADES_MID := 3600
+const BLADES_FAR := 1100
 const MAX_CHUNKS := 81            ## (2*5+1)^2, hard cap on live chunks
 const SEA_MARGIN := 2.4           ## metres above water level where grass starts
 
@@ -75,7 +75,11 @@ func _build_resources() -> void:
 	# chasing: it was never density or colour. Each instance gets a random yaw
 	# (see _build_chunk), so the planes do not all face the same way.
 	var quad := QuadMesh.new()
-	quad.size = Vector2(BLADE_W * 3.4, BLADE_H * 1.15)
+	# Roughly square in aspect: a tuft's silhouette is a fan of blades as tall as
+	# it is wide, and a wide short quad read as a leaf on the ground rather than as
+	# grass. (This was 3.4x the width for 1.15x the height, i.e. twice as wide as
+	# tall.)
+	quad.size = Vector2(BLADE_W * 1.15, BLADE_H * 1.30)
 	quad.orientation = PlaneMesh.FACE_Z
 	_blade_mesh = quad
 
@@ -217,7 +221,7 @@ func _build_chunk(key: Vector2i) -> void:
 		# The quad is centred on its origin, so it has to be lifted by half its
 		# height (times the instance scale) or the bottom half sinks into the
 		# ground and the tuft reads as half a blade.
-		made.append(Transform3D(basis, Vector3(x, h + BLADE_H * 1.15 * 0.5 * s - 0.06, z)))
+		made.append(Transform3D(basis, Vector3(x, h + BLADE_H * 1.30 * 0.5 * s - 0.06, z)))
 	if made.is_empty():
 		return
 	multimesh.instance_count = made.size()

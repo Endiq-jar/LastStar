@@ -150,6 +150,7 @@ func _run() -> void:
 	# several times, and both were found only by looking at a PNG.
 	if cam:
 		_check_player_visible(cam, world)
+		_dump_player_parts(cam, world)
 
 	# --- what is in front of the camera ------------------------------------
 	# An opaque, unshaded blob that covers a third of the gameplay frame has
@@ -528,6 +529,33 @@ func _report_palette(img: Image, label: String) -> void:
 				label, frac * 100.0])
 	if worst > 0.92:
 		_log("WARN", "%s has a near-pure sample (saturation %.2f) - the grade is clipping a channel" % [label, worst])
+
+
+func _dump_player_parts(cam: Camera3D, world: Node) -> void:
+	## List every mesh on the character with its projected position and visibility.
+	## The gameplay frame showed only her legs, and there is no way to tell from a
+	## PNG whether the upper body is missing, unlit, transparent or off screen.
+	var player := world.get_node_or_null("Player")
+	if player == null:
+		return
+	var shown := 0
+	var parts: Array[String] = []
+	for mi in player.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		var wp := m.global_position
+		var scr := cam.unproject_position(wp)
+		var behind := cam.is_position_behind(wp)
+		var vis := m.is_visible_in_tree()
+		var aabb := m.global_transform * m.get_aabb()
+		parts.append("%s vis=%s behind=%s screen=(%d,%d) size=%.2f y=%.2f" % [
+			str(m.get_path()).replace(str(player.get_path()) + "/", ""),
+			str(vis), str(behind), int(scr.x), int(scr.y), aabb.size.length(), wp.y])
+		if vis and not behind:
+			shown += 1
+	parts.sort()
+	_log("INFO", "player parts: %d meshes, %d on screen" % [parts.size(), shown])
+	for i in range(mini(parts.size(), 10)):
+		_log("INFO", "  " + parts[i])
 
 
 func _check_player_visible(cam: Camera3D, world: Node) -> void:
