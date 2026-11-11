@@ -103,7 +103,6 @@ func _ready() -> void:
 	# renderer has no clustered lighting, so a 9 m OmniLight on every waypoint is
 	# charged per pixel across everything it overlaps. The activated crystal below
 	# is emissive and unshaded, which is what actually reads as "lit".
-	_light = null
 
 	var label := Label3D.new()
 	label.text = statue_name

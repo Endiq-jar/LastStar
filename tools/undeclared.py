@@ -26,7 +26,8 @@ albedo_color emission_energy_multiplier emission mesh material_override
 multimesh cast_shadow instance_count set_instance_transform transform_format
 velocity move_and_slide is_on_floor create_tween tween_property bind connect
 body_entered body_exited area_entered button_down button_up gui_input timeout
-pressed mouse_entered mouse_exited
+pressed mouse_entered mouse_exited process_mode collision_layer collision_mask
+monitoring monitorable paused time_scale y_sort_enabled z_index clip_children
 call_deferred set_process set_physics_process has_method call emit
 """.split())
 
@@ -136,7 +137,7 @@ def scan(path):
         # straight into tween_property / connect / bind, with no `.` on it.
         stripped = l.strip()
         if not stripped.startswith(("func ", "class ", "extends", "signal ")):
-            for mm in re.finditer(r"[(,]\s*([a-z_][\w]*)\s*[,)]", l):
+            for mm in re.finditer(r"[(,]\s*(_?[a-z]\w*)\s*[,)]", l):
                 name = mm.group(1)
                 if (name in BUILTIN or name in INHERITED or name in file_scope
                         or name in local or name in params):
@@ -146,8 +147,18 @@ def scan(path):
                             "true", "false", "null", "self"}:
                     continue
                 problems.append((i + 1, name, l.strip()))
+        # Assignment targets: `foo = ...` / `foo += ...` where foo is a bare
+        # local name. This is how a deleted member variable usually survives -
+        # the removal takes the declaration and leaves the write behind.
+        am = re.match(r"\s*(_?[a-z]\w*)\s*(?:\+|-|\*|/)?=\s*[^=]", l)
+        if am:
+            aname = am.group(1)
+            if not (aname in BUILTIN or aname in INHERITED or aname in file_scope
+                    or aname in local or aname in params):
+                problems.append((i + 1, aname, l.strip()))
+
         # receivers: `name.` where name is a bare identifier at statement level
-        for mm in re.finditer(r"(?<![\w.\"])([a-z_][\w]*)\s*\.\s*[A-Za-z_]", l):
+        for mm in re.finditer(r"(?<![\w.\"])(_?[a-z]\w*)\s*\.\s*[A-Za-z_]", l):
             name = mm.group(1)
             if (name in BUILTIN or name in INHERITED or name in file_scope
                     or name in local or name in params):
