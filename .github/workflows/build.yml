@@ -216,25 +216,31 @@ jobs:
         # Never let the visual probe block the APK: a hung software-GL context
         # must not cost players their build. It reports, it does not gate.
         continue-on-error: true
-        timeout-minutes: 8
+        # 8 was too tight. The install alone can burn several minutes on a slow
+        # mirror, and the step was being killed at 8:13 with no frame captured -
+        # which looks identical to a passing run in the job list. The budget is
+        # now sized as: bounded installs + 240s probe + reporting overhead.
+        timeout-minutes: 16
         run: |
           set -uo pipefail
           # Software GL so a real framebuffer can be captured on the runner.
           #
-          # apt on this runner fails intermittently (mirror timeouts). It is
-          # worth retrying rather than giving up: when this step gives up, no
-          # frame is rendered, the screenshots branch is not updated, and the
-          # only visible trace is a warning - so the ground-contrast number
-          # silently stops existing. That happened once already.
+          # apt on this runner fails intermittently (mirror timeouts), and an
+          # unbounded retry loop starves the probe of its own time budget. Each
+          # attempt is therefore hard-limited, and apt's own network timeouts are
+          # shortened so a dead mirror fails fast instead of hanging.
+          APT="-o Acquire::http::Timeout=25 -o Acquire::ftp::Timeout=25"
+          APT="$APT -o Acquire::Retries=1 -o Acquire::ForceIPv4=true"
           OK=0
           for attempt in 1 2 3; do
-            sudo apt-get update -qq || true
-            if sudo apt-get install -y -qq xvfb libgl1 libglx-mesa0 libegl1; then
+            timeout -k 5 150 sudo apt-get $APT update -qq || true
+            if timeout -k 5 300 sudo apt-get $APT install -y -qq \
+                 xvfb libgl1 libglx-mesa0 libegl1; then
               OK=1
               break
             fi
-            echo "apt attempt $attempt failed; retrying"
-            sleep $((attempt * 10))
+            echo "::notice::apt attempt $attempt did not finish; retrying"
+            sleep $((attempt * 5))
           done
           if [ "$OK" -ne 1 ]; then
             echo "::warning::could not install Xvfb/Mesa after 3 attempts - no frame this run"
