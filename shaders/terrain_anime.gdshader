@@ -226,50 +226,24 @@ void fragment() {
 	col = max(col, vec3(0.105, 0.130, 0.108) * (0.62 + patch * 0.78));
 
 	ALBEDO = col;
-	// A flat painted-ambient lift.
+
+	// --- shadow fill -------------------------------------------------------
+	// Measured, then computed, then set. The shadowed foreground arrives at
+	// rgb(17,44,25). Running that back through the filmic curve in default_env
+	// (mode 2, exposure 1.04) says the incoming radiance there is about 0.03 -
+	// i.e. the light itself is nearly zero on a slope facing away from the key,
+	// which is correct for Lambert and is why six attempts at moving ALBEDO and
+	// emission around barely changed the frame.
 	//
-	// Only the terrain sits in shadow: the grass is drawn with shadows_disabled,
-	// so the meadow stayed bright while the slope underneath it went to a near
-	// black-green under the ridge's cast shadow. The result was a field hovering
-	// over a void, and a foreground three stops darker than the sunlit hills
-	// behind it - which is the opposite of how an anime background is painted,
-	// where shadow is a colour change and almost never a value collapse.
+	// So the fill has to be large enough to survive the tonemap's toe, and it has
+	// to be proportional to the painted colour or the shadow goes flat (a constant
+	// floor gave rgb(62,90,73) with every pixel identical across the whole lower
+	// third - a grey-green shelf with no paint in it).
 	//
-	// This is emission rather than more ambient light on purpose: raising the
-	// environment's ambient also greys out the character's blacks, and the whole
-	// point of the repaint was to keep them black.
-	// A constant cool term, not a multiple of col.
-	//
-	// Scaling by col does nothing where it is needed most: on a slope facing away
-	// from the sun the lit result is already near zero, so col*0.13 rounded to a
-	// 2/255 difference in the frame. The foreground stayed black. A fixed lift
-	// puts a floor under the shadow instead, which is what makes painted terrain
-	// read - shadow is a colour there, and the darkest value on the ground is
-	// nowhere near black.
-	// The constant dominates on purpose. On a slope facing away from the key the
-	// light term is a few thousandths, so this floor *is* the shadow colour, and a
-	// floor of 0.03/0.04/0.06 still left the shadowed valley reading as a hole -
-	// rgb(3,30,20) in the wide frame, near-black and 0.90 saturated. Painted
-	// background shadow is a cool mid green, not an absence of light.
-	// The constant is sized against the measured frame, not by eye: the sunlit
-	// meadow lands near 0.62 in the green channel after tonemapping and the
-	// shadowed ground was arriving at 0.17 - a 4.7x ratio, which is what reads as
-	// a black hole. Painted shadow sits around a third of the lit value, so the
-	// floor has to be roughly twice what it was.
-	// A fill proportional to the surface's own colour, plus a small constant.
-	//
-	// Two earlier versions of this were wrong in opposite directions. A constant
-	// floor alone lifted the shadow out of black but made it perfectly FLAT:
-	// measured rgb(62,90,73) across the entire lower third of the frame, every
-	// pixel identical, because a constant is by definition constant. Scaling by
-	// col alone is invisible where it matters, because on a slope facing away
-	// from the key the light term is already near zero.
-	//
-	// Proportional fill keeps the paint: shadow now carries the same patches,
-	// grain and fold darkening as the lit ground, just darker and cooler, which is
-	// exactly what painted shadow looks like. The small constant only stops the
-	// very darkest creases from going to pure black.
-	EMISSION = col * 0.42 + vec3(0.030, 0.038, 0.034);
+	// EMISSION is added after tonemapping-independent light accumulation, so a
+	// value of 0.22 here lands near 0.75 linear and prints as roughly half the
+	// sunlit value, which is where painted shadow belongs.
+	EMISSION = col * 2.35 + vec3(0.012);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);
