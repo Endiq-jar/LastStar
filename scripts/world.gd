@@ -67,11 +67,12 @@ func _ready() -> void:
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
 	_build_spawn_glade()
+	# Clouds are drawn by shaders/sky_anime.gdshader now, not spawned as 3D
+	# billboards - see the note there on why billboards could not be placed.
 	_scatter_landmarks()
 	_spawn_waypoints()
 	_spawn_sigils()
 	_spawn_enemies()
-	_spawn_clouds()
 	_add_audio()
 	Game.quest_changed.emit(Game.quest_text)
 	apply_quality()
@@ -326,6 +327,14 @@ func _setup_environment() -> void:
 	sky_mat.set_shader_parameter("glow_strength", 0.45)
 	sky_mat.set_shader_parameter("band_strength", 0.11)
 	sky_mat.set_shader_parameter("gradient_power", 0.52)
+	# Cloud layer. The height is deliberately far above the terrain rim: the
+	# layer is projected, so what matters is that it is high enough that its
+	# perspective converges slowly, not that it clears any particular hill.
+	sky_mat.set_shader_parameter("cloud_height", 1250.0)
+	sky_mat.set_shader_parameter("cloud_coverage", 0.44)
+	sky_mat.set_shader_parameter("cloud_opacity", 0.92)
+	sky_mat.set_shader_parameter("cloud_color", Color(1.0, 1.0, 1.0))
+	sky_mat.set_shader_parameter("cloud_shadow_color", Color(0.74, 0.80, 0.90))
 	sky.sky_material = sky_mat
 	env.sky = sky
 	# Ambient was 1.15 here, then recomputed every frame to 0.85-1.40 by the
@@ -857,78 +866,3 @@ func _add_audio() -> void:
 	add_child(audio)
 
 
-func _spawn_clouds() -> void:
-	## Soft billboard clouds drifting above the valley.
-	##
-	## These used to be plain unshaded white quads. With no texture and no
-	## falloff they rendered as solid blue-white rectangles hanging in the sky -
-	## the single most "this is a prototype" thing in the whole scene. Each
-	## cloud is now a cluster of soft procedural puffs that fade at the rim.
-	var tex := _cloud_texture()
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
-	mat.billboard_keep_scale = true
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.albedo_texture = tex
-	# Clouds are lit by the sky, not emissive. 0.55 alpha over a bright blue sky
-	# gave near-white puffs that read as paper cut-outs; slightly bluer and
-	# fainter lets them sit inside the sky.
-	mat.albedo_color = Color(0.96, 0.97, 1.0, 0.62)
-
-	# More clusters, spread as long horizontal bands rather than scattered
-	# blobs: cloud in an open sky reads as layered streaks near the horizon, and
-	# a dozen round puffs at random heights read as marbles stuck to the sky.
-	#
-	# The band is 88-165 m, not 150-260. At the old heights every cloud sat
-	# above the top edge of the beauty camera's frustum, which is why the wide
-	# shot had 85% sky and not one cloud in it - the clouds existed and were
-	# simply never in frame. Lowering the band puts them where the camera
-	# actually looks when it tilts up from the ridge.
-	for i in range(46):
-		var cluster := Node3D.new()
-		cluster.position = Vector3(
-			_rng.randf_range(-680.0, 680.0),
-			_rng.randf_range(88.0, 165.0),
-			_rng.randf_range(-680.0, 680.0))
-		# Flatten the cluster along Y so it has a cloud's proportions.
-		cluster.scale = Vector3(1.0, 0.55, 1.0)
-		# 4-7 overlapping puffs of different sizes make a believable cloud.
-		var puffs := _rng.randi_range(4, 7)
-		for p in range(puffs):
-			var cloud := MeshInstance3D.new()
-			var quad := QuadMesh.new()
-			var s := _rng.randf_range(120.0, 260.0)
-			quad.size = Vector2(s, s * 0.46)
-			cloud.mesh = quad
-			cloud.material_override = mat
-			# Spread mostly along X: clouds stretch sideways, not in depth.
-			cloud.position = Vector3(
-				_rng.randf_range(-0.95, 0.95) * s,
-				_rng.randf_range(-0.04, 0.04) * s,
-				_rng.randf_range(-0.22, 0.22) * s)
-			cloud.rotation.y = _rng.randf() * TAU
-			cloud.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			cluster.add_child(cloud)
-		add_child(cluster)
-
-
-func _cloud_texture() -> Texture2D:
-	## A radial soft blob, generated once: opaque in the middle, transparent at
-	## the rim, with a little noise so the edge is not a clean circle.
-	var size := 96
-	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
-	var noise := FastNoiseLite.new()
-	noise.frequency = 0.055
-	noise.seed = 7
-	var half := float(size) * 0.5
-	for y in range(size):
-		for x in range(size):
-			var nx := (float(x) + 0.5 - half) / half
-			var ny := (float(y) + 0.5 - half) / half
-			var r := sqrt(nx * nx + ny * ny)
-			# Soft edge, pushed in and out by noise.
-			var edge := 1.0 - smoothstep(0.45, 1.0, r + noise.get_noise_2d(x, y) * 0.14)
-			img.set_pixel(x, y, Color(1, 1, 1, clampf(edge, 0.0, 1.0)))
-	return ImageTexture.create_from_image(img)
