@@ -366,6 +366,29 @@ func _run() -> void:
 			_log("INFO", "alt view mean_luma=%.3f nonblack=%.1f%% colours=%d" % [
 				s2["luma"], s2["nonblack"] * 100.0, s2["colours"]])
 
+	# --- character close-up -------------------------------------------------
+	# A frame of the character from the front at conversational distance. The
+	# gameplay camera cannot answer "is the model correct" - it answers "is the
+	# model readable in play", and those are different questions.
+	var player_node := world.get_node_or_null("Player") as Node3D
+	if player_node != null:
+		var portrait := Camera3D.new()
+		portrait.fov = 40.0
+		portrait.near = 0.05
+		portrait.far = 60.0
+		world.add_child(portrait)
+		var focus := player_node.global_position + Vector3(0.0, 1.05, 0.0)
+		portrait.global_position = focus + Vector3(0.0, 0.16, 2.9)
+		portrait.look_at(focus, Vector3.UP)
+		portrait.current = true
+		await get_tree().create_timer(0.35).timeout
+		await get_tree().process_frame
+		var pimg := get_viewport().get_texture().get_image()
+		if pimg != null and not pimg.is_empty():
+			pimg.save_png(out_dir.path_join("player.png"))
+			_log("INFO", "saved character close-up")
+		portrait.queue_free()
+
 	# --- clear combat VFX before the beauty frame --------------------------
 	# The gameplay capture caught a burst mid-cast: an 18 m transparent light
 	# pillar directly behind the player, which is what the tall cyan wedge in the
@@ -553,6 +576,19 @@ func _dump_player_parts(cam: Camera3D, world: Node) -> void:
 		if vis and not behind:
 			shown += 1
 	parts.sort()
+	# The model's own bounds settle whether the upper body exists at all.
+	var total := AABB()
+	var first := true
+	for mi in player.find_children("*", "MeshInstance3D", true, false):
+		var m2 := mi as MeshInstance3D
+		if m2.mesh == null:
+			continue
+		var box := m2.global_transform * m2.get_aabb()
+		total = box if first else total.merge(box)
+		first = false
+	_log("INFO", "player bounds y=%.2f..%.2f (height %.2f m), x=%.2f..%.2f" % [
+		total.position.y, total.end.y, total.size.y,
+		total.position.x, total.end.x])
 	_log("INFO", "player parts: %d meshes, %d on screen" % [parts.size(), shown])
 	for i in range(mini(parts.size(), 10)):
 		_log("INFO", "  " + parts[i])
