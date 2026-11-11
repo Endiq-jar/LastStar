@@ -64,13 +64,19 @@ func setup(terrain: Node, player: Node3D) -> void:
 
 
 func _build_resources() -> void:
-	# One textured quad per tuft. The blade cluster lives in the texture's alpha
-	# channel, so a single plane draws a full tuft - three solid quads per tuft
-	# (the old approach) merged into bright cauliflower blobs at any distance
-	# and cost three times the overdraw.
+	# One textured quad per tuft, standing UPRIGHT. The blade cluster lives in the
+	# texture's alpha channel, so a single plane draws a full tuft, and the shader
+	# uses cull_disabled so the plane is visible from both faces.
+	#
+	# QuadMesh defaults to FACE_Z (upright). This was set to FACE_Y, which lays
+	# the quad FLAT - so every tuft was a horizontal decal lying on the hillside
+	# and the grass rendered as elongated blotches smeared across the ground.
+	# That is the blotchy-patch artefact this file spent several revisions
+	# chasing: it was never density or colour. Each instance gets a random yaw
+	# (see _build_chunk), so the planes do not all face the same way.
 	var quad := QuadMesh.new()
-	quad.size = Vector2(BLADE_W * 3.9, BLADE_H * 1.20)
-	quad.orientation = PlaneMesh.FACE_Y
+	quad.size = Vector2(BLADE_W * 3.4, BLADE_H * 1.15)
+	quad.orientation = PlaneMesh.FACE_Z
 	_blade_mesh = quad
 
 	_material = ShaderMaterial.new()
@@ -210,7 +216,10 @@ func _build_chunk(key: Vector2i) -> void:
 			continue
 		var s := rng.randf_range(0.75, 1.45) * height_scale
 		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s))
-		made.append(Transform3D(basis, Vector3(x, h - 0.05, z)))
+		# The quad is centred on its origin, so it has to be lifted by half its
+		# height (times the instance scale) or the bottom half sinks into the
+		# ground and the tuft reads as half a blade.
+		made.append(Transform3D(basis, Vector3(x, h + BLADE_H * 1.15 * 0.5 * s - 0.06, z)))
 	if made.is_empty():
 		return
 	multimesh.instance_count = made.size()
