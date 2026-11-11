@@ -245,6 +245,16 @@ jobs:
             esac
           done
 
+          # Surface the measured performance census as annotations.
+          #
+          # Step logs and artifacts both live on blob storage, which is not
+          # always reachable from a review context; annotations are. Without
+          # this the PERF line is produced and then never seen, which is how a
+          # "measured" number ends up being quoted from nowhere.
+          grep -E "^PROBE_INFO: PERF" /tmp/probe.log | head -4 | while IFS= read -r line; do
+            echo "::notice title=measurement::$line"
+          done
+
           if ! grep -q "PROBE_BEGIN" /tmp/probe.log; then
             # The engine itself could not start (no GL on this runner). That is
             # an infrastructure limit, not a game bug - warn, do not fail.
