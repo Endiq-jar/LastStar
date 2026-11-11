@@ -44,3 +44,7 @@ Thumbs.db
 # same signature or Android refuses to install an update over an existing copy.
 # It is a debug key (public password "android"), never a release key.
 !keys/debug.keystore
+
+# Python bytecode (tools/ has helper scripts linted in CI)
+__pycache__/
+*.pyc
