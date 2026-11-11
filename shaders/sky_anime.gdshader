@@ -37,11 +37,14 @@ uniform float sun_strength : hint_range(0.0, 4.0) = 1.6;
 // Height of the cloud layer above the world, in metres.
 uniform float cloud_height = 1250.0;
 // World size of one noise cell. Larger = bigger, fewer clouds.
-uniform float cloud_scale = 0.0034;
+uniform float cloud_scale = 0.0021;
 // 0.0 = clear sky, 1.0 = overcast.
-uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.52;
+uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.34;
 uniform float cloud_opacity : hint_range(0.0, 1.0) = 0.92;
 uniform vec3 cloud_color : source_color = vec3(1.0, 1.0, 1.0);
+// Pushed above 1.0 so the tonemapper still lands the lit tops on white - a
+// literal 1.0 goes through filmic and comes out noticeably grey.
+uniform float cloud_brightness : hint_range(0.5, 3.0) = 1.45;
 uniform vec3 cloud_shadow_color : source_color = vec3(0.74, 0.80, 0.90);
 // How much the cloud layer drifts, in cells per second.
 uniform float cloud_drift = 0.004;
@@ -165,7 +168,7 @@ void sky() {
 		// around by a slower-varying field breaks the blobs into the cauliform
 		// shapes a cumulus deck actually has.
 		vec2 warp = vec2(sky_fbm(p * 0.45 + 7.1), sky_fbm(p * 0.45 + 19.3)) - 0.5;
-		p += warp * 1.35;
+		p += warp * 0.95;
 
 		float n = sky_fbm(p + vec2(cloud_drift * TIME, 0.0));
 		float n2 = sky_fbm(p * 2.6 + vec2(0.0, cloud_drift * TIME * 1.7) + 31.4);
@@ -180,18 +183,23 @@ void sky() {
 		// Coverage is a threshold on the noise: raising it lowers the cut, so
 		// more of the sky fills in.
 		float lo = 1.0 - cloud_coverage;
-		float mask = smoothstep(lo, lo + 0.13, density);
+		float mask = smoothstep(lo, lo + 0.19, density);
 
 		// Fade the layer out at the horizon and at the zenith. The horizon fade
 		// avoids a hard seam where the perspective divide blows up; the zenith
 		// fade keeps the top of the frame clean blue, which is where a painted
 		// sky wants its deepest colour.
 		mask *= smoothstep(0.0, 0.14, h) * (1.0 - smoothstep(0.72, 0.99, h));
+		// Thin the deck as the eye swings up. The plane projection already
+		// stretches clouds toward the horizon for free, which is where a real
+		// deck looks dense; overhead, a painted sky wants open blue so a
+		// character standing on a hill still reads against it.
+		mask *= mix(1.0, 0.35, smoothstep(0.20, 0.62, h));
 
 		// Lit tops, cool shaded undersides - the flat two-tone that reads as
 		// cel-shaded cloud rather than a photographic texture.
 		float lit = smoothstep(lo, lo + 0.34, density);
-		vec3 cloud = mix(cloud_shadow_color, cloud_color, lit);
+		vec3 cloud = mix(cloud_shadow_color, cloud_color * cloud_brightness, lit);
 		// Faint rim brightening where the layer faces the sun.
 		cloud += sun_color * pow(max(sun_dot, 0.0), 6.0) * 0.18;
 

@@ -331,9 +331,9 @@ func _setup_environment() -> void:
 	# layer is projected, so what matters is that it is high enough that its
 	# perspective converges slowly, not that it clears any particular hill.
 	sky_mat.set_shader_parameter("cloud_height", 1250.0)
-	sky_mat.set_shader_parameter("cloud_scale", 0.0034)
-	sky_mat.set_shader_parameter("cloud_coverage", 0.52)
-	sky_mat.set_shader_parameter("cloud_opacity", 0.92)
+	sky_mat.set_shader_parameter("cloud_scale", 0.0021)
+	sky_mat.set_shader_parameter("cloud_coverage", 0.34)
+	sky_mat.set_shader_parameter("cloud_opacity", 0.95)
 	sky_mat.set_shader_parameter("cloud_color", Color(1.0, 1.0, 1.0))
 	sky_mat.set_shader_parameter("cloud_shadow_color", Color(0.74, 0.80, 0.90))
 	sky.sky_material = sky_mat
