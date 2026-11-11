@@ -79,23 +79,31 @@ void light() {
 	// intact instead of a clipped white one.
 	DIFFUSE_LIGHT += mix(shadowed, lit_col, lit) * (0.68 + warm * 0.30) * diffuse_energy * 0.62;
 
-	// Anime specular band: a thin ring around the key direction.
-	float spec_ndl = smoothstep(1.0 - spec_size, 1.0 - spec_size * 0.35, ndl);
-	float ndv = clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0);
-	float spec_amount = spec_ndl * spec_energy * (0.4 + ndv * 0.6);
-	// Fade the band out as the surface turns fully toward the light, so it reads
-	// as a highlight on the edge of the lit side rather than a disc on the front.
-	spec_amount *= 1.0 - smoothstep(0.90, 1.0, ndl);
+	// Anime specular: a compact blob on the half-vector, not a ring around the
+	// key.
+	//
+	// This used to key off ndl alone, and ndl is constant along a circle around
+	// the light direction - so on every rounded form (a head, a chest capsule) the
+	// "band" drew a donut. That donut is the grey ring that sat on her hair cap
+	// and her sternum for several rounds while I blamed the hairpin and the
+	// collar, then cast shadows. It was none of those; it was the specular term.
+	// The half-vector produces a single compact highlight the way anime hair
+	// actually reads, and it cannot wrap into a circle.
+	vec3 n = normalize(NORMAL);
+	vec3 v = normalize(VIEW);
+	float ndv = clamp(dot(n, v), 0.0, 1.0);
+	vec3 half_vec = normalize(normalize(LIGHT) + v);
+	float ndh = dot(n, half_vec);
+	float spec_amount = smoothstep(1.0 - spec_size, 1.0 - spec_size * 0.30, ndh);
+	spec_amount *= spec_energy * (0.4 + ndv * 0.6);
 	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * min(spec_amount, spec_ceiling);
 
 	// Rim: bright edge facing away from the light, gives that "painted" pop.
 	//
-	// Both terms are clamped. On a head-sized sphere facing the key light, ndl
-	// is ~1 across most of the visible surface, so the specular band covered the
-	// whole head, and the rim term multiplied by a 2.2-energy sun put the total
-	// radiance far over the tonemapper's knee. The result was a featureless white
-	// ball where the player's face should be - the single worst artefact in the
-	// render, and it made every character read as a blank mannequin.
+	// Kept small and clamped on purpose. On a head-sized sphere facing the key
+	// light ndl is ~1 across most of the visible surface, so a strong rim
+	// multiplied by a 2.2-energy sun put the total radiance far over the
+	// tonemapper's knee - the featureless white ball that used to be her face.
 	float rim = pow(1.0 - max(ndv, 0.0), rim_power);
 	rim *= smoothstep(0.05, 0.45, 1.0 - ndl);
 	DIFFUSE_LIGHT += rim_color.rgb * LIGHT_COLOR * ATTENUATION * rim * rim_strength * 0.22;
