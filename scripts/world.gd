@@ -309,6 +309,7 @@ func _setup_environment() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 
+	var sky := Sky.new()
 	# The stock ProceduralSkyMaterial only gives a two-colour gradient, and the
 	# published wide shot read exactly like one: 85% of the frame was a flat blue
 	# wash with no clouds, no haze band at the ridge and no sun anywhere in it.
