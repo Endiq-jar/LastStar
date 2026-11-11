@@ -449,22 +449,10 @@ func _run() -> void:
 		portrait.queue_free()
 
 	# --- clear combat VFX before the beauty frame --------------------------
-	# The gameplay capture caught a burst mid-cast: an 18 m transparent light
-	# pillar directly behind the player, which is what the tall cyan wedge in the
-	# frame was. VFX tweens are driven by the tree, so once the world is paused
-	# they never finish and the pillar stays on screen forever. Free every
-	# transient effect node rather than waiting for a tween that will not run.
-	for fx_node in world.find_children("*", "MeshInstance3D", true, false):
-		var fx_mi := fx_node as MeshInstance3D
-		var mat := fx_mi.material_override
-		if mat is StandardMaterial3D:
-			var sm := mat as StandardMaterial3D
-			# Unshaded emissive geometry is only ever VFX or a crystal.
-			if sm.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED and sm.emission_enabled:
-				if fx_mi.get_parent() != null and fx_mi.get_parent().name.begins_with("@"):
-					fx_mi.get_parent().queue_free()
-				elif fx_mi.name.begins_with("@"):
-					fx_mi.queue_free()
+	# Same rule as _clear_frame: only anonymous effect roots directly under the
+	# world. This block used to repeat the "free anything unshaded and emissive"
+	# logic, which armed the bug described in _clear_frame.
+	_clear_frame(world)
 	await get_tree().process_frame
 
 	# --- environment beauty shot -------------------------------------------
@@ -535,31 +523,26 @@ func _clear_frame(world: Node) -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return
-	var from := cam.global_position
 	var removed := 0
-	# Transient VFX: unshaded emissive meshes parented to an unnamed runtime node.
-	for fx_node in world.find_children("*", "MeshInstance3D", true, false):
-		var mi := fx_node as MeshInstance3D
-		var mat := mi.material_override
-		if not (mat is StandardMaterial3D):
+	# Transient VFX live as anonymous "@Node3D" roots directly under the world.
+	#
+	# This deliberately does NOT hunt for unshaded emissive meshes anywhere in the
+	# tree. It used to, and the character's elemental crest and glowing eyes are
+	# exactly that - so the walk-up loop climbed from the crest to her Torso node
+	# and freed 43 of her 51 meshes. THAT is what rendered her as a pair of boots
+	# for half a dozen builds while the probe kept insisting her body was present
+	# and visible. The lesson: a cleanup pass must be handcuffed to nodes it can
+	# positively identify, never to a material class.
+	for child in world.get_children():
+		if not child.name.begins_with("@"):
 			continue
-		var sm := mat as StandardMaterial3D
-		if sm.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED or not sm.emission_enabled:
-			continue
-		var holder := mi.get_parent()
-		if holder != null and (holder.name.begins_with("@") or mi.name.begins_with("@")):
-			# Walk up to the outermost transient node so the whole effect goes.
-			var root := holder
-			while root.get_parent() != null and root.get_parent() != world \
-					and root.get_parent().name.begins_with("@"):
-				root = root.get_parent()
-			root.queue_free()
-			removed += 1
+		child.queue_free()
+		removed += 1
 	# Enemies that have drifted within 7 m of the lens.
 	var enemies := world.get_node_or_null("Enemies")
 	if enemies != null:
 		for enemy in enemies.get_children():
-			if enemy is Node3D and (enemy as Node3D).global_position.distance_to(from) < 7.0:
+			if enemy is Node3D and (enemy as Node3D).global_position.distance_to(cam.global_position) < 7.0:
 				enemy.queue_free()
 				removed += 1
 	if removed > 0:
