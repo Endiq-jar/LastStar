@@ -41,9 +41,16 @@ void fragment() {
 	ROUGHNESS = 0.62;
 	METALLIC = 0.0;
 	SPECULAR = 0.28;
-	// A tiny lift keeps characters from reading as black silhouettes in shade,
-	// and doubles as the glow channel for elemental pieces.
-	EMISSION = emission_color.rgb * emission_boost + base * 0.02;
+	// A floor proportional to the part's own colour.
+	//
+	// The character is sunlit from behind in play (the sun sits behind her right
+	// shoulder, which is why the gameplay camera sees her lit and the front
+	// portrait sees her in shadow). With only ambient behind it, her face came out
+	// near black and the whole reviewing problem moved from "too white" to "no
+	// face". 0.02 of the albedo is three thousandths of a stop on an 8-bit buffer
+	// and did nothing. This is the same treatment the terrain and grass get, so
+	// every surface in the frame has a shadow of a colour rather than a hole.
+	EMISSION = emission_color.rgb * emission_boost + base * 0.12;
 }
 
 void light() {

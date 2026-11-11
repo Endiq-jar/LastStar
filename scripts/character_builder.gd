@@ -14,13 +14,17 @@ static func _toon(color: Color, rim: float = 0.35) -> ShaderMaterial:
 	m.shader = TOON_SHADER
 	m.set_shader_parameter("albedo_color", color)
 	m.set_shader_parameter("shadow_tint", Color(0.46, 0.48, 0.70))
-	m.set_shader_parameter("rim_color", Color(1.0, 0.95, 0.84))
+	# Cool, not white. A warm white rim on near-black cloth is a 1.0-value line on
+	# a 0.13-value surface - it reads as a pale streak stuck to her shoulder, which
+	# is exactly what it looked like on the first front-on portrait. A sky-tinted
+	# rim reads as reflected environment light and still separates the silhouette.
+	m.set_shader_parameter("rim_color", Color(0.66, 0.75, 1.0))
 	# Rim and spec used to run at 0.7-0.8 strength with a 0.45 spec energy; on a
 	# build made mostly of spheres every one of them picked up a broad highlight
 	# plus a full rim ring, and the accumulated radiance washed the character out
 	# to a white blob. The shader clamps these now, and the values fed in are
 	# deliberately restrained.
-	m.set_shader_parameter("rim_strength", minf(rim, 0.45))
+	m.set_shader_parameter("rim_strength", minf(rim, 0.30))
 	m.set_shader_parameter("diffuse_energy", 1.0)
 	m.set_shader_parameter("spec_energy", 0.26)
 	# Deliberately left at 0. Setting render_priority on an opaque material takes it
@@ -151,13 +155,13 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	# Anime eyes: two glowing planes with a dark outline plane behind.
 	for side in [-1.0, 1.0]:
 		var dark := QuadMesh.new()
-		dark.size = Vector2(0.075, 0.062)
+		dark.size = Vector2(0.086, 0.072)
 		var dm := _glow(Color(0.10, 0.09, 0.14), 0.0)
 		var d := _add(head, dark, dm, Vector3(0.058 * side, 0.005, -0.145))
 		d.rotation_degrees = Vector3(0, 0, 0)
 
 		var iris := QuadMesh.new()
-		iris.size = Vector2(0.052, 0.05)
+		iris.size = Vector2(0.062, 0.058)
 		var i := _add(head, iris, eye, Vector3(0.058 * side, 0.004, -0.151))
 
 		var shine := QuadMesh.new()
@@ -173,11 +177,17 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	cap_mi.scale = Vector3(1.06, 1.0, 1.08)
 	cap_mi.rotation_degrees = Vector3(-8, 0, 0)
 
+	# Bangs hang over the brow, not over the eyes.
+	#
+	# They used to be 0.20 tall centred 0.02 below the head origin, so they reached
+	# y=-0.12 while the eyes sit at y=0.005: the fringe covered the entire face and
+	# the first front-on portrait was a featureless black dome with a red fringe.
+	# Shortened and raised so the fringe stops just above the brow line.
 	for i in range(5):
 		var bang := PrismMesh.new()
-		bang.size = Vector3(0.075, 0.20, 0.06)
+		bang.size = Vector3(0.075, 0.15, 0.05)
 		var bx := -0.11 + 0.055 * i
-		var b := _add(head, bang, hair if i % 2 == 0 else hair_tip, Vector3(bx, -0.02, -0.135))
+		var b := _add(head, bang, hair if i % 2 == 0 else hair_tip, Vector3(bx, 0.075, -0.132))
 		b.rotation_degrees = Vector3(6, 0, -14.0 + i * 7.0)
 
 	for side in [-1.0, 1.0]:
