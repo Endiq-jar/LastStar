@@ -54,10 +54,16 @@ func _build() -> void:
 	_mesh_root = Node3D.new()
 	add_child(_mesh_root)
 
+	# Radius 0.72 / height 1.1 made a 1.4 m wide opaque balloon - as wide as the
+	# player is tall, and twice as wide as she is. From the third-person camera it
+	# filled a third of the screen as a flat, fully saturated disc with a heavy
+	# black rim. On screen that is indistinguishable from a UI bug, and it is the
+	# most "this is a prototype" object in the player's view. A slime is a
+	# knee-high blob.
 	var body := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
-	sphere.radius = 0.72
-	sphere.height = 1.1
+	sphere.radius = 0.40
+	sphere.height = 0.64
 	sphere.radial_segments = 16
 	sphere.rings = 10
 	body.mesh = sphere
@@ -65,26 +71,24 @@ func _build() -> void:
 	_body_mat.shader = load("res://shaders/anime_toon.gdshader")
 	_body_mat.set_shader_parameter("albedo_color", Color(0.62, 0.92, 0.86))
 	_body_mat.set_shader_parameter("shadow_tint", Color(0.5, 0.6, 0.9))
-	_body_mat.set_shader_parameter("rim_strength", 0.7)
-	_body_mat.set_shader_parameter("spec_energy", 0.9)
-	_body_mat.set_shader_parameter("spec_size", 0.35)
+	_body_mat.set_shader_parameter("rim_strength", 0.35)
 	body.material_override = _body_mat
-	body.position.y = 0.6
+	body.position.y = 0.40
 	_mesh_root.add_child(body)
 
 	var outline := MeshInstance3D.new()
 	var shell := SphereMesh.new()
-	shell.radius = 0.735
-	shell.height = 1.12
+	shell.radius = 0.412
+	shell.height = 0.66
 	shell.radial_segments = 16
 	shell.rings = 10
 	outline.mesh = shell
 	var om := ShaderMaterial.new()
 	om.shader = load("res://shaders/outline.gdshader")
-	om.set_shader_parameter("outline_width", 0.02)
+	om.set_shader_parameter("outline_width", 0.011)
 	om.set_shader_parameter("outline_color", Color(0.12, 0.12, 0.22, 1.0))
 	outline.material_override = om
-	outline.position.y = 0.6
+	outline.position.y = 0.40
 	_mesh_root.add_child(outline)
 
 	_core = MeshInstance3D.new()
@@ -98,35 +102,42 @@ func _build() -> void:
 	_core_mat.emission_energy_multiplier = 2.6
 	_core_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_core.material_override = _core_mat
-	_core.position = Vector3(0, 0.62, -0.32)
+	_core.position = Vector3(0, 0.42, -0.22)
 	_mesh_root.add_child(_core)
 
 	# Two glowing eyes.
 	for side in [-1.0, 1.0]:
 		var eye := MeshInstance3D.new()
 		var quad := QuadMesh.new()
-		quad.size = Vector2(0.10, 0.14)
+		quad.size = Vector2(0.062, 0.085)
 		eye.mesh = quad
 		var em := StandardMaterial3D.new()
 		em.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		em.albedo_color = Color(0.12, 0.10, 0.18)
 		eye.material_override = em
-		eye.position = Vector3(0.20 * side, 0.80, -0.62)
+		eye.position = Vector3(0.115 * side, 0.50, -0.365)
 		_mesh_root.add_child(eye)
 
 	var light := OmniLight3D.new()
 	light.light_energy = 0.9
-	light.omni_range = 4.5
+	light.omni_range = 3.0
 	light.shadow_enabled = false
 	light.light_color = ELEMENT_COLORS[element]
-	light.position = Vector3(0, 0.8, 0)
+	light.position = Vector3(0, 0.5, 0)
 	_mesh_root.add_child(light)
 	_apply_element()
 
 
 func _apply_element() -> void:
 	var col: Color = ELEMENT_COLORS[element]
-	_body_mat.set_shader_parameter("albedo_color", Color(col.r, col.g, col.b))
+	# Milky, desaturated gel rather than the raw element hue. The body used to be
+	# the element colour at full chroma with a 0.7 rim and a 0.9 spec, which on a
+	# sphere this size is a solid saturated disc. Mixing most of the way to white
+	# and leaving the saturated hue to the core, the eyes and the light is how the
+	# reference creatures read.
+	var gel := col.lerp(Color(0.88, 0.90, 0.92), 0.42)
+	gel = gel.lerp(Color(1, 1, 1), 0.10)
+	_body_mat.set_shader_parameter("albedo_color", gel)
 	_core_mat.albedo_color = col
 	_core_mat.emission = col
 

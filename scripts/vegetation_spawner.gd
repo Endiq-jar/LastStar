@@ -19,6 +19,31 @@ var _player: Node3D
 var _scatter_roots: Array[Node3D] = []
 var _cull_timer := 0.0
 const CULL_NEAR := 190.0
+## Fraction of the scatter that is actually instantiated, set by the quality
+## tier. The spawner used to build the full count and the tier then hid the whole
+## node - see World.apply_quality, which no longer does that.
+var _detail := 1.0
+
+
+var _built := false
+
+
+## Called by the quality tuner. Safe to call before OR after the scatter exists:
+## the counts are only read inside _ready(), so a late call rebuilds the scatter
+## at the new density rather than silently doing nothing. World.apply_quality()
+## runs after _ready() has been queued, and relying on that ordering to be the
+## right way round is exactly the kind of bug that only shows up on one device.
+func set_detail_scale(scale: float) -> void:
+	var next := clampf(scale, 0.1, 1.0)
+	if is_equal_approx(next, _detail):
+		return
+	_detail = next
+	if _built:
+		_rebuild()
+
+
+func _scaled(base: int) -> int:
+	return maxi(1, int(round(float(base) * _detail)))
 
 
 func _ready() -> void:
@@ -26,6 +51,25 @@ func _ready() -> void:
 	var terrain := get_node_or_null(terrain_path)
 	if terrain == null or not terrain.has_method("get_height_at"):
 		push_warning("VegetationSpawner: terrain missing")
+		return
+	_spawn_round_trees(terrain)
+	_spawn_pines(terrain)
+	_spawn_rocks(terrain)
+	_spawn_flowers(terrain)
+	_spawn_fallen_logs(terrain)
+	_spawn_pebbles(terrain)
+	_built = true
+
+
+## Drop every scatter root and build again at the current detail level. Only
+## used when the quality tier changes after the world is already standing.
+func _rebuild() -> void:
+	for root in _scatter_roots:
+		if is_instance_valid(root):
+			root.queue_free()
+	_scatter_roots.clear()
+	var terrain := get_node_or_null(terrain_path)
+	if terrain == null or not terrain.has_method("get_height_at"):
 		return
 	_spawn_round_trees(terrain)
 	_spawn_pines(terrain)
@@ -42,7 +86,6 @@ func _toon(color: Color, rim: float = 0.3) -> ShaderMaterial:
 	m.set_shader_parameter("shadow_tint", Color(0.55, 0.62, 0.88))
 	m.set_shader_parameter("rim_color", Color(1.0, 0.95, 0.8))
 	m.set_shader_parameter("rim_strength", rim)
-	m.set_shader_parameter("spec_energy", 0.18)
 	m.set_shader_parameter("diffuse_energy", 1.0)
 	return m
 
@@ -77,7 +120,10 @@ func _pick(terrain: Node, rng: RandomNumberGenerator, min_h: float, max_h: float
 		attempts += 1
 		var x := rng.randf_range(-SPREAD, SPREAD)
 		var z := rng.randf_range(-SPREAD, SPREAD)
-		var h: float = terrain.get_height_at(x, z)
+		# Bumped surface, so trees and rocks sit in the visible ground rather
+		# than hovering over it (see TerrainGenerator.surface_height_at).
+		var h: float = terrain.surface_height_at(x, z) if terrain.has_method("surface_height_at") \
+			else terrain.get_height_at(x, z)
 		if h < min_h or h > max_h:
 			continue
 		# Reject actual water rather than a circle around the lake centre:
@@ -95,7 +141,7 @@ func _pick(terrain: Node, rng: RandomNumberGenerator, min_h: float, max_h: float
 func _spawn_round_trees(terrain: Node) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 771
-	var spots := _pick(terrain, rng, 3.0, 78.0, 0.85, TREE_COUNT)
+	var spots := _pick(terrain, rng, 3.0, 78.0, 0.85, _scaled(TREE_COUNT))
 
 	var trunk_mat := _toon(Color(0.42, 0.29, 0.22))
 	var leaf_mats := [
@@ -158,7 +204,7 @@ func _spawn_round_trees(terrain: Node) -> void:
 func _spawn_pines(terrain: Node) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 992
-	var spots := _pick(terrain, rng, 10.0, 135.0, 1.1, PINE_COUNT)
+	var spots := _pick(terrain, rng, 10.0, 135.0, 1.1, _scaled(PINE_COUNT))
 	var trunk_mat := _toon(Color(0.36, 0.26, 0.2))
 	var pine_mats := [
 		_toon(Color(0.22, 0.48, 0.32), 0.35),
@@ -208,7 +254,7 @@ func _spawn_fallen_logs(terrain: Node) -> void:
 	## they break the grass silhouette, and a player can see they were placed.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 771
-	var spots := _pick(terrain, rng, 3.0, 70.0, 0.9, LOG_COUNT)
+	var spots := _pick(terrain, rng, 3.0, 70.0, 0.9, _scaled(LOG_COUNT))
 	if spots.is_empty():
 		return
 	var bark := _toon(Color(0.34, 0.26, 0.20), 0.18)
@@ -258,7 +304,7 @@ func _spawn_pebbles(terrain: Node) -> void:
 	## like a flat texture painted on the hill.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 977
-	var spots := _pick(terrain, rng, 1.2, 90.0, 1.0, PEBBLE_COUNT)
+	var spots := _pick(terrain, rng, 1.2, 90.0, 1.0, _scaled(PEBBLE_COUNT))
 	if spots.is_empty():
 		return
 
@@ -290,7 +336,7 @@ func _spawn_pebbles(terrain: Node) -> void:
 func _spawn_rocks(terrain: Node) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 313
-	var spots := _pick(terrain, rng, 0.6, 140.0, 1.6, ROCK_COUNT, false)
+	var spots := _pick(terrain, rng, 0.6, 140.0, 1.6, _scaled(ROCK_COUNT), false)
 	var mat := _toon(Color(0.62, 0.62, 0.68), 0.35)
 	var root := Node3D.new()
 	root.name = "Rocks"
@@ -314,7 +360,7 @@ func _spawn_rocks(terrain: Node) -> void:
 func _spawn_flowers(terrain: Node) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
-	var spots := _pick(terrain, rng, 2.0, 60.0, 0.7, FLOWER_COUNT)
+	var spots := _pick(terrain, rng, 2.0, 60.0, 0.7, _scaled(FLOWER_COUNT))
 	var colors := [
 		Color(0.55, 0.85, 1.0),
 		Color(1.0, 0.78, 0.9),

@@ -50,8 +50,21 @@ static func _glow(color: Color, energy: float = 1.5) -> StandardMaterial3D:
 ## cape another across her chest, both plainly visible in the close-up. A toon
 ## character does not need self-shadowing - the ramp and the outline carry the
 ## form - so the small pieces opt out and only the body parts cast.
+##
+## The BODY still casts (see _body), which is what puts her on the ground. With
+## every piece opted out she had no shadow whatsoever and appeared to hover a
+## hand's width above the terrain, which is most of why the character looked
+## "pasted on" rather than standing in the world.
 static func _no_shadow(mi: MeshInstance3D) -> MeshInstance3D:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
+## A structural body part: casts a real shadow so the character is anchored to
+## the ground. Only the main silhouette pieces use this (head, torso, skirt,
+## thighs, boots, cape surface), not the decorations stacked on top of them.
+static func _body(mi: MeshInstance3D) -> MeshInstance3D:
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	return mi
 
 
@@ -115,12 +128,12 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	skirt.bottom_radius = 0.34
 	skirt.height = 0.30
 	skirt.radial_segments = 16
-	_outlined(torso, skirt, accent, Vector3(0, 0.82, 0), 0.010)
+	_body(_outlined(torso, skirt, accent, Vector3(0, 0.82, 0), 0.010))
 
 	var chest := CapsuleMesh.new()
 	chest.radius = 0.19
 	chest.height = 0.56
-	_outlined(torso, chest, outfit, Vector3(0, 1.18, 0), 0.009)
+	_body(_outlined(torso, chest, outfit, Vector3(0, 1.18, 0), 0.009))
 
 	# Was a 0.22 outer-radius hoop on a chest of radius 0.19 - a hula hoop floating
 	# around her torso, which from the front rendered as a large grey donut sitting
@@ -165,7 +178,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	skull.rings = 12
 	# A thin outline on the head: at 0.012 the black hull around pale skin read as a
 	# dark helmet rather than as a drawn contour.
-	_outlined(head, skull, skin, Vector3.ZERO, 0.006)
+	_body(_outlined(head, skull, skin, Vector3.ZERO, 0.006))
 
 	# Anime eyes: two glowing planes with a dark outline plane behind.
 	#
@@ -283,11 +296,11 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		var thigh := CapsuleMesh.new()
 		thigh.radius = 0.068
 		thigh.height = 0.46
-		_outlined(leg, thigh, skin, Vector3(0, -0.23, 0), 0.007)
+		_body(_outlined(leg, thigh, skin, Vector3(0, -0.23, 0), 0.007))
 		var boot := CapsuleMesh.new()
 		boot.radius = 0.082
 		boot.height = 0.40
-		_add(leg, boot, accent, Vector3(0, -0.55, 0))
+		_body(_add(leg, boot, accent, Vector3(0, -0.55, 0)))
 
 		var toe := BoxMesh.new()
 		toe.size = Vector3(0.13, 0.09, 0.24)
@@ -301,7 +314,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	torso.add_child(cape_root)
 	var cape_mesh := QuadMesh.new()
 	cape_mesh.size = Vector2(0.42, 0.72)
-	var cape_mi := _no_shadow(_outlined(cape_root, cape_mesh, cape_mat, Vector3(0, -0.34, 0.02), 0.012))
+	var cape_mi := _body(_outlined(cape_root, cape_mesh, cape_mat, Vector3(0, -0.34, 0.02), 0.012))
 	# No 180-degree yaw. QuadMesh's front face points along +Z, the character faces
 	# -Z and the camera sits behind her on +Z, so the cape already faces the camera.
 	# Yawing it by 180 turned its front away and left only the inverted-hull outline

@@ -89,6 +89,13 @@ void fragment() {
 	vec3 meadow_detail = tri(meadow_tex, v_world, wn, uv_scale);
 	vec3 rock_detail = tri(rock_tex, v_world, wn, uv_scale * 0.62);
 	vec3 sand_detail = tri(sand_tex, v_world, wn, uv_scale * 1.25);
+	// A second, much finer sample at a different scale. One texture at one scale
+	// over a whole hillside is what makes procedural terrain read as a single
+	// flat colour: there is nothing between the macro patch (hundreds of metres)
+	// and the base tint. Blending two scales of the same paint gives the
+	// mid-frequency breakup a painted hillside has.
+	vec3 meadow_fine = tri(meadow_tex, v_world, wn, uv_scale * 4.7);
+	float meadow_fl = dot(meadow_fine, vec3(0.2126, 0.7152, 0.0722));
 	float meadow_l = dot(meadow_detail, vec3(0.2126, 0.7152, 0.0722));
 	float rock_l = dot(rock_detail, vec3(0.2126, 0.7152, 0.0722));
 	float sand_l = dot(sand_detail, vec3(0.2126, 0.7152, 0.0722));
@@ -96,7 +103,8 @@ void fragment() {
 	// Meadow: two greens, broken up by the soft macro patches, modulated by the
 	// painted detail (kept subtle so the flat anime bands still dominate).
 	vec3 grass = mix(meadow_deep.rgb, meadow_tint.rgb, 0.35 + patch * 0.65);
-	grass *= mix(1.0, meadow_l * 1.9, 0.45);
+	grass *= mix(1.0, meadow_l * 1.9, 0.50);
+	grass *= mix(1.0, meadow_fl * 1.7, 0.30);
 	// A little golden meadow mixed in, the way open-world grass reads. Kept
 	// low: push this and the hillsides turn acid yellow-green.
 	// The dry blend is nearly as weak as it can be while still breaking up the
@@ -168,6 +176,14 @@ void fragment() {
 	// which is what made the ridges read as blank cardboard cut-outs.
 	vec3 hazed = mix(vec3(luma), col, 0.72) * vec3(0.80, 0.86, 1.06);
 	col = mix(col, hazed, haze * 0.88);
+
+	// Painted ground darkens in the creases. Lambert alone leaves a smooth
+	// hillside one flat value across the whole frame; a background painter puts
+	// a darker wash on every concave fold and that is most of what gives the
+	// ground its rolls. `slope` is already computed for the rock blend, so this
+	// costs nothing.
+	float fold = smoothstep(0.12, 0.55, slope);
+	col *= mix(1.0, 0.78, fold * 0.55);
 
 	// Pull the hue back toward grey before handing the albedo to the light.
 	//

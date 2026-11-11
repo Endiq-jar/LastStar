@@ -33,7 +33,6 @@ func _ready() -> void:
 	stone.set_shader_parameter("albedo_color", Color(0.52, 0.55, 0.62))
 	stone.set_shader_parameter("shadow_tint", Color(0.6, 0.66, 0.95))
 	stone.set_shader_parameter("rim_strength", 0.4)
-	stone.set_shader_parameter("spec_energy", 0.2)
 
 	var glow := StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED

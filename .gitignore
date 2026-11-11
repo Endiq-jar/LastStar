@@ -39,3 +39,8 @@ Thumbs.db
 
 # Android build template installed by `godot --install-android-build-template`
 /android/
+
+# The shared DEBUG signing key is deliberately tracked: every APK must carry the
+# same signature or Android refuses to install an update over an existing copy.
+# It is a debug key (public password "android"), never a release key.
+!keys/debug.keystore

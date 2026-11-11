@@ -382,14 +382,46 @@ jobs:
           "$SDKMANAGER" "platform-tools" "platforms;android-34" "build-tools;34.0.0" \
             "cmake;3.22.1" "ndk;23.2.8568313" | tail -5
 
-      - name: Configure Godot editor settings (SDK, JDK, debug keystore)
+      - name: Install the shared debug keystore
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/share/godot/export_templates"
           ln -sfn /opt/godot-templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION_DIR}"
-          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
-            -keystore "$HOME/debug.keystore" -storepass android \
-            -dname "CN=Android Debug,O=Android,C=US" -validity 9999
+
+          # THE SAME DEBUG KEY FOR EVERY BUILD, and that is the whole point.
+          #
+          # This step used to run `keytool -genkeypair` unconditionally, minting a
+          # brand new RSA key on every runner. Every published APK was therefore
+          # signed by a different certificate, and Android refuses to install an
+          # APK whose signature does not match the installed copy: the phone
+          # reports "App not installed as package conflicts with an existing
+          # package", with nothing in the message to suggest signatures. That is
+          # why updating LastStar on a phone failed.
+          #
+          # The keystore is committed to the repository instead of a cache: caches
+          # are evicted, and an evicted cache would silently rotate the signing
+          # key again and break every existing install with no error in CI. A
+          # debug signing key is public by definition - that is what "debug"
+          # means - so committing it costs nothing. A release build uses the
+          # ANDROID_KEYSTORE_BASE64 secret below and is unaffected.
+          cp keys/debug.keystore "$HOME/debug.keystore"
+
+          # Godot's Android export wants a JKS, and the committed file is PKCS#12
+          # (exportable without a JDK). keytool converts it and PRESERVES the
+          # certificate and key, so the signature stays identical build to build.
+          keytool -importkeystore -noprompt \
+            -srckeystore "$HOME/debug.keystore" -srcstoretype PKCS12 \
+            -srcstorepass android -srcalias androiddebugkey -srckeypass android \
+            -destkeystore "$HOME/debug.jks" -deststoretype JKS \
+            -deststorepass android -destalias androiddebugkey -destkeypass android
+          cp "$HOME/debug.jks" "$HOME/debug.keystore"
+
+          # Assert the fingerprint so a rotated key fails loudly here rather than
+          # silently on a player's phone.
+          FP=$(keytool -list -v -keystore "$HOME/debug.keystore" -storepass android \
+                 -alias androiddebugkey | grep -m1 "SHA-256:" || true)
+          echo "::notice::Debug signing key $FP"
+
           mkdir -p "$HOME/.config/godot"
           SETTINGS="$HOME/.config/godot/editor_settings-4.3.tres"
           {

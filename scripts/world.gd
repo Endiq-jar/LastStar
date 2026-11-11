@@ -223,9 +223,17 @@ func apply_quality() -> void:
 	var veg := get_node_or_null("Vegetation")
 
 	# --- shadows -----------------------------------------------------------
+	#
+	# Performance used to switch the sun's shadow map off completely. That single
+	# line is the whole "the character is floating on nothing" problem: with no
+	# shadow map there is no contact shadow under her, no cast shadow from the
+	# hills, and no self-shadowing anywhere. The world flattens into pure ambient
+	# and every object looks pasted on. A short-radius shadow map is one of the
+	# cheapest things on the GPU and it is the single most important depth cue in
+	# the frame, so no tier turns it off now - the tiers only shorten its reach.
 	if tier == 1:
-		sun.shadow_enabled = false
-		sun.directional_shadow_max_distance = 120.0
+		sun.shadow_enabled = true
+		sun.directional_shadow_max_distance = 70.0
 	elif compat:
 		# Compatibility shadows are cheap but not free; keep the radius short.
 		sun.shadow_enabled = true
@@ -242,8 +250,17 @@ func apply_quality() -> void:
 		_grass_field.call("set_density_scale", 1.0 if tier >= 2 else (0.65 if tier == 0 else 0.35))
 
 	# --- vegetation ---------------------------------------------------------
+	#
+	# Performance used to set the whole Vegetation node invisible: every tree,
+	# rock, flower and shrub in the valley vanished and the player was left on
+	# bare terrain with a few far-off waypoints. That is why the phone screenshots
+	# look like an empty green plane with props scattered on it while the desktop
+	# renders have hillsides full of trees. Thinning the scatter is a fair trade;
+	# deleting the entire world's dressing is not, so no tier does that now.
 	if veg:
-		veg.visible = tier != 1
+		veg.visible = true
+		if veg.has_method("set_detail_scale"):
+			veg.call("set_detail_scale", 1.0 if tier >= 2 else (0.8 if tier == 0 else 0.55))
 
 	if env == null:
 		return

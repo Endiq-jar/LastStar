@@ -20,9 +20,9 @@ const VIEW_CHUNKS := 5            ## radius, in chunks (5 * 26 = 130 m)
 ## blotches of green on bare ground rather than a carpet. Roughly doubled to close
 ## that up. The far tiers stay cheap because each tuft there covers more screen
 ## area.
-const BLADES_NEAR := 9000         ## instances in a chunk adjacent to the player
-const BLADES_MID := 3600
-const BLADES_FAR := 1100
+const BLADES_NEAR := 14000        ## instances in a chunk adjacent to the player
+const BLADES_MID := 5200
+const BLADES_FAR := 1500
 const MAX_CHUNKS := 81            ## (2*5+1)^2, hard cap on live chunks
 const SEA_MARGIN := 2.4           ## metres above water level where grass starts
 
@@ -45,6 +45,14 @@ var _blade_mesh: Mesh
 var _material: ShaderMaterial
 var _last_center := Vector2i(9999, 9999)
 var _build_budget := 3             ## chunks built per frame, to avoid hitches
+## Multiplies every tier's instance count. This is the real density control.
+##
+## set_density_scale() used to write _build_budget and nothing else, so the
+## "density" setting only changed how many chunks were streamed per frame - the
+## blade counts were identical at every tier. A phone that dropped to
+## Performance therefore grew the same meadow as a desktop, which is exactly
+## backwards, and the quality menu's promise was never wired to anything.
+var _density := 1.0
 var _enabled := true
 ## Diagnostics: why blades were rejected, so a density regression is explainable
 ## instead of a mystery number.
@@ -189,12 +197,18 @@ func _build_chunk(key: Vector2i) -> void:
 	# Taller further out hides the reduced density without turning the mid ring
 	# into reeds.
 	var height_scale := 1.0 + clampf(float(dist) * 0.045, 0.0, 0.22)
+	count = maxi(1, int(round(float(count) * _density)))
 	_tier_counts[count] = int(_tier_counts.get(count, 0)) + 1
 	for i in range(count):
 		_tried += 1
 		var x := origin_x + rng.randf() * CHUNK_SIZE
 		var z := origin_z + rng.randf() * CHUNK_SIZE
-		var h: float = _terrain.get_height_at(x, z)
+		# surface_height_at(), not get_height_at(): the grass has to sit on the
+		# bumpy mesh the camera actually sees, not on the smooth analytic field
+		# the collision uses. Those differ by up to the sagitta of a 3 m triangle,
+		# which is exactly enough for a tuft to hover with air under it.
+		var h: float = _terrain.surface_height_at(x, z) if _terrain.has_method("surface_height_at") \
+			else _terrain.get_height_at(x, z)
 		# Grass grows on gentle ground above the shoreline, not on cliffs,
 		# not underwater and not on the high rock/snow bands.
 		if h > 58.0:
@@ -313,6 +327,16 @@ func focus_at(point: Vector3) -> void:
 
 
 func set_density_scale(scale: float) -> void:
-	## Used by the quality tuner: 1.0 = full, 0.5 = half the blades.
-	_build_budget = maxi(1, int(round(4.0 * scale)))
+	## Used by the quality tuner: 1.0 = full, 0.65 = Balanced, 0.35 = Performance.
+	##
+	## Only affects chunks built AFTER the call, so existing geometry is rebuilt
+	## by dropping the ring and streaming it again - otherwise the player would
+	## see the density change only once they had walked far enough to cycle every
+	## chunk, which at 26 m chunks and 130 m of view is well over a minute.
+	_build_budget = maxi(2, int(round(4.0 * scale)))
 	visible = scale > 0.01
+	if is_equal_approx(scale, _density):
+		return
+	_density = scale
+	if _player != null:
+		_last_center = Vector2i(9999, 9999)
