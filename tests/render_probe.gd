@@ -632,20 +632,20 @@ func _dump_visual_tree(player: Node) -> void:
 	_log("INFO", "PLAYER_MESHES total=%d hidden_in_tree=%d" % [vis_total, hidden])
 	# Exact world Y of the landmarks, relative to the player's own origin. If the
 	# model is proportioned correctly the head sits at ~1.8 and the boots near 0.
-	var origin_y := player.global_position.y
+	var origin_y: float = (player as Node3D).global_position.y
 	for want in ["Torso", "Head", "ArmL", "LegL", "LegR"]:
-		var node := visual.find_child(want, true, false) as Node3D
+		var node: Node3D = visual.find_child(want, true, false) as Node3D
 		if node != null:
 			_log("INFO", "PART %s world_y=%.2f (rel %.2f) scale=%s" % [
 				want, node.global_position.y, node.global_position.y - origin_y,
 				str(node.global_transform.basis.get_scale())])
-	var mesh_y := []
+	var mesh_y: Array[String] = []
 	for mi in visual.find_children("*", "MeshInstance3D", true, false):
 		var m := mi as MeshInstance3D
 		if m.mesh == null or not m.is_visible_in_tree():
 			continue
 		var b := m.global_transform * m.get_aabb()
-		mesh_y.append("%s:%.1f-%.1f" % [m.name, b.position.y - origin_y, b.end.y - origin_y])
+		mesh_y.append("%s:%.1f-%.1f" % [str(m.name), b.position.y - origin_y, b.end.y - origin_y])
 	if mesh_y.size() > 0:
 		_log("INFO", "MESH_Y (rel to feet): " + " ".join(mesh_y.slice(0, 14)))
 
