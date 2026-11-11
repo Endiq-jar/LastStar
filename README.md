@@ -25,7 +25,7 @@ produces an installable APK on every push.
 |---|---|
 | **Renderer** | OpenGL ES 3.0 (Compatibility) — runs on every Android device since 2013, including PowerVR GPUs like the Helio P95 where the Vulkan path black-screens |
 | **Anime terrain** | 900 m procedural valley, 144² heightfield, custom `terrain_anime` shader: painterly banded meadow, slope-aware rock, wet shoreline and snow caps |
-| **Cel shading** | `anime_toon.gdshader` — world-space two-band ramp, cool tinted shadows, warm rim light, anime specular band + inverted-hull outline pass |
+| **Cel shading** | `anime_toon.gdshader` — world-space two-band ramp, cool tinted shadows, a small cool rim + inverted-hull outline pass. No specular lobe: on near-black cloth it only ever painted grey patches, so the ramp and the outline carry the form |
 | **Party of three** | Sora (Anemo, sword), Ember (Pyro, catalyst), Volt (Electro, bow). Switch instantly with **T** or the portrait row |
 | **Traversal** | Sprint with stamina, double jump, **gliding** with wind wings, plunge attack from a dive |
 | **Combat** | 3-hit melee combo, elemental skill (E) with cooldown, elemental burst (Q) that spends energy, damage numbers, hit flashes, shockwaves |
@@ -34,7 +34,8 @@ produces an installable APK on every push.
 | **World dressing** | Lake with stylized wave shader, wind arches, glowing crystal formations, campfires, rolling clouds, 3 700+ instanced trees/rocks/flowers and a 2 600-blade swooshing grass carpet |
 | **Day / night** | Sun angle, colour and ambient light drift over time; campfire and crystal lights carry the night |
 | **Environment (rendered)** | ![wide](docs/render_wide.png) ![gameplay](docs/render_world.png) |
-| **Grass** | A streaming meadow over the whole valley: 26 m chunks rebuilt around the player out to 130 m, density falling off with distance (2,600 / 1,300 / 520 blades per chunk), ~80,000 instances at full quality. Wind-waved, per-instance colour variation, root-to-tip gradient and faked subsurface scattering |
+| **Character (rendered, front)** | ![front](docs/render_player.png) |
+| **Grass** | A streaming meadow over the whole valley: 26 m chunks rebuilt around the player out to 130 m, density falling off with distance (9,000 / 3,600 / 1,100 blades per chunk), ~80,000 instances at full quality. Wind-waved, per-instance colour variation, root-to-tip gradient and faked subsurface scattering |
 | **Mobile UI** | Touch joystick + right-side camera drag + on-screen action buttons, plus a **Quality** toggle (Balanced / Performance / High) |
 
 ### Controls
