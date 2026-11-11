@@ -25,7 +25,7 @@ import pathlib
 import re
 import sys
 
-SHADER_DIR = pathlib.Path("shaders")
+SHADER_DIRS = [pathlib.Path("shaders"), pathlib.Path("assets/shaders")]
 
 # Built-ins that exist only in the fragment stage of a spatial shader.
 FRAGMENT_ONLY = (
@@ -56,6 +56,31 @@ def check(path: pathlib.Path) -> None:
         if re.search(r"\bvar\s+\w+\s*:", code):
             problems.append(f"{path}:{number}: 'var' is GDScript, not GLSL")
 
+        # Built-ins whose type is easy to get wrong, where a wrong type does not
+        # fail loudly: Godot logs a shader error and draws the surface with a
+        # default material, which is how the meadow turned lavender.
+        #
+        #   RIM_TINT  is a float (0 = white, 1 = albedo), not a colour.
+        #   BACKLIGHT is vec3.
+        #   AO, RIM, SPECULAR are floats.
+        m = re.match(r"\s*RIM_TINT\s*=\s*(vec[234]|texture\s*\()", code)
+        if m:
+            problems.append(
+                f"{path}:{number}: RIM_TINT is a float in Godot 4 (0=white, "
+                f"1=albedo) - a vec3 there is a compile error"
+            )
+        # Writing ALPHA forces the transparent pipeline even if it is only read.
+        # The opt-out marker may sit on this line or on either of the two above
+        # it, so a multi-line comment can explain itself.
+        recent = " ".join(lines[max(0, number - 5):number])
+        if (re.search(r"^\s*ALPHA\s*=\s*", code)
+                and "lint:allow-transparent" not in recent):
+            problems.append(
+                f"{path}:{number}: writing ALPHA moves the material to the "
+                f"transparent pipeline - use ALPHA_SCISSOR_THRESHOLD for cutouts "
+                f"(or add '// lint:allow-transparent' if it is genuinely needed)"
+            )
+
         if re.match(r"\s*void\s+vertex\s*\(", code):
             in_vertex = True
             depth = code.count("{") - code.count("}")
@@ -73,10 +98,15 @@ def check(path: pathlib.Path) -> None:
 
 
 def main() -> int:
-    if not SHADER_DIR.is_dir():
-        print(f"no {SHADER_DIR}/ directory here")
+    shaders: list[pathlib.Path] = []
+    for d in SHADER_DIRS:
+        if not d.is_dir():
+            continue
+        # rglob, not glob: the asset shader library is nested by category.
+        shaders.extend(sorted(d.rglob("*.gdshader")))
+    if not shaders:
+        print("no shader directories found here")
         return 1
-    shaders = sorted(SHADER_DIR.glob("*.gdshader"))
     for path in shaders:
         check(path)
     if problems:

@@ -28,6 +28,7 @@ velocity move_and_slide is_on_floor create_tween tween_property bind connect
 body_entered body_exited area_entered button_down button_up gui_input timeout
 pressed mouse_entered mouse_exited process_mode collision_layer collision_mask
 monitoring monitorable paused time_scale y_sort_enabled z_index clip_children
+process_priority process_physics_priority process_mode
 call_deferred set_process set_physics_process has_method call emit
 """.split())
 
