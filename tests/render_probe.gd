@@ -143,6 +143,14 @@ func _run() -> void:
 			_log("INFO" if pct > 99.0 else "FAIL",
 				"terrain normals face up: %.1f%% of %d sampled" % [pct, checked])
 
+	# --- is the character actually on screen? -------------------------------
+	# Run early, deliberately: the annotation API returns only the first ~24
+	# entries, so a check that reports late is invisible in CI even when it fails.
+	# The character has been buried by grass and pushed behind the HUD band
+	# several times, and both were found only by looking at a PNG.
+	if cam:
+		_check_player_visible(cam, world)
+
 	# --- what is in front of the camera ------------------------------------
 	# An opaque, unshaded blob that covers a third of the gameplay frame has
 	# shown up twice now and both times the cause was guessed at from the PNG.
@@ -155,12 +163,6 @@ func _run() -> void:
 	# Compact one-liner so the grass totals survive the annotation cap: the API
 	# returns only the first ~24 annotations, and the detailed grass report runs
 	# later in the log than that.
-	# Is the character actually visible in the gameplay frame? She has been
-	# covered by grass and pushed behind the HUD band more than once, and the
-	# only way that was caught was by looking at the PNG.
-	if cam:
-		_check_player_visible(cam, world)
-
 	var gf := world.get_node_or_null("GrassField")
 	if gf != null:
 		_log("INFO", "GRASS_SUMMARY blades=%d chunks=%d diag=%s" % [

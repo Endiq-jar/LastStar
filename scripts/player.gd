@@ -26,13 +26,16 @@ const CAM_DISTANCE := 5.0
 ## Chest height on a 1.8 m character. The frame is centred here, which leaves the
 ## full body in view above the HUD band at the bottom of the screen.
 const CAM_HEIGHT := 1.45
-## The camera aims ABOVE the pivot. The spring arm places the camera
-## behind and above the pivot and the camera keeps the arm's orientation, so the
-## frame is centred on wherever the arm points, not on the pivot. Tilting the
-## camera up by this much pulls the character up from the bottom of the frame into
-## the middle without moving the camera at all. The HUD's action bar occupies the
-## bottom quarter of the screen, so a character centred on the pivot sits behind it.
-const CAM_AIM_LIFT := 1.05
+## Extra camera pitch, in radians, applied on top of the player's own look angle.
+##
+## Sign is easy to get backwards and I did. The camera inherits the spring arm's
+## orientation and the arm hangs behind and above the pivot, so a POSITIVE x
+## rotation pitches the camera UP and moves the subject DOWN the frame. An "aim
+## lift" of 1.05 m therefore pushed the character off the bottom of the screen
+## instead of up it. Negative tilts the lens down, centring the frame a little
+## below the pivot, which is what puts a chest-height pivot comfortably inside the
+## play area rather than behind the HUD's action bar.
+const CAM_AIM_DROP := -0.16
 const CAM_SHOULDER := 0.45
 const MOUSE_SENS := 0.0026
 const STICK_SENS := 2.4
@@ -152,7 +155,7 @@ func _build_camera() -> void:
 	_pivot.add_child(_spring)
 
 	_camera = Camera3D.new()
-	_camera.rotation_degrees = Vector3(rad_to_deg(atan2(CAM_AIM_LIFT, CAM_DISTANCE)), 0.0, 0.0)
+	_camera.rotation_degrees = Vector3(rad_to_deg(CAM_AIM_DROP), 0.0, 0.0)
 	_camera.fov = 62.0
 	_camera.near = 0.05
 	_camera.far = 900.0
