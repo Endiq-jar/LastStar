@@ -238,22 +238,36 @@ jobs:
           # unbounded retry loop starves the probe of its own time budget. Each
           # attempt is therefore hard-limited, and apt's own network timeouts are
           # shortened so a dead mirror fails fast instead of hanging.
-          APT="-o Acquire::http::Timeout=25 -o Acquire::ftp::Timeout=25"
-          APT="$APT -o Acquire::Retries=1 -o Acquire::ForceIPv4=true"
-          OK=0
-          for attempt in 1 2 3; do
-            timeout -k 5 150 sudo apt-get $APT update -qq || true
-            if timeout -k 5 300 sudo apt-get $APT install -y -qq \
-                 xvfb libgl1 libglx-mesa0 libegl1; then
-              OK=1
-              break
+          # The GitHub runner image already ships Xvfb and Mesa (it needs a GL
+          # stack for browsers), so apt is a *fallback*, not a prerequisite.
+          # Driving the install unconditionally meant a flaky mirror took the
+          # whole probe with it, even though everything needed was already on
+          # disk. Check first; only reach for apt if something is genuinely
+          # missing.
+          have_gl() {
+            command -v xvfb-run >/dev/null 2>&1 &&
+            ls /usr/lib/x86_64-linux-gnu/libGL.so* >/dev/null 2>&1
+          }
+          if have_gl; then
+            echo "::notice::Xvfb and Mesa already present - skipping apt"
+          else
+            APT="-o Acquire::http::Timeout=25 -o Acquire::ftp::Timeout=25"
+            APT="$APT -o Acquire::Retries=1 -o Acquire::ForceIPv4=true"
+            OK=0
+            for attempt in 1 2 3; do
+              timeout -k 5 150 sudo apt-get $APT update -qq || true
+              if timeout -k 5 300 sudo apt-get $APT install -y -qq \
+                   xvfb libgl1 libglx-mesa0 libegl1; then
+                OK=1
+                break
+              fi
+              echo "::notice::apt attempt $attempt did not finish; retrying"
+              sleep $((attempt * 5))
+            done
+            if [ "$OK" -ne 1 ]; then
+              echo "::warning::no GL stack for the pixel probe - no frame this run"
+              exit 0
             fi
-            echo "::notice::apt attempt $attempt did not finish; retrying"
-            sleep $((attempt * 5))
-          done
-          if [ "$OK" -ne 1 ]; then
-            echo "::warning::could not install Xvfb/Mesa after 3 attempts - no frame this run"
-            exit 0
           fi
           mkdir -p /tmp/probe
 
