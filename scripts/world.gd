@@ -309,20 +309,22 @@ func _setup_environment() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 
-	var sky := Sky.new()
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.15, 0.32, 0.66)
-	sky_mat.sky_horizon_color = Color(0.74, 0.88, 1.0)
-	sky_mat.sky_curve = 0.11
-	sky_mat.sky_energy_multiplier = 1.15
-	# The ground half of a procedural sky is only seen below the horizon, but a
-	# pitch-black or blown-out value there shows up in reflections and fog, so
-	# keep it a soft hazy green-blue.
-	sky_mat.ground_bottom_color = Color(0.30, 0.44, 0.40)
-	sky_mat.ground_horizon_color = Color(0.64, 0.78, 0.90)
-	sky_mat.ground_curve = 0.06
-	sky_mat.sun_angle_max = 26.0
-	sky_mat.sun_curve = 0.10
+	# The stock ProceduralSkyMaterial only gives a two-colour gradient, and the
+	# published wide shot read exactly like one: 85% of the frame was a flat blue
+	# wash with no clouds, no haze band at the ridge and no sun anywhere in it.
+	# shaders/sky_anime.gdshader gives the stacked horizon haze and an analytic sun
+	# disc that tracks the directional light, for a few smoothsteps per sky pixel.
+	# preload, not load, so the export dependency scanner is guaranteed to pick
+	# the shader up and ship it in the APK.
+	var sky_mat := ShaderMaterial.new()
+	sky_mat.shader = preload("res://shaders/sky_anime.gdshader")
+	# Tuned here rather than left at the shader defaults so the values that shape
+	# the frame live next to the rest of the lighting rig.
+	sky_mat.set_shader_parameter("zenith_color", Color(0.10, 0.28, 0.68))
+	sky_mat.set_shader_parameter("horizon_color", Color(0.86, 0.93, 1.0))
+	sky_mat.set_shader_parameter("glow_strength", 0.45)
+	sky_mat.set_shader_parameter("band_strength", 0.11)
+	sky_mat.set_shader_parameter("gradient_power", 0.52)
 	sky.sky_material = sky_mat
 	env.sky = sky
 	# Ambient was 1.15 here, then recomputed every frame to 0.85-1.40 by the
@@ -508,6 +510,20 @@ func _update_time_of_day() -> void:
 		mat.sky_energy_multiplier = lerpf(1.15, 1.0, warmth)
 		mat.ground_horizon_color = mat.sky_horizon_color
 		mat.ground_bottom_color = Color(0.20, 0.26, 0.22).lerp(Color(0.28, 0.24, 0.22), warmth)
+	elif sky != null and sky.sky_material is ShaderMaterial:
+		# Same intent for the painted sky: deepen the zenith and push the horizon
+		# toward peach as the sun drops, so the whole frame moves together. The sun
+		# disc and halo need no help - the shader reads LIGHT0 directly, so they
+		# follow the light on their own.
+		var sm := sky.sky_material as ShaderMaterial
+		sm.set_shader_parameter("zenith_color",
+			Color(0.10, 0.28, 0.68).lerp(Color(0.13, 0.20, 0.46), warmth))
+		sm.set_shader_parameter("horizon_color",
+			Color(0.86, 0.93, 1.0).lerp(Color(1.0, 0.83, 0.66), warmth))
+		# The warm band is subtle at noon and broad and strong at dawn/dusk.
+		sm.set_shader_parameter("glow_strength", lerpf(0.42, 0.78, warmth))
+		sm.set_shader_parameter("horizon_glow",
+			Color(1.0, 0.94, 0.80).lerp(Color(1.0, 0.70, 0.42), warmth))
 
 	_grade_env(env, warmth)
 
@@ -858,16 +874,22 @@ func _spawn_clouds() -> void:
 	# Clouds are lit by the sky, not emissive. 0.55 alpha over a bright blue sky
 	# gave near-white puffs that read as paper cut-outs; slightly bluer and
 	# fainter lets them sit inside the sky.
-	mat.albedo_color = Color(0.96, 0.97, 1.0, 0.42)
+	mat.albedo_color = Color(0.96, 0.97, 1.0, 0.62)
 
 	# More clusters, spread as long horizontal bands rather than scattered
 	# blobs: cloud in an open sky reads as layered streaks near the horizon, and
 	# a dozen round puffs at random heights read as marbles stuck to the sky.
-	for i in range(34):
+	#
+	# The band is 88-165 m, not 150-260. At the old heights every cloud sat
+	# above the top edge of the beauty camera's frustum, which is why the wide
+	# shot had 85% sky and not one cloud in it - the clouds existed and were
+	# simply never in frame. Lowering the band puts them where the camera
+	# actually looks when it tilts up from the ridge.
+	for i in range(46):
 		var cluster := Node3D.new()
 		cluster.position = Vector3(
 			_rng.randf_range(-680.0, 680.0),
-			_rng.randf_range(150.0, 260.0),
+			_rng.randf_range(88.0, 165.0),
 			_rng.randf_range(-680.0, 680.0))
 		# Flatten the cluster along Y so it has a cloud's proportions.
 		cluster.scale = Vector3(1.0, 0.55, 1.0)
@@ -876,8 +898,8 @@ func _spawn_clouds() -> void:
 		for p in range(puffs):
 			var cloud := MeshInstance3D.new()
 			var quad := QuadMesh.new()
-			var s := _rng.randf_range(90.0, 210.0)
-			quad.size = Vector2(s, s * 0.34)
+			var s := _rng.randf_range(120.0, 260.0)
+			quad.size = Vector2(s, s * 0.46)
 			cloud.mesh = quad
 			cloud.material_override = mat
 			# Spread mostly along X: clouds stretch sideways, not in depth.
