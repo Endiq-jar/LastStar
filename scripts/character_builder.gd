@@ -45,6 +45,17 @@ static func _glow(color: Color, energy: float = 1.5) -> StandardMaterial3D:
 	return m
 
 
+## Decorative layers sit a few millimetres off the body, so at the shadow map's
+## resolution they cast a soft dark blob onto the surface underneath instead of a
+## contact shadow: the hairpin painted a grey ellipse across the hair cap and the
+## cape another across her chest, both plainly visible in the close-up. A toon
+## character does not need self-shadowing - the ramp and the outline carry the
+## form - so the small pieces opt out and only the body parts cast.
+static func _no_shadow(mi: MeshInstance3D) -> MeshInstance3D:
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
 static func _add(parent: Node3D, mesh: Mesh, mat: Material, pos: Vector3, node_name: String = "") -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
@@ -117,24 +128,26 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	collar.outer_radius = 0.22
 	collar.rings = 12
 	collar.ring_segments = 8
-	_add(torso, collar, accent, Vector3(0, 1.44, 0)).rotation_degrees = Vector3(90, 0, 0)
+	var collar_mi := _add(torso, collar, accent, Vector3(0, 1.44, 0))
+	collar_mi.rotation_degrees = Vector3(90, 0, 0)
+	_no_shadow(collar_mi)
 
 	# Elemental crest on the chest.
 	var crest := SphereMesh.new()
 	crest.radius = 0.045
 	crest.height = 0.09
-	_add(torso, crest, element_glow, Vector3(0, 1.30, -0.19))
+	_no_shadow(_add(torso, crest, element_glow, Vector3(0, 1.30, -0.19)))
 
 	# Belt + hanging cloth panels (a tiny bit of Genshin-ish silhouette).
 	var belt := CylinderMesh.new()
 	belt.top_radius = 0.21
 	belt.bottom_radius = 0.21
 	belt.height = 0.06
-	_add(torso, belt, _toon(Color(0.09, 0.08, 0.10)), Vector3(0, 0.99, 0))
+	_no_shadow(_add(torso, belt, _toon(Color(0.09, 0.08, 0.10)), Vector3(0, 0.99, 0)))
 	for side in [-1.0, 1.0]:
 		var panel := BoxMesh.new()
 		panel.size = Vector3(0.12, 0.34, 0.03)
-		var p := _add(torso, panel, accent, Vector3(0.10 * side, 0.74, -0.26))
+		var p := _no_shadow(_add(torso, panel, accent, Vector3(0.10 * side, 0.74, -0.26)))
 		p.rotation_degrees = Vector3(8.0, 0.0, 3.0 * side)
 
 	# --- head -------------------------------------------------------------
@@ -230,7 +243,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	pin.outer_radius = 0.165
 	pin.rings = 14
 	pin.ring_segments = 6
-	var pin_mi := _add(head, pin, element_glow, Vector3(0, 0.075, 0.02))
+	var pin_mi := _no_shadow(_add(head, pin, element_glow, Vector3(0, 0.075, 0.02)))
 	pin_mi.rotation_degrees = Vector3(12, 0, 0)
 
 	# --- arms -------------------------------------------------------------
@@ -252,7 +265,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		cuff.outer_radius = 0.075
 		cuff.rings = 8
 		cuff.ring_segments = 6
-		var c := _add(arm, cuff, accent, Vector3(0, -0.29, 0))
+		var c := _no_shadow(_add(arm, cuff, accent, Vector3(0, -0.29, 0)))
 		c.rotation_degrees = Vector3(90, 0, 0)
 		arms.append(arm)
 
@@ -284,7 +297,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	torso.add_child(cape_root)
 	var cape_mesh := QuadMesh.new()
 	cape_mesh.size = Vector2(0.42, 0.72)
-	var cape_mi := _outlined(cape_root, cape_mesh, cape_mat, Vector3(0, -0.34, 0.02), 0.012)
+	var cape_mi := _no_shadow(_outlined(cape_root, cape_mesh, cape_mat, Vector3(0, -0.34, 0.02), 0.012))
 	# No 180-degree yaw. QuadMesh's front face points along +Z, the character faces
 	# -Z and the camera sits behind her on +Z, so the cape already faces the camera.
 	# Yawing it by 180 turned its front away and left only the inverted-hull outline
