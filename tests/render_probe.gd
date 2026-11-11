@@ -399,7 +399,19 @@ func _run() -> void:
 		# chest from 2.9 m with the camera only 0.16 m above it, so the frame was
 		# mostly sky and the HUD covered her feet - useless as a reference.
 		var focus := player_node.global_position + Vector3(0.0, 1.00, 0.0)
-		portrait.global_position = focus + Vector3(0.0, 0.45, 4.6)
+		# Shoot her from the FRONT.
+		#
+		# Every portrait so far was taken from +Z, which is where the third-person
+		# camera sits, and the character faces -Z. So this capture has been a view
+		# of her back in all fifteen runs, and the face - the one thing a character
+		# review is actually about - has never once been checked. Offset along the
+		# direction she is facing instead of along world +Z.
+		var facing := -player_node.global_transform.basis.z
+		facing.y = 0.0
+		if facing.length() < 0.01:
+			facing = Vector3(0.0, 0.0, -1.0)
+		facing = facing.normalized()
+		portrait.global_position = focus + facing * 4.6 + Vector3(0.0, 0.45, 0.0)
 		portrait.look_at(focus, Vector3.UP)
 		portrait.current = true
 

@@ -99,7 +99,12 @@ void vertex() {
 	// 0 right at the lens, 1 beyond near_clear. Collapsing the quad (rather than
 	// discarding) keeps the vertex count identical, so there is no branch
 	// divergence and no popping in the instance buffer.
-	v_cull = smoothstep(near_clear * 0.45, near_clear, cam_dist);
+	// The near clearing keeps blades out of the lens, but it was carved at up to
+	// 2.6 m and, with the camera only 3.9 m back, that empty apron filled the
+	// bottom third of the gameplay frame - bare shaded terrain under a bright
+	// meadow, which is the dark shelf still visible under the character. Start
+	// the carves closer to the lens so the grass reaches further toward her.
+	v_cull = smoothstep(near_clear * 0.22, near_clear * 0.72, cam_dist);
 	v_cull *= smoothstep(player_clear * 0.6, player_clear, player_dist);
 	v_cull *= smoothstep(0.30, 0.85, sightline_dist);
 	VERTEX *= v_cull;
