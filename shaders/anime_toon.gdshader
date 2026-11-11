@@ -51,16 +51,22 @@ void light() {
 	// Two-tone ramp with a soft transition — the core of the anime look.
 	float lit = smoothstep(-ramp_softness, ramp_softness, ndl);
 	float warm = smoothstep(0.45, 0.95, ndl);
-	vec3 shadowed = ATTENUATION * LIGHT_COLOR * albedo_color.rgb * shadow_tint.rgb;
-	vec3 lit_col = ATTENUATION * LIGHT_COLOR * albedo_color.rgb;
-	// 0.34, not 0.60. In Godot 4 defining light() replaces the built-in lighting
-	// term but ALBEDO still contributes through ambient; with a key at 1.6 energy
-	// the old factor pushed white cloth and pale hair straight through the
-	// tonemapper's knee and every character rendered as a featureless white
-	// silhouette. The value is chosen so a 0.8 albedo under a 1.6-energy key lands
-	// near 0.85 in linear space, which the filmic curve maps to a lit surface with
-	// its shading intact.
-	DIFFUSE_LIGHT += mix(shadowed, lit_col, lit) * (0.68 + warm * 0.30) * diffuse_energy * 0.34;
+	// Use ALBEDO, not the raw albedo_color uniform: ALBEDO is what fragment() wrote,
+	// including the texture multiply. Reading the uniform meant every part ignored
+	// its own texture and the model shaded from flat colours.
+	//
+	// LIGHT_COLOR in Godot's light() already has the light's energy folded in, so a
+	// 1.6-energy key arrives with a magnitude well above 1. Multiplying that by a
+	// pale albedo without a scale factor is what clipped the whole character to
+	// white regardless of how the diffuse factor was tuned.
+	vec3 key = min(LIGHT_COLOR * ATTENUATION, vec3(1.55));
+	vec3 shadowed = key * ALBEDO * shadow_tint.rgb;
+	vec3 lit_col = key * ALBEDO;
+	// The key light is clamped to 1.55 above, so this factor is now the only gain
+	// control: a 0.8 albedo times a 1.55 key times 0.62 lands just under 0.8 in
+	// linear space, which the filmic curve maps to a lit surface with its shading
+	// intact instead of a clipped white one.
+	DIFFUSE_LIGHT += mix(shadowed, lit_col, lit) * (0.68 + warm * 0.30) * diffuse_energy * 0.62;
 
 	// Anime specular band: a thin ring around the key direction.
 	float spec_ndl = smoothstep(1.0 - spec_size, 1.0 - spec_size * 0.35, ndl);
