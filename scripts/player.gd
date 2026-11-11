@@ -175,8 +175,17 @@ func _update_camera_occlusion() -> void:
 	var vis := _visual_node()
 	if vis == null or _spring == null:
 		return
-	var dist := _spring.get_hit_length()
-	vis.visible = dist > CAM_DISTANCE * 0.35
+	# SpringArm3D.get_hit_length() returns 0.0 when the arm HITS NOTHING - it is not
+	# "the current arm length", it is "the length at which something was hit". The
+	# earlier check therefore hid the character in every open field, which is why she
+	# rendered as a pair of boots: the only meshes that survived were the ones drawn
+	# before the visibility change took effect on screen.
+	#
+	# Treat a zero hit length as "nothing in the way" (full length) and only cull
+	# when the arm has genuinely been shortened to a fraction of its length.
+	var hit := _spring.get_hit_length()
+	var arm_len := hit if hit > 0.001 else CAM_DISTANCE
+	vis.visible = arm_len > CAM_DISTANCE * 0.45
 
 
 func _visual_node() -> Node3D:
