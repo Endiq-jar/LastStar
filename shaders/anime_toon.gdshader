@@ -79,27 +79,24 @@ void light() {
 	// intact instead of a clipped white one.
 	DIFFUSE_LIGHT += mix(shadowed, lit_col, lit) * (0.68 + warm * 0.30) * diffuse_energy * 0.62;
 
-	// Anime specular: a compact blob on the half-vector, not a ring around the
-	// key.
+	// No specular term at all.
 	//
-	// This used to key off ndl alone, and ndl is constant along a circle around
-	// the light direction - so on every rounded form (a head, a chest capsule) the
-	// "band" drew a donut. That donut is the grey ring that sat on her hair cap
-	// and her sternum for several rounds while I blamed the hairpin and the
-	// collar, then cast shadows. It was none of those; it was the specular term.
-	// The half-vector produces a single compact highlight the way anime hair
-	// actually reads, and it cannot wrap into a circle.
-	vec3 n = normalize(NORMAL);
-	vec3 v = normalize(VIEW);
-	float ndv = clamp(dot(n, v), 0.0, 1.0);
-	vec3 half_vec = normalize(normalize(LIGHT) + v);
-	float ndh = dot(n, half_vec);
-	// Tight. A highlight is a small mark, not a wash: with the half-vector set to
-	// a wide tolerance the blob covered every surface facing the camera at once,
-	// which on black cloth is a grey smudge rather than a shine.
-	float spec_amount = smoothstep(1.0 - spec_size, 1.0 - spec_size * 0.35, ndh);
-	spec_amount *= spec_energy * (0.4 + ndv * 0.6);
-	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * min(spec_amount, spec_ceiling);
+	// It had three goes at this and every one was an artefact: keyed off ndl it
+	// drew a donut around the light direction (the grey ring on her hair and
+	// chest); keyed off the half-vector it became a grey smudge across everything
+	// facing the camera; tightened, it became hard-edged grey ellipses, one per
+	// light, because the top of the smoothstep saturates and flattens to a solid
+	// patch. A near-black albedo has nothing to modulate a highlight with, so any
+	// visible spec on it is grey paint.
+	//
+	// A cel character does not need one: the two-tone ramp, the rim and the
+	// outline carry the form, and the reference art gets its hair shine from
+	// painted texture, not from a specular lobe. Removing the term is the honest
+	// fix, and it is what the reference material actually does.
+
+	// NdotV is still needed by the rim below.
+	vec3 view_dir = normalize(VIEW);
+	float ndv = clamp(dot(normalize(NORMAL), view_dir), 0.0, 1.0);
 
 	// Rim: bright edge facing away from the light, gives that "painted" pop.
 	//
