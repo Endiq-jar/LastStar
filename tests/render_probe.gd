@@ -389,12 +389,63 @@ func _run() -> void:
 		portrait.global_position = focus + Vector3(0.0, 0.45, 4.6)
 		portrait.look_at(focus, Vector3.UP)
 		portrait.current = true
+
+		# Report where her body actually lands on screen, in pixels. The close-up
+		# has twice shown a figure far smaller than 1.95 m at 4.6 m would be, so
+		# this measures it instead of leaving the discrepancy to the eye.
+		var vis_node := player_node.get_node_or_null("Visual") as Node3D
+		if vis_node != null:
+			var box := AABB()
+			var firstbox := true
+			for mi in vis_node.find_children("*", "MeshInstance3D", true, false):
+				var m := mi as MeshInstance3D
+				if m.mesh == null or not m.is_visible_in_tree():
+					continue
+				var b := m.global_transform * m.get_aabb()
+				box = b if firstbox else box.merge(b)
+				firstbox = false
+			var lo := cam.unproject_position(box.position)
+			var hi := cam.unproject_position(box.end)
+			_log("INFO", "portrait: character AABB %.2fm tall projects to %dpx tall (screen %d)" % [
+				box.size.y, int(absf(hi.y - lo.y)), get_viewport().get_visible_rect().size.y])
+
 		await get_tree().create_timer(0.35).timeout
 		await get_tree().process_frame
 		var pimg := get_viewport().get_texture().get_image()
 		if pimg != null and not pimg.is_empty():
 			pimg.save_png(out_dir.path_join("player.png"))
 			_log("INFO", "saved character close-up")
+
+		# Same frame again with every character material replaced by flat unshaded
+		# magenta. If magenta appears where the body should be, the geometry and its
+		# visibility are fine and the problem is a material; if it does not, the
+		# problem is the geometry or the transform.
+		var flat := StandardMaterial3D.new()
+		flat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		flat.albedo_color = Color(1.0, 0.0, 1.0)
+		var replaced: Array[MeshInstance3D] = []
+		if vis_node != null:
+			for mi in vis_node.find_children("*", "MeshInstance3D", true, false):
+				var m2 := mi as MeshInstance3D
+				if m2.mesh == null:
+					continue
+				replaced.append(m2)
+				m2.material_override = flat
+		await get_tree().create_timer(0.3).timeout
+		await get_tree().process_frame
+		var fimg := get_viewport().get_texture().get_image()
+		if fimg != null and not fimg.is_empty():
+			fimg.save_png(out_dir.path_join("player_flat.png"))
+			var magenta := 0
+			var step := maxi(1, int(fimg.get_width() / 200.0))
+			for y in range(0, fimg.get_height(), step):
+				for x in range(0, fimg.get_width(), step):
+					var c := fimg.get_pixel(x, y)
+					if c.r > 0.7 and c.b > 0.7 and c.g < 0.3:
+						magenta += 1
+			_log("INFO", "flat-material test: %d magenta samples in frame" % magenta)
+			if magenta == 0:
+				_log("FAIL", "character geometry does not rasterise at all, even with a flat material")
 		portrait.queue_free()
 
 	# --- clear combat VFX before the beauty frame --------------------------
