@@ -101,12 +101,12 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	skirt.bottom_radius = 0.34
 	skirt.height = 0.30
 	skirt.radial_segments = 16
-	_outlined(torso, skirt, accent, Vector3(0, 0.82, 0), 0.016)
+	_outlined(torso, skirt, accent, Vector3(0, 0.82, 0), 0.010)
 
 	var chest := CapsuleMesh.new()
 	chest.radius = 0.19
 	chest.height = 0.56
-	_outlined(torso, chest, outfit, Vector3(0, 1.18, 0), 0.014)
+	_outlined(torso, chest, outfit, Vector3(0, 1.18, 0), 0.009)
 
 	var collar := TorusMesh.new()
 	collar.inner_radius = 0.14
@@ -144,7 +144,9 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	skull.height = 0.30
 	skull.radial_segments = 20
 	skull.rings = 12
-	_outlined(head, skull, skin, Vector3.ZERO, 0.012)
+	# A thin outline on the head: at 0.012 the black hull around pale skin read as a
+	# dark helmet rather than as a drawn contour.
+	_outlined(head, skull, skin, Vector3.ZERO, 0.006)
 
 	# Anime eyes: two glowing planes with a dark outline plane behind.
 	for side in [-1.0, 1.0]:
@@ -209,7 +211,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		var upper := CapsuleMesh.new()
 		upper.radius = 0.055
 		upper.height = 0.34
-		_outlined(arm, upper, outfit, Vector3(0, -0.17, 0), 0.009)
+		_outlined(arm, upper, outfit, Vector3(0, -0.17, 0), 0.006)
 		var glove := SphereMesh.new()
 		glove.radius = 0.052
 		_add(arm, glove, skin, Vector3(0, -0.36, 0))
@@ -232,7 +234,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		var thigh := CapsuleMesh.new()
 		thigh.radius = 0.068
 		thigh.height = 0.46
-		_outlined(leg, thigh, skin, Vector3(0, -0.23, 0), 0.01)
+		_outlined(leg, thigh, skin, Vector3(0, -0.23, 0), 0.007)
 		var boot := CapsuleMesh.new()
 		boot.radius = 0.082
 		boot.height = 0.40
