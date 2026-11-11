@@ -11,6 +11,10 @@ const WaterScript := preload("res://scripts/water_plane.gd")
 const PlayerScript := preload("res://scripts/player.gd")
 const AudioDirectorScript := preload("res://scripts/audio_director.gd")
 const GrassFieldScript := preload("res://scripts/grass_field.gd")
+const VegetationDemoScript := preload("res://scripts/performance/vegetation_demo.gd")
+const VegWindScript := preload("res://scripts/performance/vegetation_wind.gd")
+const VegLayerScript := preload("res://scripts/performance/vegetation_layer.gd")
+const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
 
 const ENEMY_COUNT := 14
 
@@ -897,6 +901,54 @@ func _build_grass_field() -> void:
 	add_child(field)
 	field.call("setup", t, player)
 	_grass_field = field
+	_build_environment_vegetation(t, player)
+
+
+func _build_environment_vegetation(t: Node, player: Node3D) -> void:
+	## The authored environment species: border grass, flowers, bushes, fallen
+	## leaves and pebbles, plus a second grass layer that shares one material.
+	##
+	## The original grass field above stays in place - it is the dense carpet
+	## directly under the player and it works. This adds the variety on top of it
+	## that a meadow needs to stop reading as a single green plane, and it does so
+	## as batched MultiMeshes so the prop count does not become draw calls.
+	##
+	## One wind driver node owns every foliage material. The GPU does the wind;
+	## the driver's entire cost is one uniform write per material per frame.
+	var wind := Node.new()
+	wind.name = "VegetationWind"
+	wind.set_script(VegWindScript)
+	add_child(wind)
+	wind.call("set_player", player)
+
+	for spec in VegPresets.species():
+		# The base grass carpet is already handled by GrassField, which is tuned
+		# to the player's position and streams differently. Skip the duplicate.
+		if spec["name"] == "grass":
+			continue
+		var tex: Texture2D = VegPresets.texture(spec["tex"])
+		if tex == null:
+			push_warning("LastStar: missing vegetation texture %s" % spec["tex"])
+			continue
+		var mat: ShaderMaterial = VegPresets.material_for(
+			spec["name"], spec["wind"], spec["tint"])
+		mat.set_shader_parameter("albedo_texture", tex)
+		wind.call("register_material", mat)
+
+		var layer := Node3D.new()
+		layer.name = "Veg_%s" % spec["name"]
+		layer.set_script(VegLayerScript)
+		add_child(layer)
+		layer.set("density", spec["density"])
+		layer.set("min_height", spec["hmin"])
+		layer.set("max_height", spec["hmax"])
+		layer.set("max_slope", spec["slope"])
+		layer.set("mesh_kind", spec["mesh"])
+		layer.set("material", mat)
+		# Fewer chunks per frame than the demo scene: the world is already
+		# building terrain, enemies and the grass field on the same frames.
+		layer.set("chunks_per_frame", 1)
+		layer.call("setup", t, player, hash(spec["name"]))
 
 
 func _add_audio() -> void:

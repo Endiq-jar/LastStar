@@ -250,18 +250,24 @@ void fragment() {
 	// EMISSION is added after tonemapping-independent light accumulation, so a
 	// value of 0.22 here lands near 0.75 linear and prints as roughly half the
 	// sunlit value, which is where painted shadow belongs.
-	// 2.35 got the foreground out of the hole - rgb(106,156,92) against sunlit
-	// grass - but overshot into a pale mint wash, flatter than the dark version
-	// because at that brightness the tonemap compresses everything into a narrow
-	// band and the paint detail disappears. 1.05 puts the shadow at roughly
-	// rgb(70,110,66): clearly shadowed, clearly green, and still carrying the
-	// patches and grain. The value was picked by rendering both.
 	// Measured between the two extremes rather than modelled: k=2.35 printed the
 	// shadow at green 156 (a mint wash with no detail left), k=1.05 at 60 (back
-	// to a dark shelf). The tonemap's toe is steep through this range, so the
-	// target of ~100 green sits nearer the middle than a linear read would
-	// suggest. k=1.75 renders it there and keeps the paint.
-	EMISSION = col * 1.75 + vec3(0.010);
+	// to a dark shelf), k=1.75 at 100 but with the probe still reporting a
+	// lit/dark ratio of 7.8x against its own 1.8-3.0 target. The tonemap's toe is
+	// steep through this range, so the working value sits above the middle of
+	// those points, not on it.
+	//
+	// A flat `col * k` multiply is what produced both failures. Multiplying the
+	// albedo by a constant adds brightness in proportion to the albedo, so it adds
+	// almost nothing where the paint is dark - and the fold shading and grain both
+	// live at the dark end. A flat lift therefore flattens exactly the detail it
+	// was meant to reveal, which is why k=2.35 read as a wash rather than as light.
+	//
+	// The fill is now tilted by `patch`, the large-scale colour variation: darker
+	// patches get more fill and brighter ones less, so painted variation survives
+	// in shade instead of collapsing to a single value.
+	float fill_k = 2.06 - patch * 0.30;
+	EMISSION = col * fill_k + vec3(0.014, 0.018, 0.014);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);
