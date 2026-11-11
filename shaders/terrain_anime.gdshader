@@ -266,8 +266,14 @@ void fragment() {
 	// The fill is now tilted by `patch`, the large-scale colour variation: darker
 	// patches get more fill and brighter ones less, so painted variation survives
 	// in shade instead of collapsing to a single value.
-	float fill_k = 2.06 - patch * 0.30;
-	EMISSION = col * fill_k + vec3(0.014, 0.018, 0.014);
+	// Floor + slope, matching grass_sway.gdshader. Both surfaces now fill to the
+	// same absolute level whatever their albedo, instead of each multiplying its
+	// own paint by a constant - which is what let one shader sit twenty times
+	// darker than the other and what made matching the constants blow the
+	// meadow out. `patch` still tilts the slope so large-scale colour survives
+	// in shade.
+	float fill_k = 0.42 - patch * 0.12;
+	EMISSION = col * fill_k + vec3(0.098, 0.104, 0.088);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);

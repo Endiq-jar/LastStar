@@ -202,5 +202,25 @@ void fragment() {
 	//
 	// tools/fill_check.py asserts this agreement without a GPU, which is how it
 	// is now checked on every push instead of only when a framebuffer exists.
-	EMISSION = col * 2.02 + vec3(0.013, 0.019, 0.012);
+	// A *floor plus a shallow slope*, not a scale factor.
+	//
+	// 1.95x matched the terrain's fill scale in the dark and blew the meadow
+	// white in the light: the probe's brightest ground pixel became
+	// rgb(235,255,197) with green clipped at 255, so the lit/dark ratio only
+	// fell from 7.8x to 4.9x while the foreground turned into a glowing mass.
+	// Matching a scale factor copies the other surface's problem as well as its
+	// cure, because the two surfaces have very different albedo ranges -
+	// terrain paint sits near 0.1, a grass blade near 0.35, so the same k puts
+	// three times the light on the blade.
+	//
+	// What shadow should look like is an absolute level: the ambient-only
+	// irradiance, roughly 0.10-0.20 linear. A floor gets there regardless of
+	// albedo; a shallow slope on top keeps painted variation visible inside the
+	// shade instead of flattening it to one value.
+	//
+	//   shade blade (col 0.15) -> 0.17      sunlit blade (col 0.5) -> 0.36
+	//
+	// versus 0.02 and 0.98 before, which was both a black hole and a highlight
+	// clip in the same shader.
+	EMISSION = col * 0.55 + vec3(0.085, 0.095, 0.075);
 }

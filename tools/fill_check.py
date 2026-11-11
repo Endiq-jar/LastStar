@@ -44,6 +44,18 @@ SURFACES = [
 # a factor of 20.
 MAX_SPREAD = 2.0
 
+# Absolute band every ground fill must land in, in linear luminance.
+#
+# A ratio-only test is not enough, and this is not hypothetical: scaling grass
+# fill by 1.95 to match the terrain's 2.06 equalised the *ratio* (7.8x -> 4.9x)
+# while pushing the sunlit meadow to rgb(235,255,197) with green clipped at 255.
+# A fill can be consistent with its neighbour and still be wrong in absolute
+# terms - too dark reads as a hole, too bright reads as a glowing lawn.
+# Sunlit ground fill should sit clearly below the key light; shadow fill should
+# sit clearly above black.
+FILL_MIN = 0.03
+FILL_MAX = 0.55
+
 # Albedo range swept. Stylised painted ground and grass both live here.
 ALBEDOS = [0.05, 0.08, 0.12, 0.16, 0.20, 0.26, 0.32, 0.40, 0.50]
 
@@ -241,6 +253,21 @@ def main(argv):
                                  ref_path.split("/")[-1], ref_val))
             if spread > MAX_SPREAD:
                 bad = True
+
+    # Absolute band, checked on every surface including the reference.
+    for path, samples in results:
+        hi = max(v for _, _, v in samples)
+        lo = min(v for _, _, v in samples)
+        if hi > FILL_MAX:
+            print("::error title=fill::%s fills to %.3f at the bright end "
+                  "(limit %.2f) - sunlit ground will clip"
+                  % (path, hi, FILL_MAX))
+            bad = True
+        if lo < FILL_MIN:
+            print("::error title=fill::%s fills to only %.3f at the dark end "
+                  "(floor %.2f) - shadowed ground will read as a hole"
+                  % (path, lo, FILL_MIN))
+            bad = True
 
     print("fill check: %d surfaces, worst spread %.2fx (limit %.1fx)"
           % (len(results), worst, MAX_SPREAD))
