@@ -423,7 +423,10 @@ jobs:
                  -storepass android -alias androiddebugkey | grep -m1 "SHA256:" || true)
           echo "::notice::Debug signing key ${FP:-UNKNOWN}"
           EXPECTED="1BE9CE30E62F7D024F9A100E98021556706AED47CDF331A461DF2A38768AB216"
-          GOT=$(echo "$FP" | tr -d ' ' | sed 's/.*SHA256://')
+          # keytool prints the digest colon-separated (1B:E9:CE:...); strip the
+          # colons as well as the whitespace before comparing. Forgetting that
+          # made the guard fail on a correct key.
+          GOT=$(echo "$FP" | sed 's/.*SHA256://' | tr -d ' :')
           if [ -n "$GOT" ] && [ "$GOT" != "$EXPECTED" ]; then
             echo "::error title=Signing key rotated::APK would not install over an existing copy. Expected $EXPECTED, got $GOT"
             exit 1
