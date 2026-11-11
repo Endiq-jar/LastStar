@@ -1,0 +1,176 @@
+shader_type spatial;
+render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
+
+
+// Alpha-scissor, not alpha-blend: a cut-out discard costs no sorting and no
+// blending on mobile GLES3, which is why every open-world game does grass this
+// way. Alpha blending here would also make blades sort against each other and
+// flicker as the camera turns.
+
+// Wind-swept stylized grass for MultiMeshInstance3D.
+//
+// Written for the Compatibility (OpenGL ES 3.0) renderer, which is what ships
+// on the target phone. Two things matter there:
+//   * no screen-space effects, so the colour must carry the look by itself;
+//   * vertex work is cheap but fragment overdraw is not, so the shader avoids
+//     extra texture fetches entirely and does all variation in the vertex stage.
+
+// Albedo is deliberately dark and desaturated. Stylised grass gets its colour
+// from the light and the sky gradient, not from the paint: bright green albedo
+// plus a bright sun is what produced the neon lime carpet that made the valley
+// look like a golf course. Real Genshin grass albedo sits around 0.12-0.22
+// luminance and lets the key light take it up.
+// Note the blue channel. A green albedo of (0.15, 0.27, 0.11) looks reasonable
+// on paper, but a warm low sun plus a warm grade multiplies blue by ~0.4, and
+// blue was already the weakest channel - so the lit result landed at rgb(82,163,9),
+// a pure hue-92 lime with no blue left in it at all. Keeping blue at roughly half
+// of green survives the warm light and reads as the soft green of lit grass.
+uniform vec4 grass_color : source_color = vec4(0.115, 0.185, 0.102, 1.0);
+uniform vec4 grass_tip : source_color = vec4(0.30, 0.40, 0.205, 1.0);
+uniform vec4 dry_color : source_color = vec4(0.33, 0.32, 0.185, 1.0);
+uniform float wind_strength : hint_range(0.0, 1.0) = 0.22;
+uniform float wind_speed : hint_range(0.0, 4.0) = 1.4;
+uniform vec2 wind_dir = vec2(0.85, 0.35);
+uniform float color_variance : hint_range(0.0, 1.0) = 0.20;
+// Blades closer than this to the camera are shrunk out of existence, so the
+// third-person camera can see the character it is following. Without it the
+// meadow in front of the lens is a wall of grass taller than the player.
+uniform float near_clear : hint_range(0.0, 12.0) = 2.6;
+// Camera position, pushed in from grass_field.gd once per frame.
+//
+// This is a uniform rather than a built-in on purpose: the camera built-ins
+// (CAMERA_POSITION_WORLD, MAIN_CAM_INV_VIEW_MATRIX) are fragment-stage only in
+// the spatial shader, and referencing either one from vertex() is a compile error
+// that Godot does not treat as fatal - it logs the error and draws every blade
+// with a default white material. That produced a pale lavender meadow that read
+// as an art bug. A uniform works in both stages and is one float3 per frame.
+uniform vec3 cam_origin = vec3(0.0);
+// Centre of the character the camera follows, pushed in from grass_field.gd.
+// Blades inside this radius are culled so the player is never buried: with an
+// upright, metre-wide tuft rendered from a third-person camera, the meadow in
+// front of the lens covers the character entirely, and no amount of colour or
+// density tuning fixes that - only not drawing it there does.
+uniform vec3 player_origin = vec3(0.0);
+uniform float player_clear : hint_range(0.0, 3.0) = 1.50;
+uniform sampler2D blade_tex : source_color, filter_linear_mipmap, repeat_disable;
+uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
+
+varying float v_tint;
+varying float v_height;
+varying float v_cull;
+
+void vertex() {
+	vec3 origin = MODEL_MATRIX[3].xyz;
+	float height = max(VERTEX.y, 0.0);
+
+	// Two overlapping waves: a slow gust field plus a faster ripple, both
+	// driven by world position so neighbouring chunks move as one meadow.
+	float wave = sin(origin.x * 0.19 + origin.z * 0.15 - TIME * wind_speed * 1.7);
+	float gust = sin(origin.x * 0.043 - TIME * 0.55 + origin.z * 0.031);
+	float sway = (wave * 0.62 + gust * 0.38) * wind_strength * height * 1.7;
+	vec2 dir = normalize(wind_dir);
+	VERTEX.x += dir.x * sway;
+	VERTEX.z += dir.y * sway;
+	// Bending shortens the blade slightly, which reads as real motion.
+	VERTEX.y -= abs(sway) * 0.22;
+
+	// Per-instance colour variation, hashed from the instance origin so it is
+	// stable frame to frame (no shimmer as the camera moves).
+	float h = fract(sin(dot(origin.xz, vec2(12.9898, 78.233))) * 43758.5453);
+	v_tint = h;
+	v_height = height;
+
+	// Distance from this instance to the camera, in world space. VERTEX is in
+	// model space here and MODEL_MATRIX is the instance transform, so the world
+	// position of the tuft's base is MODEL_MATRIX[3].xyz, which is `origin`.
+	float cam_dist = length(origin - cam_origin);
+	// Also collapse blades standing on top of the character.
+	float player_dist = length(origin - player_origin);
+
+	// ...and blades standing BETWEEN the camera and the character. A radius around
+	// the player alone is not enough: the camera is 3.9 m back, so a tuft at, say,
+	// 2 m from her is nowhere near the clearing sphere and still sits directly in
+	// the sightline, covering her torso. Distance to the camera-to-player segment
+	// removes exactly the grass that would occlude her, in one smoothstep, and
+	// nothing else.
+	vec3 to_player = player_origin - cam_origin;
+	float seg_t = clamp(dot(origin - cam_origin, to_player) / max(dot(to_player, to_player), 0.0001), 0.0, 1.0);
+	float sightline_dist = length(origin - (cam_origin + to_player * seg_t));
+	// 0 right at the lens, 1 beyond near_clear. Collapsing the quad (rather than
+	// discarding) keeps the vertex count identical, so there is no branch
+	// divergence and no popping in the instance buffer.
+	// The near clearing keeps blades out of the lens, but it was carved at up to
+	// 2.6 m and, with the camera only 3.9 m back, that empty apron filled the
+	// bottom third of the gameplay frame - bare shaded terrain under a bright
+	// meadow, which is the dark shelf still visible under the character. Start
+	// the carves closer to the lens so the grass reaches further toward her.
+	v_cull = smoothstep(near_clear * 0.22, near_clear * 0.72, cam_dist);
+	v_cull *= smoothstep(player_clear * 0.6, player_clear, player_dist);
+	v_cull *= smoothstep(0.30, 0.85, sightline_dist);
+	VERTEX *= v_cull;
+}
+
+void fragment() {
+	// Cut the blade shape out of the quad. Anything outside the drawn tuft is
+	// discarded outright, so the quad never reads as a rectangle.
+	vec4 tex = texture(blade_tex, UV);
+	if (tex.a < alpha_cut || v_cull < 0.02) {
+		discard;
+	}
+
+	// Root-to-tip gradient. Dark at the base anchors the tuft in the soil;
+	// brighter at the tip catches the sky. The gradient is narrower than it
+	// used to be - a wide one turned every chunk into a two-tone blob at
+	// distance, which is what gave the hillsides that mown-lawn banding.
+	float t = clamp(UV.y, 0.0, 1.0);
+	vec3 base = grass_color.rgb;
+	// Some tufts lean dry/yellow, the way a real meadow is not one flat green.
+	base = mix(base, dry_color.rgb, v_tint * color_variance * 0.22);
+	vec3 col = mix(base, grass_tip.rgb, pow(t, 1.35) * 0.72);
+
+	// Break up the flat fill with a cheap per-tuft value variation. Without
+	// this every tuft has identical colour and the field reads as one surface.
+	// Centred a little above 1.0: the previous 0.86-1.14 range biased the whole
+	// field darker, which is why the grass read as wet mud next to the terrain.
+	col *= 0.94 + v_tint * 0.30;
+
+	// --- distance fade ------------------------------------------------------
+	// Far chunks cover many screen pixels each with a quad, so their flat colour
+	// dominates the silhouette. Mute and cool them toward the hillside colour so
+	// the field settles into the terrain instead of hovering over it.
+	float dist = length(VERTEX);
+	// Fade to the meadow's own mid tone, not to a dark forest green - the field
+	// has to sit in the hillside, and the hillside is not dark.
+	float far_t = smoothstep(60.0, 140.0, dist);
+	col = mix(col, vec3(0.205, 0.275, 0.165), far_t * 0.45);
+
+	// Dissolve before the streaming edge. Grass only exists in a 130 m radius
+	// around the player, and the shader was drawing right up to that boundary -
+	// a hard arc of blades against bare terrain, plainly visible in the gameplay
+	// frame. This must match VIEW_CHUNKS * CHUNK_SIZE in grass_field.gd.
+	float edge = smoothstep(112.0, 128.0, dist);
+	if (edge > 0.96) {
+		discard;
+	}
+
+	// Same hue discipline as the terrain: the field has to sit in the hillside, and
+	// the hillside is no longer a saturated hue. A little luminance mixed back in
+	// keeps the meadow from reading as a separate, greener surface.
+	col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), 0.14);
+
+	ALBEDO = col;
+	ROUGHNESS = 0.94;
+	METALLIC = 0.0;
+	SPECULAR = 0.0;
+	// Backlight fakes subsurface scatter: blades glow when lit from behind,
+	// which is most of what makes wind-blown grass look alive. Small, because
+	// it stacks over every blade in the field.
+	BACKLIGHT = grass_tip.rgb * 0.14;
+	// Keep the shadow-facing side from going black. A plain multiple of base is
+	// useless here - base is around 0.15, so 0.02 of it is three thousandths of a
+	// stop on an 8-bit buffer. A small fixed term along with the colour keeps the
+	// field's darkest tufts above the terrain's shadow floor, so the meadow and
+	// the ground it stands on share one value range instead of splitting into a
+	// bright lawn floating over a black void.
+	EMISSION = base * 0.10 + vec3(0.014, 0.020, 0.012);
+}

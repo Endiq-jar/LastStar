@@ -1,0 +1,707 @@
+name: Build LastStar
+
+# Native Godot 4.3 pipeline (no web wrapper, no Capacitor):
+#   * verify   – imports the project and boots the main scene headlessly
+#   * android  – exports a real APK with the official export templates and the
+#                Android SDK/NDK, then publishes it to the rolling `latest-apk`
+#                release so there is always one stable download URL
+#   * desktop  – Linux + Windows builds
+#   * release  – attaches everything to `v*` tag releases
+#
+# Optional Android release signing secrets:
+#   ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_USER / ANDROID_KEYSTORE_PASSWORD
+# Without them a signed *debug* APK is produced (installs on any phone).
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: "4.3"
+  GODOT_VERSION_DIR: "4.3.stable"
+  GODOT_RELEASE: "4.3-stable"
+  EXPORT_NAME: "LastStar"
+
+jobs:
+  verify:
+    name: Import + headless boot
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache Godot editor
+        uses: actions/cache@v5.1.0
+        with:
+          path: /opt/godot
+          key: godot-editor-${{ env.GODOT_RELEASE }}-linux
+
+      - name: Install Godot editor
+        run: |
+          set -euo pipefail
+          if [ ! -x /opt/godot/godot ]; then
+            curl -L --retry 3 -o /tmp/godot.zip \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+            mkdir -p /opt/godot
+            unzip -q -o /tmp/godot.zip -d /opt/godot
+            mv /opt/godot/Godot_v${GODOT_RELEASE}_linux.x86_64 /opt/godot/godot
+            chmod +x /opt/godot/godot
+          fi
+          /opt/godot/godot --version
+
+      - name: Shader lint (fast, no Godot needed)
+        # Catches GDScript syntax typed into GLSL - `:=`, `var`, `func` - and
+        # fragment-only built-ins read in vertex(). Both have happened, and both
+        # fail soft: Godot logs an error and draws the surface in default white
+        # rather than failing the build.
+        run: python3 tools/shader_lint.py
+
+      - name: No leftover merge-conflict markers
+        # An unresolved conflict committed straight into the tree parses as a
+        # "VCS conflict marker" error and costs a whole CI cycle to find.
+        run: |
+          if grep -rIln -E '^(<<<<<<< |>>>>>>> |=======$)' \
+               --exclude-dir=.git --exclude-dir=.godot . ; then
+            echo "::error::merge-conflict markers committed to the tree"
+            exit 1
+          fi
+          echo "clean"
+
+      - name: Android preset sanity
+        run: |
+          set -uo pipefail
+          grep -q "import_etc2_astc=true" project.godot \
+            && echo "::notice::ETC2/ASTC import enabled (required for Android export)." \
+            || echo "::error::project.godot must set textures/vram_compression/import_etc2_astc=true"
+          grep -q "texture_format/etc2_astc=true" export_presets.cfg \
+            && echo "::notice::Android preset requests ETC2/ASTC textures." \
+            || echo "::error::export_presets.cfg texture_format/etc2_astc must be true"
+
+      - name: Import project + boot main scene headlessly
+        run: |
+          set -uo pipefail
+          /opt/godot/godot --headless --editor --quit-after 400 > /tmp/import.log 2>&1 \
+            || { echo "::error::Project import failed"; tail -60 /tmp/import.log; exit 1; }
+          test -d .godot
+
+          /opt/godot/godot --headless --path . --quit-after 240 > /tmp/boot.log 2>&1 || true
+          tail -40 /tmp/boot.log || true
+
+          # Any runtime error is a failure: null access, invalid call, missing
+          # function... A game that crashes before it builds the player still
+          # draws its HUD, which looks exactly like "black screen".
+          #
+          # Godot prints each error as a message line followed by an
+          # "   at: site (file:line)" context line. We pair them up so the
+          # headless-only "dummy" renderer noise (no real meshes exist without
+          # a GPU) can be dropped by its site, while every real error - and its
+          # location - is reported. The render probe below covers real drawing.
+          awk '
+            /^(ERROR|SCRIPT ERROR|USER ERROR):|Parse Error:/ {
+              msg = $0; next
+            }
+            /^[[:space:]]+at: / {
+              if (msg != "") {
+                if ($0 !~ /dummy/) print FNR-1 ": " msg "\n" FNR ": " $0
+                msg = ""
+              }
+              next
+            }
+            { if (msg != "") { if (msg !~ /^ERROR: Parameter .m. is null\.$/) print FNR ": " msg; msg = "" } }
+          ' /tmp/boot.log > /tmp/errs.log
+
+          if [ -s /tmp/errs.log ]; then
+            head -30 /tmp/errs.log | while IFS= read -r line; do
+              echo "::error title=GDScript::$line"
+            done
+            echo "::error::Runtime errors detected while booting the world"
+            exit 1
+          fi
+          echo "World booted cleanly."
+
+      - name: Compile check (every script and shader, autoloads live)
+        # Booting the world headlessly only compiles the scripts the world
+        # reaches. A compile error in tests/render_probe.gd therefore used to
+        # pass this job and only fail in the probe step, which then reported
+        # "no PROBE_RESULT" - the symptom, not the cause. That cost a full CI
+        # cycle for one bad property name.
+        #
+        # The check scene loads and instantiates every script in scripts/ and
+        # tests/ from inside the running game, so autoloads (`Game`) exist and
+        # the engine's own "Parse Error" / "SCRIPT ERROR" output is the verdict.
+        run: |
+          set -uo pipefail
+          timeout -k 10 240 /opt/godot/godot --headless --path . \
+            res://tests/compile_check.tscn > /tmp/compile.log 2>&1 || true
+          grep -E "^COMPILE_" /tmp/compile.log | tail -40 || true
+          # Shader compile failures do not stop the run either - Godot logs an
+          # error and falls back to a default white material, which reads as an
+          # art bug rather than a build failure. They are errors here.
+          if grep -qiE "Shader compilation failed" /tmp/compile.log; then
+            # The useful part is the block that follows: the file, the line and
+            # the offending expression. The API only exposes annotations, not the
+            # raw step log, so the context has to become annotations too.
+            grep -n -A 6 -B 2 -iE "Shader compilation failed|\.gdshader:[0-9]+:" /tmp/compile.log \
+              | head -40 | while IFS= read -r line; do echo "::error title=Shader::$line"; done
+          fi
+          if grep -qiE "^COMPILE_FAIL|^SCRIPT ERROR: (Parse|Compile) Error|Shader compilation failed|\.gdshader:[0-9]+" /tmp/compile.log; then
+            grep -iE "^COMPILE_FAIL|^SCRIPT ERROR: (Parse|Compile) Error|Shader compilation failed|\.gdshader:[0-9]+" /tmp/compile.log | head -20 \
+              | while IFS= read -r line; do echo "::error title=Compile::$line"; done
+            echo "::error::one or more scripts failed to compile"
+            exit 1
+          fi
+          grep -qE "^COMPILE_OK: " /tmp/compile.log \
+            || { echo "::error::compile check did not report a result"; tail -25 /tmp/compile.log; exit 1; }
+          grep -E "^COMPILE_OK:" /tmp/compile.log
+
+      - name: Structural probe (headless, no GPU required)
+        # The terrain winding bug produced a mesh with vertices, a collision
+        # shape with faces, and a framebuffer full of sky - it passed every
+        # check we had. These assertions are pure CPU work (normals, physics
+        # ray, player height) so they run headlessly and reliably gate the APK.
+        #
+        # No --quit-after here: in headless the main loop is unthrottled, so a
+        # frame budget can expire in well under a second and kill the probe
+        # before it reports. The probe quits itself; `timeout` is the backstop.
+        run: |
+          set -uo pipefail
+          timeout -k 10 300 /opt/godot/godot --headless --path . \
+            res://tests/render_probe.tscn > /tmp/structure.log 2>&1 || true
+          echo "--- structural probe log (tail) ---"
+          tail -25 /tmp/structure.log | while IFS= read -r line; do
+            echo "::notice::$line"
+          done
+          grep -E "^PROBE_" /tmp/structure.log || {
+            # The probe scene itself failed to load or compile. Surface the
+            # reason here instead of "produced no result", which says nothing
+            # about what actually went wrong.
+            echo "::error::structural probe produced no result - it did not load"
+            grep -E "Parse Error|SCRIPT ERROR|Failed to load|Cannot open" /tmp/structure.log | head -20 \
+              | while IFS= read -r line; do echo "::error title=Probe::$line"; done
+            tail -30 /tmp/structure.log
+            exit 1
+          }
+          if grep -qE "^PROBE_RESULT: PASS" /tmp/structure.log; then
+            echo "Structural checks passed."
+          else
+            grep -E "^PROBE_FAIL" /tmp/structure.log | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            echo "::error::structural probe failed"
+            exit 1
+          fi
+
+      - name: Render probe (real framebuffer screenshot)
+        # Never let the visual probe block the APK: a hung software-GL context
+        # must not cost players their build. It reports, it does not gate.
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          set -uo pipefail
+          # Software GL so a real framebuffer can be captured on the runner.
+          sudo apt-get update -qq || true
+          if ! sudo apt-get install -y -qq xvfb libgl1 libglx-mesa0 libegl1; then
+            echo "::warning::could not install Xvfb/Mesa - skipping the pixel probe"
+            exit 0
+          fi
+          mkdir -p /tmp/probe
+
+          # The APK ships the Compatibility (OpenGL ES 3.0) renderer, so the
+          # probe MUST exercise that exact path - testing Vulkan here would
+          # validate a renderer our players never run.
+          set +e
+          timeout -k 10 240 xvfb-run -a --server-args="-screen 0 1280x720x24" \
+            /opt/godot/godot --path . --rendering-method gl_compatibility \
+            --rendering-driver opengl3 --resolution 1280x720 \
+            res://tests/render_probe.tscn -- --out=/tmp/probe \
+            > /tmp/probe.log 2>&1
+          CODE=$?
+          set -e
+          if [ "$CODE" -eq 124 ]; then
+            echo "::warning::render probe timed out (software GL) - skipping visual assertion"
+            exit 0
+          fi
+
+          grep -E "^PROBE_" /tmp/probe.log | while IFS= read -r line; do
+            case "$line" in
+              PROBE_FAIL*) echo "::error title=render probe::$line" ;;
+              PROBE_WARN*) echo "::warning title=render probe::$line" ;;
+              *) echo "::notice title=render probe::$line" ;;
+            esac
+          done
+
+          if ! grep -q "PROBE_BEGIN" /tmp/probe.log; then
+            # The engine itself could not start (no GL on this runner). That is
+            # an infrastructure limit, not a game bug - warn, do not fail.
+            echo "::warning::render probe could not start on this runner"
+            tail -20 /tmp/probe.log
+            exit 0
+          fi
+          if grep -q "PROBE_RESULT: FAIL" /tmp/probe.log; then
+            # The game's own errors during the probe run are the useful part:
+            # they say which script died before it could create the camera.
+            awk '
+              /^(ERROR|SCRIPT ERROR|USER ERROR):|Parse Error:/ { msg = $0; next }
+              /^[[:space:]]+at: / { if (msg != "") { print msg "  <" $0 ">"; msg = "" } next }
+              { if (msg != "") { print msg; msg = "" } }
+            ' /tmp/probe.log | grep -v "dummy/" | head -15 | while IFS= read -r line; do
+              echo "::error title=in-game::$line"
+            done
+            tail -25 /tmp/probe.log
+            echo "::error::Render probe FAILED - the 3D view is not drawing (see the render-probe artifact)"
+            exit 1
+          fi
+          echo "Render probe passed."
+
+
+      - name: Report rendered frame
+        if: always()
+        # Runs regardless of how the probe step exited: an artifact on blob
+        # storage may be unreachable and step logs are not fetchable, so the
+        # frame is embedded as a base64 line in the build output itself.
+        run: |
+          if [ ! -f /tmp/probe.log ]; then
+            echo "::notice::no probe log - the render step did not run"
+            exit 0
+          fi
+          # Annotations are capped at ~24 per check run, so only the lines that
+          # actually diagnose something are emitted. The full log is uploaded as
+          # an artifact for anything else.
+          grep -E "PROBE_(FAIL|WARN)|TOON_MAT|PLAYER_TREE|PLAYER_MESHES|PART |MESH_Y|character is|player chest" \
+            /tmp/probe.log | head -14 \
+            | while IFS= read -r line; do echo "::notice title=probe::$line"; done
+          grep -E "PROBE_INFO: (size=|alt view)" /tmp/probe.log | \
+            while IFS= read -r line; do echo "::notice title=pixels::$line"; done
+          # Pillow is only needed to re-encode the frame for the log.
+          python3 -m pip install --quiet --disable-pip-version-check pillow 2>/dev/null || \
+            sudo apt-get install -y -qq python3-pil 2>/dev/null || true
+          # Annotations are capped (~10 per check run, ~1000 chars each) so the
+          # frame cannot be carried there. The step summary is plain Markdown
+          # with no such limit, and it is readable through the jobs API.
+          python3 tools/shot_summary.py /tmp/probe/world.png /tmp/probe/world_alt.png \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish screenshots to the repo
+        if: always()
+        # Artifacts live on blob storage that some environments cannot reach and
+        # annotations are capped, so the only channel that reliably carries the
+        # rendered frame out of a runner is a committed file. Kept small and on
+        # a throwaway branch so the main branch history stays clean.
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/shots_out
+          cp /tmp/probe/world.png /tmp/shots_out/world.png 2>/dev/null || true
+          cp /tmp/probe/world_alt.png /tmp/shots_out/world_alt.png 2>/dev/null || true
+          cp /tmp/probe/world_wide.png /tmp/shots_out/world_wide.png 2>/dev/null || true
+          cp /tmp/probe/player.png /tmp/shots_out/player.png 2>/dev/null || true
+          cp /tmp/probe/player_flat.png /tmp/shots_out/player_flat.png 2>/dev/null || true
+          ls -la /tmp/shots_out || true
+          cd /tmp/shots_out
+          git init -q -b screenshots
+          git config user.name "LastStar CI"
+          git config user.email "ci@laststar.local"
+          git add -A
+          git commit -q -m "render: $(date -u +%FT%TZ) ${GITHUB_SHA:0:7}" || echo "nothing to commit"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -f origin screenshots
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload render screenshots
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: render-probe
+          path: |
+            /tmp/probe/*.png
+            /tmp/probe.log
+          if-no-files-found: ignore
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    needs: [verify]
+    # Even if verify's optional visual probe is unhappy, ship the APK.
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Godot editor + export templates
+        uses: actions/cache@v5.1.0
+        with:
+          path: |
+            /opt/godot
+            /opt/godot-templates
+          key: godot-${GODOT_RELEASE}-linux-android
+
+      - name: Install Godot 4.3 + Android export templates
+        run: |
+          set -euo pipefail
+          if [ ! -x /opt/godot/godot ]; then
+            curl -L --retry 3 -o /tmp/godot.zip \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+            mkdir -p /opt/godot && unzip -q -o /tmp/godot.zip -d /opt/godot
+            mv /opt/godot/Godot_v${GODOT_RELEASE}_linux.x86_64 /opt/godot/godot
+            chmod +x /opt/godot/godot
+          fi
+          if [ ! -f /opt/godot-templates/android_source.zip ]; then
+            curl -L --retry 3 -o /tmp/templates.tpz \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+            rm -rf /tmp/tpl && mkdir -p /tmp/tpl
+            unzip -q /tmp/templates.tpz -d /tmp/tpl
+            mkdir -p /opt/godot-templates
+            cp -r /tmp/tpl/templates/. /opt/godot-templates/
+          fi
+          ls /opt/godot-templates | head -8
+          /opt/godot/godot --version
+
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK" -name sdkmanager -type f | head -n1)"
+          fi
+          echo "Using $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-34" "build-tools;34.0.0" \
+            "cmake;3.22.1" "ndk;23.2.8568313" | tail -5
+
+      - name: Configure Godot editor settings (SDK, JDK, debug keystore)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          ln -sfn /opt/godot-templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION_DIR}"
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+            -keystore "$HOME/debug.keystore" -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" -validity 9999
+          mkdir -p "$HOME/.config/godot"
+          SETTINGS="$HOME/.config/godot/editor_settings-4.3.tres"
+          {
+            echo '[gd_resource type="EditorSettings" format=3]'
+            echo '[resource]'
+            echo "export/android/android_sdk_path = \"${ANDROID_SDK_ROOT}\""
+            echo "export/android/java_sdk_path = \"${JAVA_HOME}\""
+            echo "export/android/debug_keystore = \"$HOME/debug.keystore\""
+            echo 'export/android/debug_keystore_user = "androiddebugkey"'
+            echo 'export/android/debug_keystore_pass = "android"'
+            echo 'export/android/shutdown_adb_on_exit = true'
+          } > "$SETTINGS"
+          cat "$SETTINGS"
+
+      - name: Detect release keystore
+        id: signing
+        env:
+          KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "${KEY_B64:-}" ]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release keystore found - building a signed release APK."
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No ANDROID_KEYSTORE_BASE64 secret - building a signed debug APK."
+          fi
+
+      - name: Prepare release keystore
+        if: steps.signing.outputs.release == 'true'
+        env:
+          KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          echo "$KEY_B64" | base64 -d > "$HOME/laststar.keystore"
+          chmod 600 "$HOME/laststar.keystore"
+          {
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$HOME/laststar.keystore"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=${{ secrets.ANDROID_KEYSTORE_USER }}"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+          } >> "$GITHUB_ENV"
+
+      - name: Import project
+        run: |
+          set -euo pipefail
+          /opt/godot/godot --headless --editor --quit-after 400
+          test -d .godot
+
+      - name: Sanity check the Android toolchain
+        run: |
+          set -uo pipefail
+          SDK="${ANDROID_SDK_ROOT}"
+          JAVA="${JAVA_HOME:-/usr/lib/jvm/temurin-17-jdk-amd64}"
+          echo "::group::toolchain"
+          java -version 2>&1 | head -2
+          echo "JAVA_HOME=$JAVA"
+          echo "ANDROID_SDK_ROOT=$SDK"
+          echo "::endgroup::"
+          echo "::group::godot templates"
+          ls /opt/godot-templates | grep -iE "android|version"
+          echo "::endgroup::"
+          echo "::group::editor settings"
+          cat "$HOME/.config/godot/editor_settings-4.3.tres"
+          echo "::endgroup::"
+
+          # Everything Godot's has_valid_export_configuration() insists on.
+          for check in "$SDK/platform-tools/adb" "$JAVA/bin/java" \
+                       "$SDK/build-tools/34.0.0/apksigner" "$HOME/debug.keystore" \
+                       "/opt/godot-templates/android_debug.apk" "/opt/godot-templates/android_release.apk"; do
+            if [ -e "$check" ]; then
+              echo "::notice title=OK::$check"
+            else
+              echo "::error title=MISSING::$check"
+              exit 1
+            fi
+          done
+          grep -q "import_etc2_astc=true" project.godot \
+            || { echo "::error::project.godot must enable import_etc2_astc"; exit 1; }
+          echo "::notice::Android toolchain is complete."
+
+      - name: Export APK
+        id: export
+        run: |
+          set -uo pipefail
+          mkdir -p build/android
+          OUT="build/android/${EXPORT_NAME}.apk"
+          MODE="debug"
+          [ "${{ steps.signing.outputs.release }}" = "true" ] && MODE="release"
+          echo "Exporting a $MODE APK"
+
+          set +e
+          /opt/godot/godot --headless --verbose --export-${MODE} "Android" "$OUT" > /tmp/export.log 2>&1
+          CODE=$?
+          set -e
+
+          # Godot aborts export when the preset or the editor settings are
+          # incomplete; print the reasons it lists after that header.
+          IDX=$(grep -n "due to configuration errors" /tmp/export.log | cut -d: -f1 | head -1 || true)
+          if [ -n "${IDX:-}" ]; then
+            sed -n "${IDX},$((IDX+16))p" /tmp/export.log | while IFS= read -r line; do
+              echo "::error title=Godot config::${line}"
+            done
+          fi
+          grep -nE "BUILD FAILED|What went wrong|Could not|FAILURE:" /tmp/export.log | head -12 \
+            | while IFS= read -r line; do echo "::error title=gradle::${line}"; done || true
+
+          echo "godot exit code: $CODE"
+          if [ -f "$OUT" ]; then
+            SIZE=$(stat -c %s "$OUT")
+            if [ "$SIZE" -lt 1000000 ]; then
+              echo "::error::APK is suspiciously small (${SIZE} bytes)"
+              exit 1
+            fi
+            # Godot 4.3 can return non-zero after a fully successful export, so
+            # trust the artifact rather than the exit code.
+            echo "::notice title=APK::$(du -h "$OUT" | cut -f1) (${SIZE} bytes), godot exit $CODE"
+            exit 0
+          fi
+          tail -40 /tmp/export.log
+          echo "::error::Export failed with no APK (godot exit $CODE)"
+          exit 1
+
+      - name: Upload export diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: android-export-log
+          path: /tmp/export.log
+          if-no-files-found: ignore
+
+      - name: Confirm APK exists
+        run: |
+          set -euo pipefail
+          OUT="build/android/${EXPORT_NAME}.apk"
+          test -f "$OUT" || { echo "::error::No APK produced"; exit 1; }
+          ls -lh build/android
+
+      - name: Verify APK
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT}"
+          "$SDK/build-tools/34.0.0/aapt2" dump badging build/android/${EXPORT_NAME}.apk \
+            | grep -E "^(package|application-label|sdkVersion|targetSdkVersion|native-code)" || true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: LastStar-android
+          path: build/android/LastStar.apk
+          if-no-files-found: error
+
+      - name: Publish to rolling `latest-apk` release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG="latest-apk"
+          API="https://api.github.com/repos/${REPO}"
+          HDR=(-H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+               -H "X-GitHub-Api-Version: 2022-11-28")
+          NOTES="**LastStar — latest native Android build** (commit \`${GITHUB_SHA::7}\`).
+
+          A real **Godot 4.3** game exported as a native Android APK (arm64-v8a) —
+          not a web page in a shell.
+
+          **Install:** download \`LastStar.apk\` on an Android phone (7.0+), allow
+          *install unknown apps* for your file manager, open it and play.
+
+          Landscape · fully offline · touch joystick and buttons."
+
+          # 1. Make sure the tag + release exist.
+          if ! curl -sf "${HDR[@]}" "$API/releases/tags/$TAG" -o /tmp/rel.json; then
+            curl -sf "${HDR[@]}" -X POST "$API/releases" \
+              -d "$(jq -n --arg t "$TAG" --arg n "LastStar — latest Android build" --arg b "$NOTES" \
+                    '{tag_name:$t, name:$n, body:$b, target_commitish:"arena/fa1d19b2-laststar"}')" \
+              -o /tmp/rel.json
+          fi
+
+          # 2. Drop stale assets so the one download URL always serves the newest APK.
+          for id in $(jq -r '.assets[].id' /tmp/rel.json); do
+            curl -sf "${HDR[@]}" -X DELETE "$API/releases/assets/$id" || true
+          done
+
+          REL_ID=$(jq -r '.id' /tmp/rel.json)
+          UPLOAD="https://uploads.github.com/repos/${REPO}/releases/${REL_ID}/assets"
+          APK="build/android/${EXPORT_NAME}.apk"
+          curl -sf "${HDR[@]}" -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary "@${APK}" "$UPLOAD?name=$(basename "$APK")" -o /tmp/asset.json
+
+          # 3. Refresh the notes.
+          curl -sf "${HDR[@]}" -X PATCH "$API/releases/${REL_ID}" \
+            -d "$(jq -n --arg b "$NOTES" '{body:$b}')" > /dev/null
+
+          echo "::notice title=Download::https://github.com/${REPO}/releases/download/${TAG}/LastStar.apk"
+          echo "published $(stat -c %s "$APK") bytes"
+
+  desktop:
+    name: Linux + Windows
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache Godot editor + export templates
+        uses: actions/cache@v5.1.0
+        with:
+          path: |
+            /opt/godot
+            /opt/godot-templates
+          key: godot-${GODOT_RELEASE}-linux-desktop
+
+      - name: Install Godot 4.3 + export templates
+        run: |
+          set -euo pipefail
+          if [ ! -x /opt/godot/godot ]; then
+            curl -L --retry 3 -o /tmp/godot.zip \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+            mkdir -p /opt/godot && unzip -q -o /tmp/godot.zip -d /opt/godot
+            mv /opt/godot/Godot_v${GODOT_RELEASE}_linux.x86_64 /opt/godot/godot
+            chmod +x /opt/godot/godot
+          fi
+          if [ ! -f /opt/godot-templates/linux_release.x86_64 ]; then
+            curl -L --retry 3 -o /tmp/templates.tpz \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+            rm -rf /tmp/tpl && mkdir -p /tmp/tpl
+            unzip -q /tmp/templates.tpz -d /tmp/tpl
+            mkdir -p /opt/godot-templates
+            cp -r /tmp/tpl/templates/. /opt/godot-templates/
+          fi
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          ln -sfn /opt/godot-templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION_DIR}"
+
+      - name: Import project
+        run: |
+          set -euo pipefail
+          /opt/godot/godot --headless --editor --quit-after 400
+          test -d .godot
+
+      - name: Export Linux + Windows (x64 and x32)
+        run: |
+          set -euo pipefail
+          mkdir -p build/linux build/windows build/windows32
+          /opt/godot/godot --headless --verbose --export-release "Linux" "build/linux/${EXPORT_NAME}.x86_64"
+          /opt/godot/godot --headless --verbose --export-release "Windows Desktop" "build/windows/${EXPORT_NAME}.exe"
+          # The 32-bit export uses the same Godot template set but a separate
+          # preset (Windows Desktop 32) so both binaries ship side by side.
+          /opt/godot/godot --headless --verbose --export-release "Windows Desktop 32" "build/windows32/${EXPORT_NAME}.exe"
+          chmod +x build/linux/${EXPORT_NAME}.x86_64
+          ls -lh build/linux build/windows build/windows32
+          # Prove both architectures really shipped instead of trusting the
+          # preset names - inspects the PE header machine field.
+          python3 tools/verify_exports.py
+          # Fail loudly if any export produced nothing rather than shipping a
+          # silently empty artifact.
+          for f in "build/linux/${EXPORT_NAME}.x86_64" \
+                   "build/windows/${EXPORT_NAME}.exe" \
+                   "build/windows32/${EXPORT_NAME}.exe"; do
+            test -s "$f" || { echo "::error::missing or empty export: $f"; exit 1; }
+          done
+          # Prove the architectures really differ instead of trusting the preset.
+          python3 - <<'EOF'
+          import struct
+          for label, path in (("x64", "build/windows/LastStar.exe"),
+                              ("x32", "build/windows32/LastStar.exe")):
+              with open(path, "rb") as fh:
+                  head = fh.read(0x200)
+              off = struct.unpack_from("<I", head, 0x3C)[0]
+              with open(path, "rb") as fh:
+                  fh.seek(off)
+                  pe = fh.read(6)
+              machine = struct.unpack_from("<H", pe, 4)[0]
+              arch = {0x8664: "x86_64", 0x14c: "i386"}.get(machine, hex(machine))
+              print("%s %s -> PE machine %s (%s)" % (label, path, hex(machine), arch))
+              expected = "x86_64" if label == "x64" else "i386"
+              assert arch == expected, "%s export is %s, wanted %s" % (path, arch, expected)
+          EOF
+
+      - name: Upload desktop builds
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: LastStar-desktop
+          path: |
+            build/linux/**
+            build/windows/**
+            build/windows32/**
+          if-no-files-found: error
+
+  release:
+    name: Tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          path: dist
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "LastStar ${{ github.ref_name }}"
+          body: |
+            **LastStar** — an open-world, cel-shaded action-RPG inspired by
+            Genshin Impact, built with Godot 4.3.
+
+            * `LastStar.apk` — native Android build (arm64-v8a).
+            * `linux/` — Linux x86_64 desktop build.
+            * `windows/` — Windows x86_64 desktop build.
+            * `windows32/` — Windows x86 (32-bit) desktop build.
+          files: |
+            dist/LastStar-android/LastStar.apk
+            dist/LastStar-desktop/**
+          draft: false
+          prerelease: false

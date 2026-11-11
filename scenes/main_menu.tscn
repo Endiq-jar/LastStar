@@ -1,0 +1,146 @@
+[gd_scene load_steps=4 format=3 uid="uid://clstarmenu0001"]
+
+[ext_resource type="Script" path="res://scripts/main_menu.gd" id="1_menu"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.04, 0.09, 0.14, 0.72)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.9, 0.62, 0.55)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+content_margin_left = 44
+content_margin_top = 34
+content_margin_right = 44
+content_margin_bottom = 34
+shadow_color = Color(0, 0, 0, 0.4)
+shadow_size = 18
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn"]
+bg_color = Color(0.13, 0.34, 0.38, 0.92)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.9, 0.6, 0.7)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 18
+content_margin_top = 12
+content_margin_right = 18
+content_margin_bottom = 12
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_menu")
+
+[node name="Dimmer" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.02, 0.05, 0.09, 0.18)
+
+[node name="LeftPanel" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 64.0
+offset_top = -220.0
+offset_right = 560.0
+offset_bottom = 220.0
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="LeftPanel"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="VBox" type="VBoxContainer" parent="LeftPanel/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="LeftPanel/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.93, 0.72, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.55)
+theme_override_constants/shadow_offset_x = 3
+theme_override_constants/shadow_offset_y = 3
+theme_override_font_sizes/font_size = 62
+text = "LastStar"
+
+[node name="Tagline" type="Label" parent="LeftPanel/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.78, 0.94, 1, 1)
+theme_override_font_sizes/font_size = 17
+text = "An open-world elemental adventure"
+autowrap_mode = 2
+
+[node name="Blurb" type="Label" parent="LeftPanel/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.86, 0.92, 0.97, 0.9)
+theme_override_font_sizes/font_size = 14
+text = "Glide across painted valleys, switch between three elemental wanderers, and bring back twelve star sigils. Built for Android and desktop with a mobile renderer."
+autowrap_mode = 2
+
+[node name="PartyLabel" type="Label" parent="LeftPanel/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.88, 0.6, 0.9)
+theme_override_font_sizes/font_size = 13
+text = "TRAVELLING PARTY"
+
+[node name="PartyRow" type="HBoxContainer" parent="LeftPanel/Panel/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 22
+
+[node name="Spacer" type="Control" parent="LeftPanel/Panel/VBox"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+
+[node name="StartButton" type="Button" parent="LeftPanel/Panel/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 56)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn")
+theme_override_font_sizes/font_size = 22
+text = "Begin the Journey"
+
+[node name="QualityButton" type="Button" parent="LeftPanel/Panel/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Quality: Balanced"
+
+[node name="QuitButton" type="Button" parent="LeftPanel/Panel/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Quit"
+
+[node name="Footer" type="Label" parent="LeftPanel/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.7, 0.76, 1)
+theme_override_font_sizes/font_size = 11
+text = "WASD move · Shift sprint · Space jump/glide · LMB attack · E skill · Q burst · T switch · Esc pause
+Touch: left joystick + right-side camera drag · Original characters, MIT-licensed code"
+autowrap_mode = 2
