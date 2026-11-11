@@ -15,7 +15,11 @@ extends Node
 ##   godot --headless --path . res://tests/compile_check.tscn
 
 const DIRS := ["res://scripts", "res://tests"]
-const SHADER_DIRS := ["res://shaders"]
+# Both locations. `assets/shaders` holds the environment shader library and is
+# nested by category, which is why the walker below had to become recursive -
+# DirAccess.get_files() lists one directory only, so the entire library was
+# silently skipped and CI reported green without ever compiling it.
+const SHADER_DIRS := ["res://shaders", "res://assets/shaders"]
 
 
 func _ready() -> void:
@@ -84,11 +88,20 @@ func _run() -> void:
 func _files(dirs: Array, suffix: String) -> Array[String]:
 	var out: Array[String] = []
 	for d in dirs:
-		var da := DirAccess.open(d)
-		if da == null:
-			continue
-		for f in da.get_files():
-			if f.ends_with(suffix):
-				out.append(d.path_join(f))
+		_walk(d, suffix, out)
 	out.sort()
 	return out
+
+
+## Recurse, because the shader library is nested by category. The previous
+## single-level listing meant res://assets/shaders/**/*.gdshader was never
+## compiled in CI at all - the check passed by not looking.
+func _walk(dir_path: String, suffix: String, out: Array[String]) -> void:
+	var da := DirAccess.open(dir_path)
+	if da == null:
+		return
+	for f in da.get_files():
+		if f.ends_with(suffix):
+			out.append(dir_path.path_join(f))
+	for sub in da.get_directories():
+		_walk(dir_path.path_join(sub), suffix, out)
