@@ -155,6 +155,12 @@ func _run() -> void:
 	# Compact one-liner so the grass totals survive the annotation cap: the API
 	# returns only the first ~24 annotations, and the detailed grass report runs
 	# later in the log than that.
+	# Is the character actually visible in the gameplay frame? She has been
+	# covered by grass and pushed behind the HUD band more than once, and the
+	# only way that was caught was by looking at the PNG.
+	if cam:
+		_check_player_visible(cam, world)
+
 	var gf := world.get_node_or_null("GrassField")
 	if gf != null:
 		_log("INFO", "GRASS_SUMMARY blades=%d chunks=%d diag=%s" % [
@@ -520,6 +526,33 @@ func _report_palette(img: Image, label: String) -> void:
 				label, frac * 100.0])
 	if worst > 0.92:
 		_log("WARN", "%s has a near-pure sample (saturation %.2f) - the grade is clipping a channel" % [label, worst])
+
+
+func _check_player_visible(cam: Camera3D, world: Node) -> void:
+	## Project the character's chest to the screen and confirm it is inside the
+	## region the play view can actually see: above the bottom HUD band and inside
+	## the viewport.
+	var player := world.get_node_or_null("Player") as Node3D
+	if player == null:
+		_log("FAIL", "no Player node - nothing to look at in the gameplay frame")
+		return
+	var chest := player.global_position + Vector3(0.0, 1.2, 0.0)
+	var screen := cam.unproject_position(chest)
+	var vp := get_viewport().get_visible_rect().size
+	# The bottom ~26% of the screen is the HUD action bar and the burst/stamina
+	# bars. A character whose chest lands below that line is effectively hidden.
+	var hud_top := vp.y * 0.74
+	_log("INFO", "player chest projects to (%.0f,%.0f) of (%.0f,%.0f), HUD starts at y=%.0f" % [
+		screen.x, screen.y, vp.x, vp.y, hud_top])
+	if cam.is_position_behind(chest):
+		_log("FAIL", "the character is behind the camera")
+	elif screen.y > hud_top:
+		_log("FAIL", "the character is behind the HUD (chest at y=%.0f, HUD from y=%.0f)" % [
+			screen.y, hud_top])
+	elif screen.x < 0.0 or screen.x > vp.x:
+		_log("FAIL", "the character is off screen horizontally")
+	else:
+		_log("INFO", "character is in clear view")
 
 
 func _hsv_of(c: Color) -> Vector3:

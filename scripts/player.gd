@@ -23,7 +23,9 @@ const TURN_SPEED := 13.0
 ## Genshin's own camera looks down at roughly 20 degrees from slightly further
 ## back, which clears the grass and shows the ground she is standing on.
 const CAM_DISTANCE := 5.0
-const CAM_HEIGHT := 2.15
+## Chest height on a 1.8 m character. The frame is centred here, which leaves the
+## full body in view above the HUD band at the bottom of the screen.
+const CAM_HEIGHT := 1.45
 const CAM_SHOULDER := 0.45
 const MOUSE_SENS := 0.0026
 const STICK_SENS := 2.4
@@ -36,8 +38,13 @@ var element_id: int = 0
 
 var _yaw: float = 0.0
 var _target_yaw: float = 0.0
-var _pitch: float = -0.34
-var _target_pitch: float = -0.34
+## Look-down angle. -0.18 rad is roughly 10 degrees: enough to see the ground the
+## character stands on and to clear the grass, without swinging the camera so high
+## that she drops to the bottom of the frame. Pitching the pivot further rotates
+## the whole spring arm upward, so the character slides down the screen along with
+## it - the fix for "the grass hides her" was the cull radius, not the angle.
+var _pitch: float = -0.18
+var _target_pitch: float = -0.18
 var _pivot: Node3D
 var _spring: SpringArm3D
 var _camera: Camera3D
@@ -116,6 +123,8 @@ func _build_rig() -> void:
 func _build_camera() -> void:
 	_pivot = Node3D.new()
 	_pivot.name = "CameraPivot"
+	# The pivot is the point the camera orbits and the point the frame is centred
+	# on, so it sits at chest height rather than above the head.
 	_pivot.position = Vector3(0, CAM_HEIGHT, 0)
 	add_child(_pivot)
 
@@ -128,7 +137,7 @@ func _build_camera() -> void:
 	# collide with the character and jam the camera inside its own head.
 	_spring.collision_mask = 1
 	_spring.add_excluded_object(get_rid())
-	_spring.position = Vector3(CAM_SHOULDER, 0.15, 0)
+	_spring.position = Vector3(CAM_SHOULDER, 0.0, 0)
 	_pivot.add_child(_spring)
 
 	_camera = Camera3D.new()
