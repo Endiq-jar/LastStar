@@ -58,6 +58,7 @@ var _target_pitch: float = -0.18
 var _pivot: Node3D
 var _spring: SpringArm3D
 var _contact_shadow: MeshInstance3D
+var _contact_shadow_base_y := 0.045
 var _camera: Camera3D
 var _double_jump_used := false
 var _gliding := false
@@ -172,18 +173,32 @@ func _build_contact_shadow() -> void:
 	_contact_shadow.mesh = quad
 	_contact_shadow.rotation_degrees = Vector3(-90, 0, 0)
 	_contact_shadow.position.y = 0.045
+	# Alpha blend, NOT multiply.
+	#
+	# BLEND_MODE_MUL multiplies dst by the source COLOUR and ignores alpha
+	# entirely, so the soft radial texture I generated was ignored and the quad
+	# rendered as a solid black rectangle on the ground - a far worse artefact
+	# than the missing shadow it was meant to replace. Alpha blending with a
+	# black albedo and a radial alpha is what gives the soft blob.
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_MUL
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_color = Color(0.06, 0.07, 0.09, 1.0)
 	mat.albedo_texture = _shadow_texture()
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	# The texture carries the falloff in RGB and the strength in A; multiplying
+	# the albedo by it keeps the blob dark without it going opaque at the rim.
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 	_contact_shadow.material_override = mat
 	# It is decoration: never let it write depth or be picked up by the probe's
 	# "what is near the camera" pass as a suspicious unshaded object.
 	_contact_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_contact_shadow)
+	# Remember the resting height; _process keeps the blob on the ground beneath
+	# her rather than at a fixed offset in her own space, so it does not sink into
+	# a slope or hover over a crest.
+	_contact_shadow_base_y = _contact_shadow.position.y
 
 
 func _shadow_texture() -> Texture2D:
@@ -195,8 +210,12 @@ func _shadow_texture() -> Texture2D:
 			var uv := Vector2(float(x) + 0.5, float(y) + 0.5) / float(size) * 2.0 - Vector2.ONE
 			var d := clampf(uv.length(), 0.0, 1.0)
 			# Smooth, and never fully black: a hard black disc reads as a hole.
-			var a := (1.0 - smoothstep(0.0, 1.0, d)) * 0.55
-			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a))
+			# Dark at the middle, transparent at the rim. Both the colour and the
+			# alpha carry the falloff so the blob is a shadow rather than a
+			# darkening decal.
+			var t := 1.0 - smoothstep(0.0, 1.0, d)
+			var a := t * t * 0.62
+			img.set_pixel(x, y, Color(0.05, 0.06, 0.08, a))
 	return ImageTexture.create_from_image(img)
 
 
@@ -235,6 +254,27 @@ func _build_camera() -> void:
 	_camera.far = 900.0
 	_camera.current = true
 	_spring.add_child(_camera)
+
+
+func _update_contact_shadow() -> void:
+	## Keep the blob on the ground under her feet.
+	##
+	## She walks over terrain that changes height constantly, so a blob parented at
+	## a fixed height in her local space would sink into the ground on a crest and
+	## hover in a dip. Resolve the real surface under her and sit on it, and fade it
+	## out while she is airborne so it does not stay glued to her boots mid-jump.
+	if _contact_shadow == null:
+		return
+	var terr := _terrain()
+	if terr == null or not terr.has_method("surface_height_at"):
+		return
+	var ground: float = terr.surface_height_at(global_position.x, global_position.z)
+	var offset: float = ground - global_position.y + _contact_shadow_base_y
+	_contact_shadow.position.y = offset
+	var air: float = maxf(0.0, global_position.y - ground)
+	var mat := _contact_shadow.material_override as StandardMaterial3D
+	if mat != null:
+		mat.albedo_color.a = clampf(1.0 - air * 0.5, 0.0, 1.0)
 
 
 func _update_camera_occlusion() -> void:
@@ -411,6 +451,7 @@ func _physics_process(delta: float) -> void:
 	_pitch = lerpf(_pitch, _target_pitch, 1.0 - exp(-16.0 * delta))
 	_pivot.rotation = Vector3(_pitch, _yaw, 0.0)
 	_update_camera_occlusion()
+	_update_contact_shadow()
 
 	_attack_cd = maxf(0.0, _attack_cd - delta)
 	_skill_cd = maxf(0.0, _skill_cd - delta)

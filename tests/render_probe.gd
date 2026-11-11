@@ -994,9 +994,16 @@ func _measure_ground_ratio(img: Image) -> Dictionary:
 	var lit := -1.0
 	var dark := 2.0
 	var count := 0
-	# Skip the HUD bands at the very top and bottom.
+	# Skip the HUD bands at the very top and bottom of the frame.
 	for y in range(int(h * 0.28), int(h * 0.82), step):
 		for x in range(0, w, step):
+			# Exclude the middle band, which is where the character stands. Her
+			# contact shadow is deliberately the darkest thing in the frame and
+			# including it measured my own blob shadow rather than the ground: the
+			# ratio jumped to 19x the moment I added it.
+			var in_character_band := x > int(w * 0.38) and x < int(w * 0.62)
+			if in_character_band:
+				continue
 			var c := img.get_pixel(x, y)
 			# Green-dominant ground only; this ignores sky, HUD and the character.
 			if c.g <= c.r + 0.04 or c.g <= c.b + 0.04:
