@@ -150,6 +150,9 @@ func _run() -> void:
 	# several times, and both were found only by looking at a PNG.
 	if cam:
 		_check_player_visible(cam, world)
+		# Visual-tree first: it is the summary that matters, and the cap truncates
+		# the tail.
+		_dump_visual_tree(world.get_node_or_null("Player"))
 		_dump_player_parts(cam, world)
 
 	# --- what is in front of the camera ------------------------------------
@@ -590,8 +593,51 @@ func _dump_player_parts(cam: Camera3D, world: Node) -> void:
 		total.position.y, total.end.y, total.size.y,
 		total.position.x, total.end.x])
 	_log("INFO", "player parts: %d meshes, %d on screen" % [parts.size(), shown])
-	for i in range(mini(parts.size(), 10)):
+	for i in range(mini(parts.size(), 4)):
 		_log("INFO", "  " + parts[i])
+
+
+func _dump_visual_tree(player: Node) -> void:
+	var visual := player.get_node_or_null("Visual") as Node3D
+	if visual == null:
+		_log("FAIL", "player has no Visual node")
+		return
+	_log("INFO", "Visual: visible=%s pos=%s scale=%s children=%d" % [
+		str(visual.visible), str(visual.position), str(visual.scale),
+		visual.get_child_count()])
+	var torso := visual.get_node_or_null("Torso") as Node3D
+	if torso != null:
+		var tb := AABB()
+		var tf := true
+		for mi in torso.find_children("*", "MeshInstance3D", true, false):
+			var m := mi as MeshInstance3D
+			if m.mesh == null:
+				continue
+			var box := m.global_transform * m.get_aabb()
+			tb = box if tf else tb.merge(box)
+			tf = false
+		_log("INFO", "Torso bounds y=%.2f..%.2f size=%s" % [
+			tb.position.y, tb.end.y, str(tb.size)])
+		for mi in torso.find_children("*", "MeshInstance3D", true, false):
+			var m2 := mi as MeshInstance3D
+			if m2.mesh == null:
+				continue
+			var mat := m2.material_override
+			var kind := "none"
+			if mat is StandardMaterial3D:
+				kind = "standard"
+			elif mat is ShaderMaterial:
+				kind = "shader:%s" % str((mat as ShaderMaterial).shader.resource_path).get_file()
+			_log("INFO", "    part %s mesh=%s mat=%s layers=%d" % [
+				m2.name, m2.mesh.get_class(), kind, m2.layers])
+			break
+	for child in visual.get_children():
+		var n3 := child as Node3D
+		if n3 == null:
+			continue
+		var meshes := n3.find_children("*", "MeshInstance3D", true, false).size()
+		_log("INFO", "  %s visible=%s pos=%s scale=%s meshes=%d" % [
+			n3.name, str(n3.visible), str(n3.position), str(n3.scale), meshes])
 
 
 func _check_player_visible(cam: Camera3D, world: Node) -> void:
