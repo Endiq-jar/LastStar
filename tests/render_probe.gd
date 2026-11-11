@@ -381,8 +381,12 @@ func _run() -> void:
 		portrait.near = 0.05
 		portrait.far = 60.0
 		world.add_child(portrait)
-		var focus := player_node.global_position + Vector3(0.0, 1.05, 0.0)
-		portrait.global_position = focus + Vector3(0.0, 0.16, 2.9)
+		# Frame the whole character: aim at her waist and stand far enough back that
+		# 1.95 m of body fits the 40-degree lens. The previous version aimed at her
+		# chest from 2.9 m with the camera only 0.16 m above it, so the frame was
+		# mostly sky and the HUD covered her feet - useless as a reference.
+		var focus := player_node.global_position + Vector3(0.0, 1.00, 0.0)
+		portrait.global_position = focus + Vector3(0.0, 0.45, 4.6)
 		portrait.look_at(focus, Vector3.UP)
 		portrait.current = true
 		await get_tree().create_timer(0.35).timeout
