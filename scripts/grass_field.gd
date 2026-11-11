@@ -15,9 +15,14 @@ extends Node3D
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
 const VIEW_CHUNKS := 5            ## radius, in chunks (5 * 26 = 130 m)
-const BLADES_NEAR := 3400         ## instances in a chunk adjacent to the player
-const BLADES_MID := 1700
-const BLADES_FAR := 700
+## Instances per 26 m chunk. Near chunks were 3400 - about five tufts per square
+## metre - drawn as 2.1 m quads, which left visible gaps between them and read as
+## blotches of green on bare ground rather than a carpet. Roughly doubled to close
+## that up. The far tiers stay cheap because each tuft there covers more screen
+## area.
+const BLADES_NEAR := 6200         ## instances in a chunk adjacent to the player
+const BLADES_MID := 2600
+const BLADES_FAR := 900
 const MAX_CHUNKS := 81            ## (2*5+1)^2, hard cap on live chunks
 const SEA_MARGIN := 2.4           ## metres above water level where grass starts
 
@@ -59,7 +64,7 @@ func _build_resources() -> void:
 	# (the old approach) merged into bright cauliflower blobs at any distance
 	# and cost three times the overdraw.
 	var quad := QuadMesh.new()
-	quad.size = Vector2(BLADE_W * 3.4, BLADE_H * 1.15)
+	quad.size = Vector2(BLADE_W * 3.9, BLADE_H * 1.20)
 	quad.orientation = PlaneMesh.FACE_Y
 	_blade_mesh = quad
 

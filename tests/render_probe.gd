@@ -152,6 +152,14 @@ func _run() -> void:
 	if cam:
 		_dump_frustum(cam, world)
 
+	# Compact one-liner so the grass totals survive the annotation cap: the API
+	# returns only the first ~24 annotations, and the detailed grass report runs
+	# later in the log than that.
+	var gf := world.get_node_or_null("GrassField")
+	if gf != null:
+		_log("INFO", "GRASS_SUMMARY blades=%d chunks=%d diag=%s" % [
+			gf.call("blade_count"), gf.call("chunk_count"), str(gf.call("diagnostics"))])
+
 	# --- environment dressing ----------------------------------------------
 	# Logs and pebbles are what stop the grass reading as a flat painted
 	# texture. Assert they actually spawned rather than silently picking zero
