@@ -124,6 +124,16 @@ jobs:
           fi
           echo "World booted cleanly."
 
+      - name: Static check (undeclared identifiers)
+        # gdparse and the Godot parser both accept a file where a variable was
+        # deleted but a use of it survives on a nearby line - the parser is
+        # lazy about scope in a way gdtoolkit does not model, and Godot only
+        # rejects it at reload. That shipped twice: once as a missing `sky`
+        # instance, once as a `fire_light` that no longer existed. Both cost a
+        # full CI cycle to find. This catches the shape statically.
+        run: |
+          python3 tools/undeclared.py scripts/*.gd
+
       - name: Compile check (every script and shader, autoloads live)
         # Booting the world headlessly only compiles the scripts the world
         # reaches. A compile error in tests/render_probe.gd therefore used to

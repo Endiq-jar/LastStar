@@ -764,9 +764,11 @@ func _scatter_landmarks() -> void:
 		#
 		# If a genuine ground-glow is wanted later, the cheap version is a single
 		# unshaded additive decal quad lying on the terrain, not a light.
-		var t := fire_light.create_tween().set_loops()
-		t.tween_property(fire_light, "light_energy", 1.6, 0.5)
-		t.tween_property(fire_light, "light_energy", 2.6, 0.7)
+		# Flicker the fire's own emission instead of a light's energy. Same visual
+		# read, no lighting cost. The tween loops for the life of the node.
+		var t := fire.create_tween().set_loops()
+		t.tween_property(fm, "emission_energy_multiplier", 2.0, 0.5)
+		t.tween_property(fm, "emission_energy_multiplier", 3.4, 0.7)
 
 
 func _spawn_waypoints() -> void:
