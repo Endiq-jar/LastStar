@@ -123,9 +123,12 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	chest.height = 0.56
 	_outlined(torso, chest, outfit, Vector3(0, 1.18, 0), 0.009)
 
+	# Was a 0.22 outer-radius hoop on a chest of radius 0.19 - a hula hoop floating
+	# around her torso, which from the front rendered as a large grey donut sitting
+	# on her sternum. Sized to actually ring the neck now.
 	var collar := TorusMesh.new()
-	collar.inner_radius = 0.14
-	collar.outer_radius = 0.22
+	collar.inner_radius = 0.105
+	collar.outer_radius = 0.145
 	collar.rings = 12
 	collar.ring_segments = 8
 	var collar_mi := _add(torso, collar, accent, Vector3(0, 1.44, 0))
@@ -199,7 +202,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	# A small mouth. Without one the face is an eye mask on a blank oval, which is
 	# the difference between "anime girl" and "mannequin".
 	var mouth := QuadMesh.new()
-	mouth.size = Vector2(0.030, 0.012)
+	mouth.size = Vector2(0.034, 0.011)
 	var m := _add(head, mouth, _glow(Color(0.55, 0.26, 0.30), 0.0), Vector3(0.0, -0.079, -0.158))
 	m.rotation_degrees = Vector3(0.0, 180.0, 0.0)
 
@@ -237,14 +240,16 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	back_hair.height = 0.60
 	_add(head, back_hair, hair, Vector3(0, -0.24, 0.09)).scale = Vector3(1.05, 1.0, 0.62)
 
-	# Headband / hairpin with the party colour.
-	var pin := TorusMesh.new()
-	pin.inner_radius = 0.14
-	pin.outer_radius = 0.165
-	pin.rings = 14
-	pin.ring_segments = 6
-	var pin_mi := _no_shadow(_add(head, pin, element_glow, Vector3(0, 0.075, 0.02)))
-	pin_mi.rotation_degrees = Vector3(12, 0, 0)
+	# A small hair ornament, not a halo.
+	#
+	# The old "hairpin" torus had a 0.165 outer radius against a hair cap of 0.168:
+	# a ring the same diameter as her entire head, which from the front appeared as
+	# a grey donut laid across the top of her hair. It was never a hairpin, and no
+	# amount of shading was going to make it look like one.
+	var ornament := SphereMesh.new()
+	ornament.radius = 0.030
+	ornament.height = 0.060
+	_no_shadow(_add(head, ornament, element_glow, Vector3(0.115, 0.088, -0.055)))
 
 	# --- arms -------------------------------------------------------------
 	var arms: Array[Node3D] = []
