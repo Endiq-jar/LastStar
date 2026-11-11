@@ -169,6 +169,17 @@ void fragment() {
 	vec3 hazed = mix(vec3(luma), col, 0.72) * vec3(0.80, 0.86, 1.06);
 	col = mix(col, hazed, haze * 0.88);
 
+	// Pull the hue back toward grey before handing the albedo to the light.
+	//
+	// The neon this project keeps fighting was never brightness - the shadowed
+	// hills measure rgb(3,30,20), which is dark and 0.90 saturated at the same
+	// time. A saturated albedo stays saturated at every exposure, so no amount of
+	// exposure tuning removed it. Mixing 18% of the luminance back in is what a
+	// painter does with green, and it is what lets the light add the warmth
+	// instead of the pigment being born at maximum chroma.
+	float col_luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+	col = mix(col, vec3(col_luma), 0.18);
+
 	// Lift the darkest end. Whatever the light does, no terrain albedo in a
 	// stylised open world should be below about 0.06 or the ground turns into a
 	// black hole under the camera while the same grass two metres away is bright.
@@ -195,7 +206,12 @@ void fragment() {
 	// puts a floor under the shadow instead, which is what makes painted terrain
 	// read - shadow is a colour there, and the darkest value on the ground is
 	// nowhere near black.
-	EMISSION = col * 0.10 + vec3(0.030, 0.040, 0.058);
+	// The constant dominates on purpose. On a slope facing away from the key the
+	// light term is a few thousandths, so this floor *is* the shadow colour, and a
+	// floor of 0.03/0.04/0.06 still left the shadowed valley reading as a hole -
+	// rgb(3,30,20) in the wide frame, near-black and 0.90 saturated. Painted
+	// background shadow is a cool mid green, not an absence of light.
+	EMISSION = col * 0.14 + vec3(0.062, 0.082, 0.098);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);

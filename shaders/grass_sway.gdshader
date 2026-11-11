@@ -148,6 +148,11 @@ void fragment() {
 		discard;
 	}
 
+	// Same hue discipline as the terrain: the field has to sit in the hillside, and
+	// the hillside is no longer a saturated hue. A little luminance mixed back in
+	// keeps the meadow from reading as a separate, greener surface.
+	col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), 0.14);
+
 	ALBEDO = col;
 	ROUGHNESS = 0.94;
 	METALLIC = 0.0;
