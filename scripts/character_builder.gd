@@ -23,6 +23,11 @@ static func _toon(color: Color, rim: float = 0.35) -> ShaderMaterial:
 	m.set_shader_parameter("rim_strength", minf(rim, 0.45))
 	m.set_shader_parameter("diffuse_energy", 1.0)
 	m.set_shader_parameter("spec_energy", 0.26)
+	# Draw the character over the meadow. Grass uses alpha scissor and can sit
+	# between the camera and the player; a higher render priority does not change
+	# depth ordering (depth test still applies) but it does keep the character's
+	# transparent-adjacent passes from sorting behind the field.
+	m.render_priority = 1
 	return m
 
 

@@ -27,8 +27,13 @@ const MAX_CHUNKS := 81            ## (2*5+1)^2, hard cap on live chunks
 const SEA_MARGIN := 2.4           ## metres above water level where grass starts
 
 ## Two crossed quads per tuft, so a tuft has volume from every angle.
+## Tuft footprint and height in metres. The height matters more than it looks:
+## the player is 1.8 m tall and the camera sits 4.2 m back at 2 m up, so a 0.78 m
+## blade with a 1.2 scale multiplier in the mid ring grew to roughly the
+## character's chest and hid her completely. Meadow grass in this style sits
+## around knee height.
 const BLADE_W := 0.62
-const BLADE_H := 0.78
+const BLADE_H := 0.56
 
 signal chunk_built(count: int)
 
@@ -166,7 +171,9 @@ func _build_chunk(key: Vector2i) -> void:
 	var origin_x := float(key.x) * CHUNK_SIZE
 	var origin_z := float(key.y) * CHUNK_SIZE
 	# Taller blades further away hide the reduced density.
-	var height_scale := 1.0 + clampf(float(dist) * 0.06, 0.0, 0.35)
+	# Taller further out hides the reduced density without turning the mid ring
+	# into reeds.
+	var height_scale := 1.0 + clampf(float(dist) * 0.045, 0.0, 0.22)
 	_tier_counts[count] = int(_tier_counts.get(count, 0)) + 1
 	for i in range(count):
 		_tried += 1

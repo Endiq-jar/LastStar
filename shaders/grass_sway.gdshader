@@ -1,6 +1,7 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 
+
 // Alpha-scissor, not alpha-blend: a cut-out discard costs no sorting and no
 // blending on mobile GLES3, which is why every open-world game does grass this
 // way. Alpha blending here would also make blades sort against each other and
@@ -31,11 +32,16 @@ uniform float wind_strength : hint_range(0.0, 1.0) = 0.22;
 uniform float wind_speed : hint_range(0.0, 4.0) = 1.4;
 uniform vec2 wind_dir = vec2(0.85, 0.35);
 uniform float color_variance : hint_range(0.0, 1.0) = 0.20;
+// Blades closer than this to the camera are shrunk out of existence, so the
+// third-person camera can see the character it is following. Without it the
+// meadow in front of the lens is a wall of grass taller than the player.
+uniform float near_clear : hint_range(0.0, 12.0) = 2.6;
 uniform sampler2D blade_tex : source_color, filter_linear_mipmap, repeat_disable;
 uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
 
 varying float v_tint;
 varying float v_height;
+varying float v_cull;
 
 void vertex() {
 	vec3 origin = MODEL_MATRIX[3].xyz;
@@ -54,16 +60,27 @@ void vertex() {
 
 	// Per-instance colour variation, hashed from the instance origin so it is
 	// stable frame to frame (no shimmer as the camera moves).
-	float h = fract(sin(dot(origin.xz, vec2(12.9898, 78.233))) * 43758.5453);
+	float h := fract(sin(dot(origin.xz, vec2(12.9898, 78.233))) * 43758.5453);
 	v_tint = h;
 	v_height = height;
+
+	// Distance from this instance to the camera, in world space. VERTEX is in
+	// model space here and MODEL_MATRIX is the instance transform, so the world
+	// position of the tuft's base is MODEL_MATRIX[3].xyz, which is `origin`.
+	// CAMERA_POSITION_WORLD is available in the vertex stage from Godot 4.0.
+	float cam_dist := length(origin - CAMERA_POSITION_WORLD);
+	// 0 right at the lens, 1 beyond near_clear. Collapsing the quad (rather than
+	// discarding) keeps the vertex count identical, so there is no branch
+	// divergence and no popping in the instance buffer.
+	v_cull = smoothstep(near_clear * 0.45, near_clear, cam_dist);
+	VERTEX *= v_cull;
 }
 
 void fragment() {
 	// Cut the blade shape out of the quad. Anything outside the drawn tuft is
 	// discarded outright, so the quad never reads as a rectangle.
 	vec4 tex = texture(blade_tex, UV);
-	if (tex.a < alpha_cut) {
+	if (tex.a < alpha_cut || v_cull < 0.02) {
 		discard;
 	}
 
@@ -92,6 +109,15 @@ void fragment() {
 	// has to sit in the hillside, and the hillside is not dark.
 	float far_t = smoothstep(60.0, 140.0, dist);
 	col = mix(col, vec3(0.26, 0.34, 0.20), far_t * 0.45);
+
+	// Dissolve before the streaming edge. Grass only exists in a 130 m radius
+	// around the player, and the shader was drawing right up to that boundary -
+	// a hard arc of blades against bare terrain, plainly visible in the gameplay
+	// frame. This must match VIEW_CHUNKS * CHUNK_SIZE in grass_field.gd.
+	float edge = smoothstep(112.0, 128.0, dist);
+	if (edge > 0.96) {
+		discard;
+	}
 
 	ALBEDO = col;
 	ROUGHNESS = 0.94;
