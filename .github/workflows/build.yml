@@ -117,7 +117,7 @@ jobs:
           fi
           echo "World booted cleanly."
 
-      - name: Compile check scene (every script, autoloads live)
+      - name: Compile check (every script and shader, autoloads live)
         # Booting the world headlessly only compiles the scripts the world
         # reaches. A compile error in tests/render_probe.gd therefore used to
         # pass this job and only fail in the probe step, which then reported
@@ -132,13 +132,16 @@ jobs:
           timeout -k 10 240 /opt/godot/godot --headless --path . \
             res://tests/compile_check.tscn > /tmp/compile.log 2>&1 || true
           grep -E "^COMPILE_" /tmp/compile.log | tail -40 || true
-          if grep -qE "^COMPILE_FAIL|^SCRIPT ERROR: Parse Error|^SCRIPT ERROR: Compile Error" /tmp/compile.log; then
-            grep -E "^COMPILE_FAIL|^SCRIPT ERROR: (Parse|Compile) Error" /tmp/compile.log | head -20 \
+          # Shader compile failures do not stop the run either - Godot logs an
+          # error and falls back to a default white material, which reads as an
+          # art bug rather than a build failure. They are errors here.
+          if grep -qiE "^COMPILE_FAIL|^SCRIPT ERROR: (Parse|Compile) Error|Shader compilation failed|\.gdshader:[0-9]+" /tmp/compile.log; then
+            grep -iE "^COMPILE_FAIL|^SCRIPT ERROR: (Parse|Compile) Error|Shader compilation failed|\.gdshader:[0-9]+" /tmp/compile.log | head -20 \
               | while IFS= read -r line; do echo "::error title=Compile::$line"; done
             echo "::error::one or more scripts failed to compile"
             exit 1
           fi
-          grep -qE "^COMPILE_OK: [0-9]+ scripts" /tmp/compile.log \
+          grep -qE "^COMPILE_OK: " /tmp/compile.log \
             || { echo "::error::compile check did not report a result"; tail -25 /tmp/compile.log; exit 1; }
           grep -E "^COMPILE_OK:" /tmp/compile.log
 

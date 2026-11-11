@@ -1,43 +1,31 @@
 extends Node
-## Compile every GDScript in the project, from inside the running game.
+## Compile every GDScript and every shader in the project, from inside the game.
 ##
-## Why a scene and not `--script`: a SceneTree script runs without autoloads, so
-## every script that references the `Game` singleton fails to compile with
-## "Identifier not found: Game" and the check reports the whole project as
-## broken. Running as a normal scene means autoloads are live and the only errors
-## reported are real ones.
+## Two classes of mistake this catches that a headless boot does not:
 ##
-## Why it exists at all: booting the world headlessly only compiles the scripts
-## the world reaches. A compile error in tests/render_probe.gd therefore passed
-## that step and only failed in the probe, as "no PROBE_RESULT" - the symptom
-## rather than the cause. (Concretely: Color.hsv does not exist; Color has a
-## from_hsv constructor but no getter.)
+##  * a compile error in a script the world never loads (the render probe), which
+##    otherwise surfaces only as "no PROBE_RESULT" in the probe step;
+##  * a shader that fails to compile. Godot does not fail the run for that - it
+##    logs "Shader compilation failed" and draws the surface with a default white
+##    material. A meadow rendered in pale lavender-White looks like an art bug, not
+##    a compile bug, and cost a full CI cycle to find: CAMERA_POSITION_WORLD is a
+##    fragment-stage built-in and its use in vertex() was the whole cause.
 ##
 ## Usage:
 ##   godot --headless --path . res://tests/compile_check.tscn
 
 const DIRS := ["res://scripts", "res://tests"]
+const SHADER_DIRS := ["res://shaders"]
 
 
 func _ready() -> void:
-	# Deferred so the tree is fully up (and autoloads are settled) before any
-	# script is loaded.
 	_run.call_deferred()
 
 
 func _run() -> void:
-	var files: Array[String] = []
-	for d in DIRS:
-		var da := DirAccess.open(d)
-		if da == null:
-			continue
-		for f in da.get_files():
-			if f.ends_with(".gd"):
-				files.append(d.path_join(f))
-	files.sort()
-
 	var failed: Array[String] = []
-	for path in files:
+
+	for path in _files(DIRS, ".gd"):
 		# Print before loading so a stall names the file it stalled on.
 		print("COMPILE_TRY: %s" % path)
 		var script := load(path) as Script
@@ -45,24 +33,45 @@ func _run() -> void:
 			failed.append(path)
 			print("COMPILE_FAIL: %s did not load" % path)
 			continue
-		# Instantiating catches resolve errors that loading alone tolerates
-		# (e.g. a call to a member that does not exist on a typed variable).
-		# Only instantiate nodes and RefCounted; anything that needs a specific
-		# constructor signature would report a false failure here.
+		# Instantiation catches member-resolution errors that loading tolerates.
 		var inst = script.new()
 		if inst == null:
 			failed.append(path)
 			print("COMPILE_FAIL: %s produced no instance" % path)
-		elif inst is RefCounted:
-			pass  # released automatically
 		elif inst is Node:
-			# Never entered the tree, so free() rather than queue_free().
 			inst.free()
 
+	# Shaders: construct a material and hand it to the renderer. A bad shader
+	# still returns a ShaderMaterial, so the failure is read from the engine's own
+	# error output, which the workflow greps for.
+	for path in _files(SHADER_DIRS, ".gdshader"):
+		print("COMPILE_TRY: %s" % path)
+		var shader := load(path) as Shader
+		if shader == null:
+			failed.append(path)
+			print("COMPILE_FAIL: %s did not load" % path)
+			continue
+		var mat := ShaderMaterial.new()
+		mat.shader = shader
+		# Touching the material forces it into the RenderingServer.
+		mat.set_shader_parameter("__compile_probe", 1.0)
+
 	if failed.is_empty():
-		print("COMPILE_OK: %d scripts" % files.size())
+		print("COMPILE_OK: all scripts and shaders")
 		get_tree().quit(0)
 	else:
-		print("COMPILE_FAIL_SUMMARY: %d of %d scripts failed: %s" % [
-			failed.size(), files.size(), ", ".join(failed)])
+		print("COMPILE_FAIL_SUMMARY: %s" % ", ".join(failed))
 		get_tree().quit(1)
+
+
+func _files(dirs: Array, suffix: String) -> Array[String]:
+	var out: Array[String] = []
+	for d in dirs:
+		var da := DirAccess.open(d)
+		if da == null:
+			continue
+		for f in da.get_files():
+			if f.ends_with(suffix):
+				out.append(d.path_join(f))
+	out.sort()
+	return out

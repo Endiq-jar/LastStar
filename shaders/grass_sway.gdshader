@@ -67,8 +67,11 @@ void vertex() {
 	// Distance from this instance to the camera, in world space. VERTEX is in
 	// model space here and MODEL_MATRIX is the instance transform, so the world
 	// position of the tuft's base is MODEL_MATRIX[3].xyz, which is `origin`.
-	// CAMERA_POSITION_WORLD is available in the vertex stage from Godot 4.0.
-	float cam_dist := length(origin - CAMERA_POSITION_WORLD);
+	// MAIN_CAM_INV_VIEW_MATRIX is the camera's world transform and is available
+	// in the vertex stage; CAMERA_POSITION_WORLD is fragment-only, and using it
+	// here is a compile error, which silently falls back to a default white
+	// material (the pale blue patches this produced).
+	float cam_dist := length(origin - MAIN_CAM_INV_VIEW_MATRIX[3].xyz);
 	// 0 right at the lens, 1 beyond near_clear. Collapsing the quad (rather than
 	// discarding) keeps the vertex count identical, so there is no branch
 	// divergence and no popping in the instance buffer.
