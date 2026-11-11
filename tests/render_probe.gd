@@ -100,6 +100,20 @@ func _run() -> void:
 	var players := get_tree().get_nodes_in_group("player")
 	_log("INFO" if players.size() == 1 else "FAIL",
 		"player nodes in group = %d" % players.size())
+	# Measure the sole-to-ground gap HERE, immediately, because the annotation
+	# channel keeps only the newest ~30 messages and this number was landing
+	# outside it. It is the one measurement that settles whether the character
+	# actually floats or merely looks like she does.
+	if players.size() > 0:
+		var probe_player := players[0] as Node3D
+		var probe_terrain := world.get_node_or_null("Terrain")
+		if probe_player != null and probe_terrain != null and probe_terrain.has_method("surface_height_at"):
+			var fx := probe_player.global_position.x
+			var fz := probe_player.global_position.z
+			var feet_y: float = probe_player.global_position.y + 0.05
+			var ground_y: float = probe_terrain.surface_height_at(fx, fz)
+			_log("INFO", "GROUND_ANCHOR feet=%.3f ground=%.3f gap=%.3f m" % [
+				feet_y, ground_y, feet_y - ground_y])
 
 	# --- every script compiles ---------------------------------------------
 	# Load each GDScript through the real compiler. This catches the class of
