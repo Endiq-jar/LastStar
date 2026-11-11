@@ -156,6 +156,11 @@ void fragment() {
 	// which is most of what makes wind-blown grass look alive. Small, because
 	// it stacks over every blade in the field.
 	BACKLIGHT = grass_tip.rgb * 0.14;
-	// Keep the shadow-facing side from going black; ambient handles the rest.
-	EMISSION = base * 0.02;
+	// Keep the shadow-facing side from going black. A plain multiple of base is
+	// useless here - base is around 0.15, so 0.02 of it is three thousandths of a
+	// stop on an 8-bit buffer. A small fixed term along with the colour keeps the
+	// field's darkest tufts above the terrain's shadow floor, so the meadow and
+	// the ground it stands on share one value range instead of splitting into a
+	// bright lawn floating over a black void.
+	EMISSION = base * 0.10 + vec3(0.014, 0.020, 0.012);
 }

@@ -1,10 +1,13 @@
 shader_type spatial;
-render_mode cull_back, diffuse_toon, specular_toon, depth_draw_opaque;
-// NOTE: with diffuse_toon the transition point between lit and shadowed is fixed
-// and very hard, which is what produced the crisp diagonal shadow edges across
-// the hills. The shader compensates by never letting albedo drop far and by
-// keeping ambient high, so the terminator reads as a colour change rather than
-// as a cut-out.
+render_mode cull_back, diffuse_lambert, specular_toon, depth_draw_opaque;
+// Lambert, not toon, for the terrain.
+//
+// The toon diffuse is what cut the hillsides into hard two-tone wedges with a
+// terminator that followed the mesh triangles rather than the form - the reason
+// a slope under a cast shadow read as a flat near-black shape with a knife edge
+// while the grass standing on it stayed bright. A background painting rolls its
+// shadow off gradually; a soft falloff plus the albedo floor below keeps the
+// stylisation in the colour ramp and out of the geometry.
 
 // Stylized Genshin-like terrain: three painted layers (meadow / rock / sand)
 // triplanar-blended by height + slope, with soft painterly macro variation and
@@ -184,7 +187,15 @@ void fragment() {
 	// This is emission rather than more ambient light on purpose: raising the
 	// environment's ambient also greys out the character's blacks, and the whole
 	// point of the repaint was to keep them black.
-	EMISSION = col * 0.13;
+	// A constant cool term, not a multiple of col.
+	//
+	// Scaling by col does nothing where it is needed most: on a slope facing away
+	// from the sun the lit result is already near zero, so col*0.13 rounded to a
+	// 2/255 difference in the frame. The foreground stayed black. A fixed lift
+	// puts a floor under the shadow instead, which is what makes painted terrain
+	// read - shadow is a colour there, and the darkest value on the ground is
+	// nowhere near black.
+	EMISSION = col * 0.10 + vec3(0.030, 0.040, 0.058);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);

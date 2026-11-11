@@ -358,9 +358,22 @@ func _run() -> void:
 	# Orbit the camera a quarter turn and capture again: catches a camera that
 	# exists but is stuck inside geometry or pointed at the void.
 	if cam:
-		# Nudge the camera only: rotating the player's pivot would also move the
-		# SpringArm's collision cast and can put the camera inside a hill.
-		cam.global_position += Vector3(0.0, 6.0, 0.0)
+		# Orbit the *pivot*, not the camera.
+		#
+		# This used to write cam.global_position, but the camera is a child of a
+		# SpringArm3D whose transform player.gd rewrites every frame from the
+		# player's yaw and pitch. The offset was overwritten before the next draw,
+		# so world_alt.png was a byte-for-byte duplicate of world.png and this
+		# check could never detect a camera stuck in geometry - which is precisely
+		# what it exists to detect. Turning the pivot is the only lever the probe
+		# actually owns.
+		var pivot := cam.get_parent()
+		while pivot != null and not (pivot is Node3D and pivot.name == "CameraPivot"):
+			pivot = pivot.get_parent()
+		if pivot is Node3D:
+			(pivot as Node3D).rotation.y += PI * 0.5
+		else:
+			_log("WARN", "no CameraPivot found - world_alt will repeat the main frame")
 		await get_tree().create_timer(0.45).timeout
 		await get_tree().process_frame
 		var img2 := get_viewport().get_texture().get_image()
