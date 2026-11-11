@@ -754,12 +754,16 @@ func _scatter_landmarks() -> void:
 		fire.material_override = fm
 		fire.position.y = 0.4
 		camp.add_child(fire)
-		var fire_light := OmniLight3D.new()
-		fire_light.light_color = Color(1.0, 0.6, 0.25)
-		fire_light.light_energy = 2.4
-		fire_light.omni_range = 8.0
-		fire_light.position.y = 1.0
-		camp.add_child(fire_light)
+		# Campfire glow is emissive only - no OmniLight3D.
+		#
+		# Six campfires across the valley each added a real-time point light to a
+		# renderer with no clustered lighting, so all six were evaluated per pixel
+		# on every lit surface that overlapped their range. The fire mesh below is
+		# already unshaded and emissive at 3x; the light added almost nothing to
+		# the image and a permanent cost to the frame.
+		#
+		# If a genuine ground-glow is wanted later, the cheap version is a single
+		# unshaded additive decal quad lying on the terrain, not a light.
 		var t := fire_light.create_tween().set_loops()
 		t.tween_property(fire_light, "light_energy", 1.6, 0.5)
 		t.tween_property(fire_light, "light_energy", 2.6, 0.7)

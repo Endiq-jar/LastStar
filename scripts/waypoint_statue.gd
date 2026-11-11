@@ -10,7 +10,6 @@ var _activated := false
 var _time := 0.0
 var _wings: Array[Node3D] = []
 var _crystal: MeshInstance3D
-var _light: OmniLight3D
 
 
 func _ready() -> void:
@@ -100,12 +99,11 @@ func _ready() -> void:
 		pivot.add_child(wing)
 		_wings.append(pivot)
 
-	_light = OmniLight3D.new()
-	_light.light_color = Color(0.55, 0.9, 1.0)
-	_light.light_energy = 1.4
-	_light.omni_range = 9.0
-	_light.position.y = 4.0
-	add_child(_light)
+	# No point light. Same reasoning as the sigils, slimes and campfires: this
+	# renderer has no clustered lighting, so a 9 m OmniLight on every waypoint is
+	# charged per pixel across everything it overlaps. The activated crystal below
+	# is emissive and unshaded, which is what actually reads as "lit".
+	_light = null
 
 	var label := Label3D.new()
 	label.text = statue_name
@@ -126,8 +124,7 @@ func _process(delta: float) -> void:
 	if _crystal:
 		_crystal.rotation.y += delta * 0.9
 		_crystal.position.y = 5.0 + sin(_time * 1.6) * 0.16
-	if _light:
-		_light.light_energy = (2.0 if _activated else 1.2) + sin(_time * 2.2) * 0.3
+
 
 
 func _on_body_entered(body: Node3D) -> void:
