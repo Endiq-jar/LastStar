@@ -13,14 +13,14 @@ uniform vec4 rim_color : source_color = vec4(1.0, 0.93, 0.80, 1.0);
 uniform float ramp_softness : hint_range(0.01, 0.6) = 0.09;
 uniform float diffuse_energy : hint_range(0.0, 2.0) = 1.0;
 uniform float spec_energy : hint_range(0.0, 2.0) = 0.55;
-uniform float spec_size : hint_range(0.0, 1.0) = 0.13;
+uniform float spec_size : hint_range(0.0, 1.0) = 0.055;
 // Hard ceiling on how much the anime specular band may add. Without it a
 // sphere facing the sun sums the band over its whole visible area.
 // A single anime specular band was blowing out to a white blob on every rounded
 // form - a bright ring the size of her head on the hair cap, and another on her
 // chest. The band is smaller and capped lower now; the hair highlights that carry
 // the look come from the band's edge, not its centre.
-uniform float spec_ceiling : hint_range(0.0, 1.0) = 0.16;
+uniform float spec_ceiling : hint_range(0.0, 1.0) = 0.10;
 uniform float rim_strength : hint_range(0.0, 2.0) = 0.35;
 uniform float rim_power : hint_range(1.0, 8.0) = 3.4;
 uniform float emission_boost : hint_range(0.0, 4.0) = 0.0;
@@ -94,7 +94,10 @@ void light() {
 	float ndv = clamp(dot(n, v), 0.0, 1.0);
 	vec3 half_vec = normalize(normalize(LIGHT) + v);
 	float ndh = dot(n, half_vec);
-	float spec_amount = smoothstep(1.0 - spec_size, 1.0 - spec_size * 0.30, ndh);
+	// Tight. A highlight is a small mark, not a wash: with the half-vector set to
+	// a wide tolerance the blob covered every surface facing the camera at once,
+	// which on black cloth is a grey smudge rather than a shine.
+	float spec_amount = smoothstep(1.0 - spec_size, 1.0 - spec_size * 0.35, ndh);
 	spec_amount *= spec_energy * (0.4 + ndv * 0.6);
 	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * min(spec_amount, spec_ceiling);
 

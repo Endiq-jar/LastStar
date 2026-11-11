@@ -26,7 +26,7 @@ static func _toon(color: Color, rim: float = 0.35) -> ShaderMaterial:
 	# deliberately restrained.
 	m.set_shader_parameter("rim_strength", minf(rim, 0.30))
 	m.set_shader_parameter("diffuse_energy", 1.0)
-	m.set_shader_parameter("spec_energy", 0.18)
+	m.set_shader_parameter("spec_energy", 0.55)
 	# Deliberately left at 0. Setting render_priority on an opaque material takes it
 	# out of the opaque queue and sorts it with the transparent pass, and on the
 	# Compatibility renderer that made the whole upper body stop rasterising while
