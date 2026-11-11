@@ -251,7 +251,11 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	var cape_mesh := QuadMesh.new()
 	cape_mesh.size = Vector2(0.42, 0.72)
 	var cape_mi := _outlined(cape_root, cape_mesh, cape_mat, Vector3(0, -0.34, 0.02), 0.012)
-	cape_mi.rotation_degrees = Vector3(-6, 180, 0)
+	# No 180-degree yaw. QuadMesh's front face points along +Z, the character faces
+	# -Z and the camera sits behind her on +Z, so the cape already faces the camera.
+	# Yawing it by 180 turned its front away and left only the inverted-hull outline
+	# shell visible - a solid black rectangle hanging down her back.
+	cape_mi.rotation_degrees = Vector3(-6, 0, 0)
 
 	var wings := Node3D.new()
 	wings.name = "Wings"
