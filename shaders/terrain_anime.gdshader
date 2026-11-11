@@ -96,6 +96,14 @@ void fragment() {
 	// mid-frequency breakup a painted hillside has.
 	vec3 meadow_fine = tri(meadow_tex, v_world, wn, uv_scale * 4.7);
 	float meadow_fl = dot(meadow_fine, vec3(0.2126, 0.7152, 0.0722));
+
+	// A third scale, sampled from the UV grid rather than triplanar because it is
+	// only ever seen on the ground. At 0.62 m this is the size of a patch of
+	// longer grass, and it is the scale the camera actually looks at from 4 m -
+	// without it the ground immediately under the player is one unbroken fill no
+	// matter how much larger-scale paint is layered above it.
+	vec3 near_detail = texture(meadow_tex, v_world.xz * 1.6).rgb;
+	float near_l = dot(near_detail, vec3(0.2126, 0.7152, 0.0722));
 	float meadow_l = dot(meadow_detail, vec3(0.2126, 0.7152, 0.0722));
 	float rock_l = dot(rock_detail, vec3(0.2126, 0.7152, 0.0722));
 	float sand_l = dot(sand_detail, vec3(0.2126, 0.7152, 0.0722));
@@ -105,12 +113,23 @@ void fragment() {
 	vec3 grass = mix(meadow_deep.rgb, meadow_tint.rgb, 0.35 + patch * 0.65);
 	grass *= mix(1.0, meadow_l * 1.9, 0.50);
 	grass *= mix(1.0, meadow_fl * 1.7, 0.30);
+	// Weighted by distance: the fine grain is only visible up close, and applying
+	// it at range would just be noise under the haze.
+	grass *= mix(1.0, near_l * 1.7, 0.34 * (1.0 - smoothstep(18.0, 70.0, length(VERTEX))));
 	// A little golden meadow mixed in, the way open-world grass reads. Kept
 	// low: push this and the hillsides turn acid yellow-green.
 	// The dry blend is nearly as weak as it can be while still breaking up the
 	// field. At 0.10 with a lighter yellow it painted large acid-yellow blotches
 	// across the meadow that read as camo, not as sun-bleached grass.
 	grass = mix(grass, vec3(0.34, 0.36, 0.19), dry * 0.06);
+	// Hue and value variety, which is what separates a painted valley from a
+	// single flat wash of green. Genshin's fields run from a warm yellow-green on
+	// the sunlit crowns to a cool blue-green in the hollows, and the transition
+	// follows the terrain's own large-scale noise rather than a screen gradient.
+	float warm_patch = smoothstep(0.35, 0.75, macro2);
+	grass = mix(grass, grass * vec3(1.16, 1.09, 0.80), warm_patch * 0.55);
+	float cool_patch = smoothstep(0.62, 0.20, macro);
+	grass = mix(grass, grass * vec3(0.80, 0.94, 1.06), cool_patch * 0.40);
 
 	// Rock: warm grey, cooler in shadowed bands.
 	vec3 rock_col = rock_tint.rgb * mix(0.66, 1.0, patch);
