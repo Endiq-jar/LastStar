@@ -217,7 +217,7 @@ func _shadow_texture() -> Texture2D:
 			# alpha carry the falloff so the blob is a shadow rather than a
 			# darkening decal.
 			var t := 1.0 - smoothstep(0.0, 1.0, d)
-			var a := t * t * 0.62
+			var a := t * t * 0.85
 			img.set_pixel(x, y, Color(0.05, 0.06, 0.08, a))
 	return ImageTexture.create_from_image(img)
 

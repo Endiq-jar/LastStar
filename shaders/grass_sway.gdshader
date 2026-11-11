@@ -35,7 +35,7 @@ uniform float color_variance : hint_range(0.0, 1.0) = 0.20;
 // Blades closer than this to the camera are shrunk out of existence, so the
 // third-person camera can see the character it is following. Without it the
 // meadow in front of the lens is a wall of grass taller than the player.
-uniform float near_clear : hint_range(0.0, 12.0) = 2.6;
+uniform float near_clear : hint_range(0.0, 12.0) = 1.9;
 // Camera position, pushed in from grass_field.gd once per frame.
 //
 // This is a uniform rather than a built-in on purpose: the camera built-ins
