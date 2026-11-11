@@ -220,9 +220,24 @@ jobs:
         run: |
           set -uo pipefail
           # Software GL so a real framebuffer can be captured on the runner.
-          sudo apt-get update -qq || true
-          if ! sudo apt-get install -y -qq xvfb libgl1 libglx-mesa0 libegl1; then
-            echo "::warning::could not install Xvfb/Mesa - skipping the pixel probe"
+          #
+          # apt on this runner fails intermittently (mirror timeouts). It is
+          # worth retrying rather than giving up: when this step gives up, no
+          # frame is rendered, the screenshots branch is not updated, and the
+          # only visible trace is a warning - so the ground-contrast number
+          # silently stops existing. That happened once already.
+          OK=0
+          for attempt in 1 2 3; do
+            sudo apt-get update -qq || true
+            if sudo apt-get install -y -qq xvfb libgl1 libglx-mesa0 libegl1; then
+              OK=1
+              break
+            fi
+            echo "apt attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          if [ "$OK" -ne 1 ]; then
+            echo "::warning::could not install Xvfb/Mesa after 3 attempts - no frame this run"
             exit 0
           fi
           mkdir -p /tmp/probe
