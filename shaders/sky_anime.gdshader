@@ -37,9 +37,9 @@ uniform float sun_strength : hint_range(0.0, 4.0) = 1.6;
 // Height of the cloud layer above the world, in metres.
 uniform float cloud_height = 1250.0;
 // World size of one noise cell. Larger = bigger, fewer clouds.
-uniform float cloud_scale = 0.0011;
+uniform float cloud_scale = 0.0034;
 // 0.0 = clear sky, 1.0 = overcast.
-uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.44;
+uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.52;
 uniform float cloud_opacity : hint_range(0.0, 1.0) = 0.92;
 uniform vec3 cloud_color : source_color = vec3(1.0, 1.0, 1.0);
 uniform vec3 cloud_shadow_color : source_color = vec3(0.74, 0.80, 0.90);
@@ -160,14 +160,27 @@ void sky() {
 		vec2 p = EYEDIR.xz * layer_dist * cloud_scale;
 		// Two layers at different heights and scales read as depth rather than
 		// as one flat sheet of noise.
+		// Domain warp: the noise is sampled offset by another noise. Plain fbm
+		// gives soft round blobs that read as fog; pushing the sample point
+		// around by a slower-varying field breaks the blobs into the cauliform
+		// shapes a cumulus deck actually has.
+		vec2 warp = vec2(sky_fbm(p * 0.45 + 7.1), sky_fbm(p * 0.45 + 19.3)) - 0.5;
+		p += warp * 1.35;
+
 		float n = sky_fbm(p + vec2(cloud_drift * TIME, 0.0));
-		float n2 = sky_fbm(p * 2.7 + vec2(0.0, cloud_drift * TIME * 1.7) + 31.4);
-		float density = n * 0.68 + n2 * 0.32;
+		float n2 = sky_fbm(p * 2.6 + vec2(0.0, cloud_drift * TIME * 1.7) + 31.4);
+		float density = n * 0.70 + n2 * 0.30;
+
+		// Stretch the usable range. fbm clusters hard around 0.5, so thresholding
+		// it raw either takes everything or nothing depending on the exact cut;
+		// remapping first means cloud_coverage sweeps smoothly from clear to
+		// overcast instead of jumping.
+		density = smoothstep(0.30, 0.72, density);
 
 		// Coverage is a threshold on the noise: raising it lowers the cut, so
 		// more of the sky fills in.
 		float lo = 1.0 - cloud_coverage;
-		float mask = smoothstep(lo, lo + 0.20, density);
+		float mask = smoothstep(lo, lo + 0.13, density);
 
 		// Fade the layer out at the horizon and at the zenith. The horizon fade
 		// avoids a hard seam where the perspective divide blows up; the zenith
@@ -177,7 +190,7 @@ void sky() {
 
 		// Lit tops, cool shaded undersides - the flat two-tone that reads as
 		// cel-shaded cloud rather than a photographic texture.
-		float lit = smoothstep(lo + 0.02, lo + 0.30, density);
+		float lit = smoothstep(lo, lo + 0.34, density);
 		vec3 cloud = mix(cloud_shadow_color, cloud_color, lit);
 		// Faint rim brightening where the layer faces the sun.
 		cloud += sun_color * pow(max(sun_dot, 0.0), 6.0) * 0.18;
