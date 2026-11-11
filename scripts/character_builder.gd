@@ -23,11 +23,11 @@ static func _toon(color: Color, rim: float = 0.35) -> ShaderMaterial:
 	m.set_shader_parameter("rim_strength", minf(rim, 0.45))
 	m.set_shader_parameter("diffuse_energy", 1.0)
 	m.set_shader_parameter("spec_energy", 0.26)
-	# Draw the character over the meadow. Grass uses alpha scissor and can sit
-	# between the camera and the player; a higher render priority does not change
-	# depth ordering (depth test still applies) but it does keep the character's
-	# transparent-adjacent passes from sorting behind the field.
-	m.render_priority = 1
+	# Deliberately left at 0. Setting render_priority on an opaque material takes it
+	# out of the opaque queue and sorts it with the transparent pass, and on the
+	# Compatibility renderer that made the whole upper body stop rasterising while
+	# its meshes still reported visible with correct bounds. Grass is cleared around
+	# the character in the grass shader instead; that is the correct place for it.
 	return m
 
 
