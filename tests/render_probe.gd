@@ -472,15 +472,25 @@ func _run() -> void:
 	# Chosen so the grass field (which follows the player, radius 130 m) is still
 	# in frame: the previous vantage sat just outside it, so the beauty shot had
 	# no foreground grass at all and the slope read as bare green geometry.
-	var eye := Vector3(-70.0, 0.0, -70.0)
+	# Stand on the meadow 45 m from the player, 11 m up, looking across the valley.
+	# The grass field streams in a 130 m radius around the *player*, so a vantage
+	# further out than that has bare terrain in the foreground - which is why
+	# every beauty frame so far showed a smooth green slope with no grass on it,
+	# while the gameplay frame was full of it.
+	var eye := Vector3(-34.0, 0.0, -30.0)
 	var terrain_node := world.get_node_or_null("Terrain")
 	if terrain_node != null and terrain_node.has_method("get_height_at"):
-		eye.y = terrain_node.get_height_at(eye.x, eye.z) + 30.0
+		eye.y = terrain_node.get_height_at(eye.x, eye.z) + 11.0
 	else:
-		eye.y = 40.0
+		eye.y = 30.0
 	beauty.global_position = eye
-	# Look slightly down-valley and just under the horizon, toward the lake.
-	beauty.look_at(Vector3(40.0, eye.y - 24.0, 90.0), Vector3.UP)
+	# Aim into the middle distance along the valley, keeping the horizon high in
+	# the frame so the meadow occupies the lower half.
+	beauty.look_at(Vector3(70.0, eye.y - 12.0, 80.0), Vector3.UP)
+	# Rebuild the grass ring around this vantage so the shot has its own meadow.
+	var gf := world.get_node_or_null("GrassField")
+	if gf != null and gf.has_method("focus_at"):
+		gf.call("focus_at", eye)
 
 	# Push the sun to a warm low morning for the beauty frame so the shot shows
 	# the graded palette rather than whatever time the world happened to boot at.

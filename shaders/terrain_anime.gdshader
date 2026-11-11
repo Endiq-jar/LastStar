@@ -17,7 +17,9 @@ uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_e
 
 uniform vec4 meadow_tint : source_color = vec4(0.28, 0.45, 0.20, 1.0);
 uniform vec4 meadow_deep : source_color = vec4(0.13, 0.27, 0.13, 1.0);
-uniform vec4 rock_tint : source_color = vec4(0.42, 0.41, 0.44, 1.0);
+// Slightly warm grey. A neutral 0.42 grey under a cool sky turns every cliff the
+// same slate blue and the mountains lose all separation from the sky behind them.
+uniform vec4 rock_tint : source_color = vec4(0.40, 0.38, 0.36, 1.0);
 uniform vec4 sand_tint : source_color = vec4(0.58, 0.52, 0.38, 1.0);
 uniform vec4 shadow_tint : source_color = vec4(0.68, 0.72, 0.95, 1.0);
 
@@ -31,8 +33,8 @@ uniform float water_level : hint_range(-20.0, 40.0) = 1.0;
 uniform float wet_band : hint_range(0.5, 24.0) = 5.0;
 uniform float band_softness : hint_range(0.0, 0.3) = 0.055;
 // Distance (metres) over which albedo starts to mute toward atmospheric haze.
-uniform float haze_begin : hint_range(0.0, 600.0) = 130.0;
-uniform float haze_end : hint_range(0.0, 900.0) = 620.0;
+uniform float haze_begin : hint_range(0.0, 600.0) = 170.0;
+uniform float haze_end : hint_range(0.0, 900.0) = 700.0;
 
 varying vec3 v_world;
 varying vec3 v_world_normal;
@@ -150,13 +152,19 @@ void fragment() {
 	// In the fragment stage VERTEX is the view-space position, so its length is
 	// the distance to the camera on every renderer without extra uniforms.
 	float cam_dist = length(VERTEX);
+	// Begin further out and reach less far, so the near and middle hills keep their
+	// own colour and the muting is reserved for the actual ridge line. At 130-620 m
+	// it was flattening the entire visible range into one grey band.
 	float haze = smoothstep(haze_begin, haze_end, cam_dist);
 	// Mute toward luminance AND darken. Muting alone kept the far ridge as bright
 	// as the near hill, so it read as a flat green wall behind the valley instead
 	// of receding into atmosphere; the depth cue is mostly the value drop.
 	float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
-	vec3 hazed = mix(vec3(luma), col, 0.58) * vec3(0.86, 0.92, 1.10);
-	col = mix(col, hazed, haze * 0.95);
+	// Keep rather more of the surface's own colour (0.72 rather than 0.58) and tint
+	// the result toward the sky blue rather than desaturating it to neutral grey,
+	// which is what made the ridges read as blank cardboard cut-outs.
+	vec3 hazed = mix(vec3(luma), col, 0.72) * vec3(0.80, 0.86, 1.06);
+	col = mix(col, hazed, haze * 0.88);
 
 	// Lift the darkest end. Whatever the light does, no terrain albedo in a
 	// stylised open world should be below about 0.06 or the ground turns into a

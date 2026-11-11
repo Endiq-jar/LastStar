@@ -288,6 +288,30 @@ func set_enabled(on: bool) -> void:
 		_refresh(true)
 
 
+func focus_at(point: Vector3) -> void:
+	## Re-centre the field on an arbitrary point instead of the player.
+	##
+	## The field normally follows the player, which is right in play and wrong for
+	## the beauty screenshot: that camera stands tens of metres away, outside the
+	## ring, so its foreground has no grass at all. Rebuilding around the vantage
+	## makes the screenshot show the world as it actually appears.
+	if _terrain == null:
+		return
+	var center := _chunk_of(point)
+	_last_center = center
+	for key in _chunks.keys():
+		var node: MultiMeshInstance3D = _chunks[key]
+		if is_instance_valid(node):
+			node.queue_free()
+	_chunks.clear()
+	_pending.clear()
+	_queue_around(center)
+	var guard := 0
+	while not _pending.is_empty() and guard < MAX_CHUNKS * 2:
+		_build_chunk(_pending.pop_front())
+		guard += 1
+
+
 func set_density_scale(scale: float) -> void:
 	## Used by the quality tuner: 1.0 = full, 0.5 = half the blades.
 	_build_budget = maxi(1, int(round(4.0 * scale)))
