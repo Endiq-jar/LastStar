@@ -159,19 +159,27 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	# reaches z = -0.149 at the eye line - and these quads were at -0.145, i.e.
 	# *inside* it. The first face that rendered correctly was a completely blank
 	# skin oval: the eyes had been there the whole time, behind the outline hull.
+	# QuadMesh's front face points along +Z while the character faces -Z, so every
+	# eye plane has to be yawed a half turn. Without it all three quads are
+	# backface-culled and the face renders as a blank skin oval - which is exactly
+	# how it looked, twice, while the meshes sat in the tree at the right position
+	# with the right material.
 	for side in [-1.0, 1.0]:
 		var dark := QuadMesh.new()
-		dark.size = Vector2(0.090, 0.076)
+		dark.size = Vector2(0.092, 0.078)
 		var dm := _glow(Color(0.09, 0.07, 0.11), 0.0)
-		_add(head, dark, dm, Vector3(0.058 * side, 0.005, -0.156))
+		var d := _add(head, dark, dm, Vector3(0.058 * side, 0.005, -0.157))
+		d.rotation_degrees = Vector3(0.0, 180.0, 0.0)
 
 		var iris := QuadMesh.new()
-		iris.size = Vector2(0.066, 0.060)
-		_add(head, iris, eye, Vector3(0.058 * side, 0.004, -0.160))
+		iris.size = Vector2(0.068, 0.062)
+		var i := _add(head, iris, eye, Vector3(0.058 * side, 0.004, -0.161))
+		i.rotation_degrees = Vector3(0.0, 180.0, 0.0)
 
 		var shine := QuadMesh.new()
-		shine.size = Vector2(0.018, 0.018)
-		_add(head, shine, _glow(Color(1, 1, 1), 1.2), Vector3(0.066 * side, 0.019, -0.164))
+		shine.size = Vector2(0.020, 0.020)
+		var sh := _add(head, shine, _glow(Color(1, 1, 1), 1.2), Vector3(0.066 * side, 0.020, -0.165))
+		sh.rotation_degrees = Vector3(0.0, 180.0, 0.0)
 
 	# Hair: cap + bangs + side locks + long back.
 	var cap := SphereMesh.new()
