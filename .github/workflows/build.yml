@@ -54,6 +54,15 @@ jobs:
           fi
           /opt/godot/godot --version
 
+      - name: Shadow-fill consistency (no GPU needed)
+        # The pixel probe can only see this with a real framebuffer, and the
+        # runner's Mesa install fails intermittently - so the class of bug it was
+        # being used to find (grass filling at 0.10x albedo while the terrain
+        # under it filled at 2x, a 15x disagreement) went undetected whenever the
+        # probe was skipped. This check is pure arithmetic on the shader source
+        # and cannot be skipped.
+        run: python3 tools/fill_check.py
+
       - name: Shader lint (fast, no Godot needed)
         # Catches GDScript syntax typed into GLSL - `:=`, `var`, `func` - and
         # fragment-only built-ins read in vertex(). Both have happened, and both

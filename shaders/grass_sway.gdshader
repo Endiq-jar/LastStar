@@ -194,6 +194,13 @@ void fragment() {
 	//
 	// Matching the terrain's scale lets a blade and the ground under it land in
 	// one value range, which is what stops the meadow reading as a bright lawn
-	// floating over a void.
-	EMISSION = base * 1.95 + vec3(0.013, 0.019, 0.012);
+	// floating over a void. It is `col`, the same variable this shader hands to
+	// ALBEDO, and not `base`: `col` carries the distance fade and the hue
+	// neutralisation, so a far blade dims in fill exactly as it dims in albedo.
+	// Filling from `base` would light distant blades more than near ones and
+	// reopen the seam at the streaming edge.
+	//
+	// tools/fill_check.py asserts this agreement without a GPU, which is how it
+	// is now checked on every push instead of only when a framebuffer exists.
+	EMISSION = col * 2.02 + vec3(0.013, 0.019, 0.012);
 }
