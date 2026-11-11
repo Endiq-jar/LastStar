@@ -152,6 +152,7 @@ func _run() -> void:
 		_check_player_visible(cam, world)
 		# Visual-tree first: it is the summary that matters, and the cap truncates
 		# the tail.
+		_test_toon_material()
 		_dump_visual_tree(world.get_node_or_null("Player"))
 		_dump_player_parts(cam, world)
 
@@ -598,46 +599,58 @@ func _dump_player_parts(cam: Camera3D, world: Node) -> void:
 
 
 func _dump_visual_tree(player: Node) -> void:
-	var visual := player.get_node_or_null("Visual") as Node3D
+	## One line, deliberately: the annotation API truncates after ~24 entries and
+	## a multi-line dump gets cut off before the part that matters.
+	var visual := player.get_node_or_null("Visual") as Node3D if player != null else null
 	if visual == null:
 		_log("FAIL", "player has no Visual node")
 		return
-	_log("INFO", "Visual: visible=%s pos=%s scale=%s children=%d" % [
-		str(visual.visible), str(visual.position), str(visual.scale),
-		visual.get_child_count()])
-	var torso := visual.get_node_or_null("Torso") as Node3D
-	if torso != null:
-		var tb := AABB()
-		var tf := true
-		for mi in torso.find_children("*", "MeshInstance3D", true, false):
-			var m := mi as MeshInstance3D
-			if m.mesh == null:
-				continue
-			var box := m.global_transform * m.get_aabb()
-			tb = box if tf else tb.merge(box)
-			tf = false
-		_log("INFO", "Torso bounds y=%.2f..%.2f size=%s" % [
-			tb.position.y, tb.end.y, str(tb.size)])
-		for mi in torso.find_children("*", "MeshInstance3D", true, false):
-			var m2 := mi as MeshInstance3D
-			if m2.mesh == null:
-				continue
-			var mat := m2.material_override
-			var kind := "none"
-			if mat is StandardMaterial3D:
-				kind = "standard"
-			elif mat is ShaderMaterial:
-				kind = "shader:%s" % str((mat as ShaderMaterial).shader.resource_path).get_file()
-			_log("INFO", "    part %s mesh=%s mat=%s layers=%d" % [
-				m2.name, m2.mesh.get_class(), kind, m2.layers])
-			break
+	var bits: Array[String] = []
+	bits.append("Visual vis=%s children=%d" % [str(visual.visible), visual.get_child_count()])
 	for child in visual.get_children():
 		var n3 := child as Node3D
 		if n3 == null:
 			continue
-		var meshes := n3.find_children("*", "MeshInstance3D", true, false).size()
-		_log("INFO", "  %s visible=%s pos=%s scale=%s meshes=%d" % [
-			n3.name, str(n3.visible), str(n3.position), str(n3.scale), meshes])
+		var meshes := n3.find_children("*", "MeshInstance3D", true, false)
+		var box := AABB()
+		var first := true
+		for mi in meshes:
+			var m := mi as MeshInstance3D
+			if m.mesh == null:
+				continue
+			var b := m.global_transform * m.get_aabb()
+			box = b if first else box.merge(b)
+			first = false
+		bits.append("%s vis=%s y=%.1f..%.1f n=%d" % [
+			n3.name, str(n3.visible), box.position.y, box.end.y, meshes.size()])
+	_log("INFO", "PLAYER_TREE " + " | ".join(bits))
+	var vis_total := visual.find_children("*", "MeshInstance3D", true, false).size()
+	var hidden := 0
+	for mi in visual.find_children("*", "MeshInstance3D", true, false):
+		if not (mi as MeshInstance3D).is_visible_in_tree():
+			hidden += 1
+	_log("INFO", "PLAYER_MESHES total=%d hidden_in_tree=%d" % [vis_total, hidden])
+
+
+func _test_toon_material() -> void:
+	## Build the character's toon material exactly the way character_builder does and
+	## check it reached the renderer with sane parameters. A ShaderMaterial whose
+	## shader failed to compile draws nothing at all, which is indistinguishable in a
+	## screenshot from geometry that is missing or hidden.
+	var shader := load("res://shaders/anime_toon.gdshader") as Shader
+	if shader == null:
+		_log("FAIL", "anime_toon.gdshader did not load")
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	mat.set_shader_parameter("albedo_color", Color(0.94, 0.96, 0.99))
+	var params := 0
+	for u in shader.get_shader_uniform_list():
+		params += 1
+	_log("INFO", "TOON_MAT shader_uniforms=%d code_len=%d render_priority=%d" % [
+		params, shader.code.length(), mat.render_priority])
+	if params == 0:
+		_log("FAIL", "anime_toon.gdshader exposes no uniforms - it failed to compile")
 
 
 func _check_player_visible(cam: Camera3D, world: Node) -> void:
