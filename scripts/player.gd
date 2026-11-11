@@ -26,6 +26,13 @@ const CAM_DISTANCE := 5.0
 ## Chest height on a 1.8 m character. The frame is centred here, which leaves the
 ## full body in view above the HUD band at the bottom of the screen.
 const CAM_HEIGHT := 1.45
+## The camera aims slightly ABOVE the pivot. The spring arm places the camera
+## behind and above the pivot and the camera keeps the arm's orientation, so the
+## frame is centred on wherever the arm points, not on the pivot. Tilting the
+## camera up by this much pulls the character up from the bottom of the frame into
+## the middle without moving the camera at all. The HUD's action bar occupies the
+## bottom quarter of the screen, so a character centred on the pivot sits behind it.
+const CAM_AIM_LIFT := 0.30
 const CAM_SHOULDER := 0.45
 const MOUSE_SENS := 0.0026
 const STICK_SENS := 2.4
@@ -137,10 +144,15 @@ func _build_camera() -> void:
 	# collide with the character and jam the camera inside its own head.
 	_spring.collision_mask = 1
 	_spring.add_excluded_object(get_rid())
+	# Horizontal shoulder offset only. Any vertical offset here is applied along the
+	# *rotated* arm, so it shifts the camera and the character moves down the frame
+	# by the same amount - which is how the character ended up behind the HUD's
+	# action bar with her head at 66% of screen height.
 	_spring.position = Vector3(CAM_SHOULDER, 0.0, 0)
 	_pivot.add_child(_spring)
 
 	_camera = Camera3D.new()
+	_camera.rotation_degrees = Vector3(rad_to_deg(atan2(CAM_AIM_LIFT, CAM_DISTANCE)), 0.0, 0.0)
 	_camera.fov = 62.0
 	_camera.near = 0.05
 	_camera.far = 900.0
