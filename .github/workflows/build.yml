@@ -135,6 +135,13 @@ jobs:
           # Shader compile failures do not stop the run either - Godot logs an
           # error and falls back to a default white material, which reads as an
           # art bug rather than a build failure. They are errors here.
+          if grep -qiE "Shader compilation failed" /tmp/compile.log; then
+            # The useful part is the block that follows: the file, the line and
+            # the offending expression. The API only exposes annotations, not the
+            # raw step log, so the context has to become annotations too.
+            grep -n -A 6 -B 2 -iE "Shader compilation failed|\.gdshader:[0-9]+:" /tmp/compile.log \
+              | head -40 | while IFS= read -r line; do echo "::error title=Shader::$line"; done
+          fi
           if grep -qiE "^COMPILE_FAIL|^SCRIPT ERROR: (Parse|Compile) Error|Shader compilation failed|\.gdshader:[0-9]+" /tmp/compile.log; then
             grep -iE "^COMPILE_FAIL|^SCRIPT ERROR: (Parse|Compile) Error|Shader compilation failed|\.gdshader:[0-9]+" /tmp/compile.log | head -20 \
               | while IFS= read -r line; do echo "::error title=Compile::$line"; done

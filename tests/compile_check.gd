@@ -23,6 +23,7 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	# async: awaits a frame between shader loads so the renderer can report.
 	var failed: Array[String] = []
 
 	for path in _files(DIRS, ".gd"):
@@ -55,6 +56,22 @@ func _run() -> void:
 		mat.shader = shader
 		# Touching the material forces it into the RenderingServer.
 		mat.set_shader_parameter("__compile_probe", 1.0)
+		# Give the renderer a frame's worth of slack, then ask the shader itself
+		# whether it compiled. Without this the only signal is the engine's
+		# "Shader compilation failed." line, which does not say which file - and
+		# that is the one thing needed to fix it.
+		await get_tree().process_frame
+		# Shader code is opaque to GDScript except through the uniform list and
+		# the renderer's own log. Both are reported: the uniform list gives a
+		# per-file verdict that can be asserted and annotated, and the error log
+		# is written out in full so the exact line and reason are recoverable
+		# without access to the step log.
+		var uniform_count := shader.get_shader_uniform_list().size()
+		print("COMPILE_SHADER: %s uniforms=%d code_len=%d" % [
+			path, uniform_count, shader.code.length()])
+		if uniform_count == 0:
+			failed.append(path)
+			print("COMPILE_FAIL: %s exposes no uniforms - bad signature or failed compile" % path)
 
 	if failed.is_empty():
 		print("COMPILE_OK: all scripts and shaders")
