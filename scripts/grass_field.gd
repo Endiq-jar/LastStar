@@ -89,6 +89,13 @@ func _build_resources() -> void:
 func _process(_delta: float) -> void:
 	if not _enabled or _player == null or _terrain == null:
 		return
+	# Push the camera position for the near-blade cull. The shader cannot read a
+	# camera built-in in its vertex stage (those are fragment-only and using one
+	# is a compile error that silently white-materials the whole field), so the
+	# value comes from here.
+	var cam := get_viewport().get_camera_3d()
+	if cam != null and _material != null:
+		_material.set_shader_parameter("cam_origin", cam.global_position)
 	var center := _chunk_of(_player.global_position)
 	if center != _last_center:
 		_last_center = center

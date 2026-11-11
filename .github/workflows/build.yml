@@ -54,6 +54,13 @@ jobs:
           fi
           /opt/godot/godot --version
 
+      - name: Shader lint (fast, no Godot needed)
+        # Catches GDScript syntax typed into GLSL - `:=`, `var`, `func` - and
+        # fragment-only built-ins read in vertex(). Both have happened, and both
+        # fail soft: Godot logs an error and draws the surface in default white
+        # rather than failing the build.
+        run: python3 tools/shader_lint.py
+
       - name: No leftover merge-conflict markers
         # An unresolved conflict committed straight into the tree parses as a
         # "VCS conflict marker" error and costs a whole CI cycle to find.

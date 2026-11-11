@@ -36,6 +36,15 @@ uniform float color_variance : hint_range(0.0, 1.0) = 0.20;
 // third-person camera can see the character it is following. Without it the
 // meadow in front of the lens is a wall of grass taller than the player.
 uniform float near_clear : hint_range(0.0, 12.0) = 2.6;
+// Camera position, pushed in from grass_field.gd once per frame.
+//
+// This is a uniform rather than a built-in on purpose: the camera built-ins
+// (CAMERA_POSITION_WORLD, MAIN_CAM_INV_VIEW_MATRIX) are fragment-stage only in
+// the spatial shader, and referencing either one from vertex() is a compile error
+// that Godot does not treat as fatal - it logs the error and draws every blade
+// with a default white material. That produced a pale lavender meadow that read
+// as an art bug. A uniform works in both stages and is one float3 per frame.
+uniform vec3 cam_origin = vec3(0.0);
 uniform sampler2D blade_tex : source_color, filter_linear_mipmap, repeat_disable;
 uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
 
@@ -60,18 +69,14 @@ void vertex() {
 
 	// Per-instance colour variation, hashed from the instance origin so it is
 	// stable frame to frame (no shimmer as the camera moves).
-	float h := fract(sin(dot(origin.xz, vec2(12.9898, 78.233))) * 43758.5453);
+	float h = fract(sin(dot(origin.xz, vec2(12.9898, 78.233))) * 43758.5453);
 	v_tint = h;
 	v_height = height;
 
 	// Distance from this instance to the camera, in world space. VERTEX is in
 	// model space here and MODEL_MATRIX is the instance transform, so the world
 	// position of the tuft's base is MODEL_MATRIX[3].xyz, which is `origin`.
-	// MAIN_CAM_INV_VIEW_MATRIX is the camera's world transform and is available
-	// in the vertex stage; CAMERA_POSITION_WORLD is fragment-only, and using it
-	// here is a compile error, which silently falls back to a default white
-	// material (the pale blue patches this produced).
-	float cam_dist := length(origin - MAIN_CAM_INV_VIEW_MATRIX[3].xyz);
+	float cam_dist = length(origin - cam_origin);
 	// 0 right at the lens, 1 beyond near_clear. Collapsing the quad (rather than
 	// discarding) keeps the vertex count identical, so there is no branch
 	// divergence and no popping in the instance buffer.
