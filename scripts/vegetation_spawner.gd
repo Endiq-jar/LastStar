@@ -408,10 +408,18 @@ func _leaf_shell(count: int, radius: float, height: float, centre_y: float) -> A
 ## samples its own fifth, so a crown shows a mix of leaf shapes instead of 26
 ## copies of the same one. That is the whole point of the strip, and a UV of 0..1
 ## across it would have shown all five squashed onto every card.
-func _make_card(size: float, slice_index: int = -1) -> Mesh:
-	var idx := slice_index
-	if idx < 0:
-		idx = randi() % 5
+func _make_card(size: float, slice_index: int = 0) -> Mesh:
+	# Always the green slice.
+	#
+	# This used to be `randi() % 5`, which spread the card across all five leaves
+	# on the sheet - green, red, pink, brown, yellow. That is why the forest had
+	# orange and yellow flecks all over it: a leaf sheet is a palette for
+	# different plants, not a randomiser for one tree. Each crown was drawing
+	# five species at once.
+	#
+	# `slice_index` stays as a parameter because the sheet genuinely has five
+	# leaves and other foliage may want them; trees want the first.
+	var idx := clampi(slice_index, 0, 4)
 	var u0 := float(idx) / 5.0
 	var u1 := float(idx + 1) / 5.0
 	var st := SurfaceTool.new()

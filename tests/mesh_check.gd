@@ -295,14 +295,20 @@ func _ready() -> void:
 				if tu.size() != tv.size():
 					failures.append("leaf shell lost its UVs in the merge (%d uvs vs %d verts) - the leaf texture cannot apply" % [tu.size(), tv.size()])
 				else:
-					# The leaf sheet is a strip of five; a crown must sample more
-					# than one of them or every card shows the same leaf.
-					var us := {}
+					# Every card must stay inside the GREEN slice of the sheet.
+					#
+					# The sheet is a palette of five leaves; sampling all of them
+					# is what put red and yellow flecks through the canopy. The
+					# assertion is therefore that no card reaches past the first
+					# fifth, not that they are spread across it - an earlier
+					# version of this check asserted the opposite and would have
+					# locked the bug in.
+					var worst := 0.0
 					for uv in tu:
-						us[int(clampf(uv.x, 0.0, 0.999) * 5.0)] = true
-					print("MESH_CHECK leaf_shell samples %d of 5 leaf slices" % us.size())
-					if us.size() < 3:
-						failures.append("leaf shell samples only %d of the 5 leaf slices" % us.size())
+						worst = maxf(worst, uv.x)
+					print("MESH_CHECK leaf_shell u max=%.3f (green slice ends at 0.200)" % worst)
+					if worst > 0.205:
+						failures.append("leaf shell samples x=%.3f, outside the green slice - the crown will show red and yellow leaves" % worst)
 
 		# Pine skirts, same question.
 		var skirts: Array = sp.call("_pine_skirts")
