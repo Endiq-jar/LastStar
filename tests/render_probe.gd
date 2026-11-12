@@ -972,6 +972,91 @@ func _check_bone_cloth(world: Node) -> void:
 
 
 ## First MultiMeshInstance3D under a node, for the material dump.
+## The same mesh and the same material, drawn once as a plain MeshInstance3D and
+## once as a one-instance MultiMesh, both a couple of metres in front of the
+## camera, with the pixel in the middle of each read back.
+##
+## If the mesh is green in one and black in the other, the fault is in the
+## instancing path and not in the bake; if both are black, it is the shader.
+func _probe_colour_path(world: Node) -> void:
+	if world == null:
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var NP = load("res://scripts/nature_pack.gd")
+	if NP == null:
+		return
+	var kind := "bush_1"
+	var mesh = NP.mesh_of(kind)
+	if mesh == null:
+		return
+	var mat = NP.material(kind, 0.0)
+	if mat == null:
+		return
+	var ahead: Vector3 = cam.global_position + (-cam.global_transform.basis.z) * 2.2
+
+	var plain := MeshInstance3D.new()
+	plain.mesh = mesh
+	plain.material_override = mat
+	plain.scale = Vector3(0.7, 0.7, 0.7)
+	world.add_child(plain)
+	plain.global_position = ahead
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_log("INFO", "COLOUR plain mesh = %s" % _centre_colour())
+	plain.visible = false
+
+	var inst := MultiMeshInstance3D.new()
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = 1
+	mm.set_instance_transform(0, Transform3D())
+	inst.multimesh = mm
+	inst.material_override = mat
+	inst.scale = Vector3(0.7, 0.7, 0.7)
+	world.add_child(inst)
+	inst.global_position = ahead
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_log("INFO", "COLOUR multimesh = %s" % _centre_colour())
+	inst.visible = false
+
+	# And the same MultiMesh with instance colours on and set to white: if that
+	# is what brings the vertex colour back, the batch path in Godot 4.3 is
+	# multiplying by the instance colour buffer, not reading the mesh's.
+	mm.use_colors = true
+	mm.set_instance_color(0, Color(1, 1, 1, 1))
+	inst.visible = true
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_log("INFO", "COLOUR multimesh use_colors = %s" % _centre_colour())
+	inst.visible = false
+	plain.visible = false
+	await get_tree().process_frame
+	plain.queue_free()
+	inst.queue_free()
+
+
+## Mean colour of a patch at the centre of the frame, as 0-255 ints.
+func _centre_colour() -> String:
+	var img := get_viewport().get_texture().get_image()
+	if img == null:
+		return "no frame"
+	var cx := img.get_width() / 2
+	var cy := img.get_height() / 2
+	var sum := Vector3.ZERO
+	var n := 0
+	for y in range(cy - 20, cy + 20, 2):
+		for x in range(cx - 20, cx + 20, 2):
+			var c := img.get_pixel(x, y)
+			sum += Vector3(c.r, c.g, c.b)
+			n += 1
+	var mean := sum / maxf(1.0, float(n))
+	return "(%d, %d, %d)" % [int(mean.x * 255.0), int(mean.y * 255.0), int(mean.z * 255.0)]
+
+
 ## Every GeometryInstance3D in the world that draws pack foliage.
 func _nature_batches(world: Node) -> Array[GeometryInstance3D]:
 	var found: Array[GeometryInstance3D] = []
@@ -1001,8 +1086,11 @@ func _nature_batches(world: Node) -> Array[GeometryInstance3D]:
 ##   flat   - constant albedo and emission, every input ignored
 ##   vcol   - the baked vertex colour, no tint and no height term
 ##   novary - the shipped body with `col` forced to grey (no varyings involved)
-##   raw    - unshaded, ALBEDO straight from COLOR
-##   abs    - unshaded, abs(COLOR), to catch negative vertex colours
+##   novertex - shipped body, but vertex() returns immediately
+##
+## "raw" and "abs" wrote light built-ins in unshaded mode, which does not
+## compile - their black result was the error material, not evidence. They are
+## kept out of the run list for that reason.
 func _nature_shader_variant(mode: String) -> Array:
 	var src := FileAccess.get_file_as_string("res://shaders/vegetation/nature_foliage.gdshader")
 	if src.is_empty():
@@ -1027,6 +1115,12 @@ func _nature_shader_variant(mode: String) -> Array:
 			swaps = {
 				"\tALBEDO = col": "\tALBEDO = COLOR.rgb;",
 				"\tEMISSION = col": "\tEMISSION = vec3(0.0);",
+			}
+		"novertex":
+			swaps = {
+				"void vertex() {": "void vertex() { return;",
+				"\tALBEDO = col": "\tALBEDO = COLOR.rgb;",
+				"\tEMISSION = col": "\tEMISSION = COLOR.rgb * 0.55 + vec3(0.112, 0.124, 0.100);",
 			}
 		"abs":
 			render_line = "render_mode cull_disabled, unshaded;"
@@ -1153,7 +1247,7 @@ func _probe_black_shapes(world: Node) -> void:
 	# The magenta test says the shapes belong to a nature batch, so the shader is
 	# what turns them black. Bisect the fragment stage: same vertex work, two
 	# different fragment bodies.
-	for mode in ["flat", "vcol", "novary", "raw", "abs"]:
+	for mode in ["flat", "vcol", "novary", "novertex"]:
 		var built := _nature_shader_variant(str(mode))
 		var variant := built[0] as Shader
 		if variant == null:
@@ -1176,6 +1270,8 @@ func _probe_black_shapes(world: Node) -> void:
 			var gi2 := pair[0] as GeometryInstance3D
 			if is_instance_valid(gi2):
 				gi2.material_override = pair[1] as Material
+
+	await _probe_colour_path(world)
 	var groups: Array = [
 		["Terrain"],
 		["Vegetation"],
