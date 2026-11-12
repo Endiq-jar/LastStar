@@ -12,7 +12,9 @@ produces an installable APK on every push.
 
 > **This is an original, fan-inspired project.** It contains **no Genshin Impact assets** — no
 > characters, models, textures, audio or data. Everything you see is generated procedurally in
-> GDScript (meshes, materials, textures, sound effects) or is permissively licensed code.
+> GDScript (characters, props, terrain, sky, sound effects) or is a **CC0 public-domain** art
+> asset from Quaternius' stylized packs — the valley's trees, grass, plants and rocks and the
+> cloth the world is dressed in. Every file and its licence is listed in `CREDITS.md`.
 > "Genshin Impact" is a trademark of HoYoverse; this project is not affiliated with them.
 
 ![style](https://img.shields.io/badge/renderer-Mobile%20(Vulkan)-5ac8fa) ![engine](https://img.shields.io/badge/Godot-4.3-478cbf) ![license](https://img.shields.io/badge/license-MIT-green)
@@ -112,6 +114,12 @@ The game is written so it **cannot** show a black screen with only the HUD:
   material. The painted pngs the vegetation used to sample are gone. The
   meadow's tuft is the pack's grass decimated to its tallest 36 blades, because
   a 100-blade tuft at meadow density is tens of millions of triangles.
+  The per-instance tint is a function of world position rather than a custom
+  data buffer: on the Compatibility renderer a MultiMesh with custom data on
+  loses the mesh's vertex colours, and every prop drawn that way came out a
+  black silhouette of itself. `tests/render_probe.gd` measures both the frame's
+  near-black fraction and the colour of a plain mesh against the same mesh in a
+  MultiMesh, so the regression cannot come back quietly.
 * **bone cloth** — the cloth the world is dressed in (ruin-gate banners, shelter
   drapes, the altar carpet, waypoint totems, and the player's cape hem and
   charms) is built from six CC0-1.0 Quaternius models in `assets/cloth/`,

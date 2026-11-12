@@ -61,3 +61,19 @@ tens of thousands of tufts, so `NaturePack.clump("grass", 36)` keeps only the
 tallest 36 blades (64 triangles), found as connected components of the index
 buffer. The blades are the pack's own geometry — nothing is redrawn — and the
 budget it protects is the frame's.
+
+## Renderer note: do not give these batches custom data
+
+The models carry `POSITION` and `NORMAL` only, so every colour arrives through
+`COLOR`, which `NaturePack` bakes from the glTF materials. On Godot 4.3's
+Compatibility renderer a `MultiMesh` with `use_custom_data = true` loses that
+attribute: the batch draws as a near-black silhouette of itself, while the same
+mesh in a batch without custom data draws correctly. That is worth its own
+paragraph because it does not look like a bug in a screenshot — it looks like
+"those props are in shadow", or unlit, or missing a texture, and the trees
+standing green over black ferns makes it read as a per-species problem.
+
+The foliage shader therefore derives its per-instance tint from world position
+(two sines) instead of `INSTANCE_CUSTOM.r`. If a species ever needs another
+per-instance value, put it in the mesh or derive it from position; do not turn
+custom data back on.
