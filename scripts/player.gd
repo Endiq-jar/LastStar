@@ -296,6 +296,8 @@ const CAM_LIFT_MAX := 4.5
 ## the hill it is looking out of.
 const CAM_CLEARANCE := 0.75
 var _arm_lift := 0.0
+## Last computed lift target, for the probe to compare against what was applied.
+var _arm_want := 0.0
 
 
 func _update_camera_occlusion(delta: float) -> void:
@@ -364,8 +366,16 @@ func _update_camera_occlusion(delta: float) -> void:
 		# being under it; the crushed-arm case is still worth lifting for.
 		var crush := clampf(1.0 - arm_len / maxf(CAM_DISTANCE, 0.001), 0.0, 1.0)
 		want_lift = maxf(want_lift, crush * crush * CAM_LIFT_MAX * 0.6)
-	_arm_lift = lerpf(_arm_lift, want_lift, 1.0 - exp(-6.0 * delta))
+	# A lens inside the terrain is a hard failure, not a camera preference - the
+	# frame is a slab of unlit rock with the level missing behind it. Easing into
+	# that correction over a second is the wrong trade, so while the lens is
+	# actually underground it snaps, and only shallow corrections are smoothed.
+	# The measured run had a 2.97 m burial and the eased version had reached 0.58 m
+	# by capture time.
+	var rate := 26.0 if want_lift > _arm_lift + 0.5 else 6.0
+	_arm_lift = lerpf(_arm_lift, want_lift, 1.0 - exp(-rate * delta))
 	_spring.position.y = _arm_lift
+	_arm_want = want_lift
 
 
 func _visual_node() -> Node3D:

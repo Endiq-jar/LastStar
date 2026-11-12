@@ -1182,9 +1182,10 @@ func _probe_near_ground(world: Node, cam: Camera3D) -> void:
 	if player != null and player.get("_spring") != null:
 		var spring = player.get("_spring")
 		var pl := player as Node3D
-		_log("INFO", "CAMERA_ARM player_y=%.2f spring_pos=%s hit_len=%.2f lift=%.2f" % [
+		_log("INFO", "CAMERA_ARM player_y=%.2f spring_pos=%s hit_len=%.2f lift=%.2f want=%.2f paused=%s" % [
 			pl.global_position.y, str(spring.position),
-			spring.get_hit_length(), float(player.get("_arm_lift"))])
+			spring.get_hit_length(), float(player.get("_arm_lift")),
+			float(player.get("_arm_want")), str(Game.is_paused)])
 	if terrain != null and terrain.has_method("surface_height_at"):
 		var th: float = terrain.surface_height_at(flat.x, flat.z)
 		var cam_y := cam.global_position.y
