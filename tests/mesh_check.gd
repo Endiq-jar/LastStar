@@ -239,6 +239,27 @@ func _ready() -> void:
 			if (uvmax - uvmin).length() < 0.1:
 				failures.append("boulder UVs are collapsed - the texture would be one flat colour")
 
+	# Cluster composition with a NON-INDEXED source.
+	#
+	# The boulder is built by composing three rock meshes through _append_mesh, and
+	# the rock is emitted as a flat triangle soup with no index array. Reading a
+	# missing ARRAY_INDEX as a typed PackedInt32Array is a hard error ("assigning
+	# Nil to PackedInt32Array") and it crashed the boot - while this check was
+	# green, because it only ever looked at V.boulder()'s output, never at the
+	# composition path that produces it. Same mistake as the SphereMesh lobes: test
+	# the route, not the destination.
+	var soup: ArrayMesh = V.rock(8, 3)
+	if soup != null and soup.get_surface_count() > 0:
+		var sa: Array = soup.surface_get_arrays(0)
+		print("MESH_CHECK rock surface indexed=%s" % str(sa[Mesh.ARRAY_INDEX] != null))
+		var composed: Mesh = V.boulder()
+		if composed == null or composed.get_surface_count() == 0:
+			failures.append("boulder composition failed from a non-indexed source")
+		else:
+			var cav: PackedVector3Array = (composed as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			if cav.size() < 150:
+				failures.append("composed boulder has only %d vertices" % cav.size())
+
 	if failures.is_empty():
 		print("MESH_CHECK OK")
 		get_tree().quit(0)

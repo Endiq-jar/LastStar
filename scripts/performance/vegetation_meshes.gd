@@ -578,10 +578,21 @@ static func _append_mesh(st: SurfaceTool, src: Mesh, xform: Transform3D,
 		push_warning("vegetation_meshes: cannot read mesh type %s" % src.get_class())
 		return
 	for a in arrays_list:
-		var verts: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
-		var uvs: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
+		# `a[...]` returns Nil for a surface that does not carry that array, and
+		# assigning Nil to a typed Packed array is a hard script error, not a
+		# silent empty value. The faceted rock is built non-indexed, so it has no
+		# ARRAY_INDEX at all - reading it as PackedInt32Array killed the boot with
+		# "Trying to assign value of type 'Nil'".
+		var verts: PackedVector3Array = _parray_v3(a, Mesh.ARRAY_VERTEX)
+		var idx: PackedInt32Array = _parray_i32(a, Mesh.ARRAY_INDEX)
+		var uvs: PackedVector2Array = _parray_v2(a, Mesh.ARRAY_TEX_UV)
 		var has_uv := uvs.size() == verts.size()
+		# Non-indexed surfaces come in as a flat triangle soup; synthesise the
+		# index list so the rest of this function has one code path.
+		if idx.is_empty():
+			idx.resize(verts.size())
+			for k in range(verts.size()):
+				idx[k] = k
 		# Remap the source atlas's own UV range into the patch this piece was
 		# asked to occupy. Without this every cluster would draw the whole flower
 		# sheet across every head.
@@ -605,6 +616,25 @@ static func _append_mesh(st: SurfaceTool, src: Mesh, xform: Transform3D,
 				u1 = _planar_uv(verts[i1], uv_patch)
 				u2 = _planar_uv(verts[i2], uv_patch)
 			_tri(st, xform, verts[i0], verts[i1], verts[i2], u0, u1, u2)
+
+
+## Safe readers for surface array entries that may be absent.
+static func _parray_v3(a: Array, what: int) -> PackedVector3Array:
+	if what < a.size() and a[what] != null:
+		return a[what]
+	return PackedVector3Array()
+
+
+static func _parray_i32(a: Array, what: int) -> PackedInt32Array:
+	if what < a.size() and a[what] != null:
+		return a[what]
+	return PackedInt32Array()
+
+
+static func _parray_v2(a: Array, what: int) -> PackedVector2Array:
+	if what < a.size() and a[what] != null:
+		return a[what]
+	return PackedVector2Array()
 
 
 ## Horizontal planar UV for meshes that carry none of their own.
