@@ -395,6 +395,8 @@ jobs:
           cp /tmp/probe/world_wide.png /tmp/shots_out/world_wide.png 2>/dev/null || true
           cp /tmp/probe/player.png /tmp/shots_out/player.png 2>/dev/null || true
           cp /tmp/probe/player_flat.png /tmp/shots_out/player_flat.png 2>/dev/null || true
+          # The full probe transcript, uncapped. Annotations drop most of it.
+          cp /tmp/probe/probe.log.txt /tmp/shots_out/probe.log.txt 2>/dev/null || true
           ls -la /tmp/shots_out || true
           cd /tmp/shots_out
           git init -q -b screenshots

@@ -12,13 +12,33 @@ extends Node
 const WORLD := "res://scenes/world.tscn"
 
 var _fail := 0
+## Every line the probe logs, in order.
+##
+## Annotations are capped at about ten per run and this job needs most of them
+## for the shader census, so the interesting lines were being produced and then
+## dropped - three separate rounds of debugging happened against annotations that
+## existed all along but never reached the API. The full transcript is written
+## next to the frames instead, where nothing caps it.
+var _transcript := PackedStringArray()
+var _out_dir := ""
 
 
 func _log(kind: String, msg: String) -> void:
 	var line := "PROBE_%s: %s" % [kind, msg]
 	print(line)
+	_transcript.append(line)
 	if kind == "FAIL":
 		_fail += 1
+
+
+## Write the whole transcript beside the frames.
+func _dump_transcript(dir: String) -> void:
+	var f := FileAccess.open(dir.path_join("probe.log.txt"), FileAccess.WRITE)
+	if f == null:
+		return
+	for line in _transcript:
+		f.store_line(line)
+	f.close()
 
 
 func _ready() -> void:
@@ -47,6 +67,7 @@ func _run() -> void:
 		if a.begins_with("--out="):
 			out_dir = a.substr(6)
 	DirAccess.make_dir_recursive_absolute(out_dir)
+	_out_dir = out_dir
 
 	print("PROBE_BEGIN godot=%s renderer=%s driver=%s" % [
 		Engine.get_version_info().string,
@@ -1096,6 +1117,9 @@ func _measure_ground_ratio(img: Image) -> Dictionary:
 	}
 
 func _finish(fails: int) -> void:
+	# Always leave the transcript behind, whichever path reached here.
+	if _out_dir != "":
+		_dump_transcript(_out_dir)
 	if fails == 0:
 		print("PROBE_RESULT: PASS")
 	else:
