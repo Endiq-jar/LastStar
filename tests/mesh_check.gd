@@ -320,6 +320,55 @@ func _ready() -> void:
 				if su.size() != sv.size():
 					failures.append("pine skirts lost their UVs in the merge")
 
+	# Surface textures must be opaque.
+	#
+	# Twice now a sprite atlas has been wired in as a surface texture: rocks.png
+	# (33% transparent black) and leaf.png (84% transparent, stored as rgb(0,1,0)).
+	# Both produced black geometry that no amount of tinting could fix, because the
+	# tint was multiplying zero. A texture used as a material surface has to be a
+	# texture, not a sheet of cut-outs.
+	print("MESH_CHECK surface textures")
+	for path in ["res://assets/environment/leaves/r_tex_leaf.png",
+			"res://assets/environment/rocks/r_tex_rocks.png",
+			"res://textures/terrain/rock.png",
+			"res://assets/environment/trees/trunk.png",
+			"res://assets/environment/wood/wood.png"]:
+		if not ResourceLoader.exists(path):
+			failures.append("missing surface texture %s" % path)
+			continue
+		var tex: Texture2D = load(path)
+		if tex == null:
+			failures.append("could not load %s" % path)
+			continue
+		var im: Image = tex.get_image()
+		if im == null:
+			failures.append("no image data for %s" % path)
+			continue
+		if im.is_compressed():
+			im.decompress()
+		var w := im.get_width()
+		var h := im.get_height()
+		var step := maxi(1, w / 64)
+		var near_black := 0
+		var transparent := 0
+		var total := 0
+		for yy in range(0, h, step):
+			for xx in range(0, w, step):
+				var c := im.get_pixel(xx, yy)
+				total += 1
+				if c.a < 0.9:
+					transparent += 1
+				if c.r + c.g + c.b < 0.18:
+					near_black += 1
+		var tr := float(transparent) / maxf(1.0, float(total))
+		var nk := float(near_black) / maxf(1.0, float(total))
+		print("MESH_CHECK tex %-46s %dx%d transparent=%.1f%% near-black=%.1f%%" % [
+			path.get_file(), w, h, tr * 100.0, nk * 100.0])
+		if tr > 0.05:
+			failures.append("%s is %.0f%% transparent - it is a sprite sheet, not a surface texture" % [path.get_file(), tr * 100.0])
+		if nk > 0.10:
+			failures.append("%s is %.0f%% near-black" % [path.get_file(), nk * 100.0])
+
 	if failures.is_empty():
 		print("MESH_CHECK OK")
 		get_tree().quit(0)
