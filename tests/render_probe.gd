@@ -1075,8 +1075,12 @@ func _measure_ground_ratio(img: Image) -> Dictionary:
 		pairs.append([vals[i], pts[i]])
 	pairs.sort_custom(_pair_less)
 	var n := pairs.size()
-	var lo := pairs[int(n * 0.05)]
-	var hi := pairs[mini(n - 1, int(n * 0.95))]
+	# Explicit `Array`, not `:=`: pairs holds untyped [float, Vector2i] entries,
+	# so `:=` cannot infer a type and the script fails to parse. That is the same
+	# class of error as the const-container one - gdparse accepted it and only
+	# Godot rejected it.
+	var lo: Array = pairs[int(n * 0.05)]
+	var hi: Array = pairs[mini(n - 1, int(n * 0.95))]
 	var dark: float = lo[0]
 	var lit: float = hi[0]
 	if dark <= 0.001 or lit <= 0.0:
