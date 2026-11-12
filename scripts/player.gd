@@ -280,7 +280,14 @@ func _update_contact_shadow() -> void:
 		mat.albedo_color.a = clampf(1.0 - air * 0.5, 0.0, 1.0)
 
 
-func _update_camera_occlusion() -> void:
+## How high the spring arm may be lifted when it is crushed against terrain.
+## About one character height: enough to clear a slope, small enough that the
+## view is still recognisably the authored third-person camera.
+const CAM_LIFT_MAX := 1.15
+var _arm_lift := 0.0
+
+
+func _update_camera_occlusion(delta: float) -> void:
 	## When a wall or the terrain pushes the spring arm right up against the
 	## character, the camera ends up inside the model and the screen reads as a
 	## flat dark shape. Cull the character in that case so the world stays
@@ -299,6 +306,26 @@ func _update_camera_occlusion() -> void:
 	var hit := _spring.get_hit_length()
 	var arm_len := hit if hit > 0.001 else CAM_DISTANCE
 	vis.visible = arm_len > CAM_DISTANCE * 0.45
+
+	# Lift the arm when it has been crushed against terrain.
+	#
+	# A spring arm can only shorten along its own direction, so when the player
+	# stands on a slope with her back to the hill the arm has nowhere to go: it
+	# collapses to a few tens of centimetres, the camera ends up inside the
+	# hillside, and the bottom of the frame becomes an unlit slab of terrain
+	# filling half the screen with nothing in it. The rendered probe caught it
+	# exactly - camera y 23.58, the ground 6 m in front of it at y 26.51 - so the
+	# camera was three metres underground looking out of the hill.
+	#
+	# Shortening alone cannot fix that, because the geometry is in the way, not
+	# the distance. Raising the arm changes what is in the way: the sightline
+	# climbs over the slope instead of grating along it. It is applied smoothly
+	# and only in proportion to how crushed the arm already is, so an open field
+	# keeps the authored camera exactly and nothing pops.
+	var crush := clampf(1.0 - arm_len / maxf(CAM_DISTANCE, 0.001), 0.0, 1.0)
+	var want_lift := crush * crush * CAM_LIFT_MAX
+	_arm_lift = lerpf(_arm_lift, want_lift, 1.0 - exp(-6.0 * delta))
+	_spring.position.y = _arm_lift
 
 
 func _visual_node() -> Node3D:
@@ -453,7 +480,7 @@ func _physics_process(delta: float) -> void:
 	_yaw = lerp_angle(_yaw, _target_yaw, 1.0 - exp(-16.0 * delta))
 	_pitch = lerpf(_pitch, _target_pitch, 1.0 - exp(-16.0 * delta))
 	_pivot.rotation = Vector3(_pitch, _yaw, 0.0)
-	_update_camera_occlusion()
+	_update_camera_occlusion(delta)
 	_update_contact_shadow()
 
 	_attack_cd = maxf(0.0, _attack_cd - delta)

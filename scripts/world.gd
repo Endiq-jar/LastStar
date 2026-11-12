@@ -939,11 +939,18 @@ func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 		layer.name = "Veg_%s" % spec["name"]
 		layer.set_script(VegLayerScript)
 		add_child(layer)
-		layer.set("density", spec["density"])
+		# Density with a per-species falloff. A flat density across a limited
+		# radius would leave a visible wall at the edge of each small layer, which
+		# reads far worse than the detail simply thinning out. Grass holds its
+		# density to the streaming edge; small props taper.
+		layer.set("density", float(spec["density"]))
 		layer.set("min_height", spec["hmin"])
 		layer.set("max_height", spec["hmax"])
 		layer.set("max_slope", spec["slope"])
 		layer.set("mesh_kind", spec["mesh"])
+		# Per-species streaming radius. Small detail does not need to exist at
+		# 130 m; see the note on the species table.
+		layer.set("chunk_radius", int(spec["radius"]))
 		layer.set("material", mat)
 		# Fewer chunks per frame than the demo scene: the world is already
 		# building terrain, enemies and the grass field on the same frames.
