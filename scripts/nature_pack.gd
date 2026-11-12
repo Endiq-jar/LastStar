@@ -169,14 +169,14 @@ static func mesh_of(kind: String) -> ArrayMesh:
 	if verts.is_empty():
 		inst.free()
 		return null
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = norms
-	arrays[Mesh.ARRAY_COLOR] = cols
-	arrays[Mesh.ARRAY_INDEX] = idx
+	var out_arrays := []
+	out_arrays.resize(Mesh.ARRAY_MAX)
+	out_arrays[Mesh.ARRAY_VERTEX] = verts
+	out_arrays[Mesh.ARRAY_NORMAL] = norms
+	out_arrays[Mesh.ARRAY_COLOR] = cols
+	out_arrays[Mesh.ARRAY_INDEX] = idx
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out_arrays)
 	mesh.resource_name = kind
 	inst.free()
 	_meshes[kind] = mesh
@@ -249,8 +249,8 @@ static func clump(kind: String, keep: int = 36) -> ArrayMesh:
 	var out_c := PackedColorArray()
 	var out_i := PackedInt32Array()
 	for r in range(keep):
-		var tris_of_root: Array = ranked[r][1]
-		for t in tris_of_root:
+		var kept_tris: Array = ranked[r][1]
+		for t in kept_tris:
 			for k in range(3):
 				var old: int = idx[t * 3 + k]
 				if not remap.has(old):

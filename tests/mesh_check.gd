@@ -275,36 +275,36 @@ func _ready() -> void:
 		print("MESH_CHECK nature kinds=%d" % kinds.size())
 		if kinds.size() < 12:
 			failures.append("nature pack has only %d kinds" % kinds.size())
-		var total_tris := 0
+		var nature_tris := 0
 		for kind in kinds:
-			var m: ArrayMesh = NP.mesh_of(kind)
-			if m == null or m.get_surface_count() == 0:
+			var nat_mesh: ArrayMesh = NP.mesh_of(kind)
+			if nat_mesh == null or nat_mesh.get_surface_count() == 0:
 				failures.append("nature model '%s' baked no surface" % kind)
 				continue
 			# One surface is the requirement, not an accident: an instance draws
 			# every surface with the same material.
-			if m.get_surface_count() != 1:
-				failures.append("nature model '%s' baked %d surfaces" % [kind, m.get_surface_count()])
-			var arrays: Array = m.surface_get_arrays(0)
-			var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-			var cols: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
-			var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-			if verts.is_empty() or idx.is_empty():
+			if nat_mesh.get_surface_count() != 1:
+				failures.append("nature model '%s' baked %d surfaces" % [kind, nat_mesh.get_surface_count()])
+			var nat_arrays: Array = nat_mesh.surface_get_arrays(0)
+			var nat_verts: PackedVector3Array = nat_arrays[Mesh.ARRAY_VERTEX]
+			var nat_cols: PackedColorArray = nat_arrays[Mesh.ARRAY_COLOR]
+			var nat_idx: PackedInt32Array = nat_arrays[Mesh.ARRAY_INDEX]
+			if nat_verts.is_empty() or nat_idx.is_empty():
 				failures.append("nature model '%s' has no geometry" % kind)
 				continue
-			if cols.size() != verts.size():
-				failures.append("nature model '%s' lost its vertex colours (%d cols vs %d verts) - every surface would draw one flat colour or none at all" % [kind, cols.size(), verts.size()])
+			if nat_cols.size() != nat_verts.size():
+				failures.append("nature model '%s' lost its vertex colours (%d cols vs %d verts) - every surface would draw one flat colour or none at all" % [kind, nat_cols.size(), nat_verts.size()])
 			# The pack is authored in centimetres behind a 100x node scale. If that
 			# scale is dropped the model is a 3 cm prop, and nothing but a
 			# measurement would notice.
-			var h: float = NP.height_of(kind)
-			if h < 0.2 or h > 8.0:
-				failures.append("nature model '%s' is %.2f m tall - the 100x glTF node scale did not survive" % [kind, h])
-			total_tris += idx.size() / 3
-			print("MESH_CHECK nature %-14s verts=%5d tris=%5d height=%.2fm" % [kind, verts.size(), idx.size() / 3, h])
-		print("MESH_CHECK nature total tris=%d" % total_tris)
-		if total_tris < 4000:
-			failures.append("nature pack baked only %d triangles" % total_tris)
+			var nat_h: float = NP.height_of(kind)
+			if nat_h < 0.2 or nat_h > 8.0:
+				failures.append("nature model '%s' is %.2f m tall - the 100x glTF node scale did not survive" % [kind, nat_h])
+			nature_tris += nat_idx.size() / 3
+			print("MESH_CHECK nature %-14s verts=%5d tris=%5d height=%.2fm" % [kind, nat_verts.size(), nat_idx.size() / 3, nat_h])
+		print("MESH_CHECK nature total tris=%d" % nature_tris)
+		if nature_tris < 4000:
+			failures.append("nature pack baked only %d triangles" % nature_tris)
 		# The grass clump is the one derived asset, and the meadow's budget
 		# depends on it actually being smaller than the tuft it comes from.
 		var full: ArrayMesh = NP.mesh_of("grass")

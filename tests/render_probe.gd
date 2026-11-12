@@ -1011,8 +1011,8 @@ func _check_nature_pack(world: Node) -> void:
 			if not (mmi.multimesh.mesh is ArrayMesh):
 				continue
 			# Nature meshes are the ones whose surface carries vertex colours.
-			var arrays := (mmi.multimesh.mesh as ArrayMesh).surface_get_arrays(0)
-			if arrays.size() > Mesh.ARRAY_COLOR and arrays[Mesh.ARRAY_COLOR] != null:
+			var batch_arrays := (mmi.multimesh.mesh as ArrayMesh).surface_get_arrays(0)
+			if batch_arrays.size() > Mesh.ARRAY_COLOR and batch_arrays[Mesh.ARRAY_COLOR] != null:
 				nature_nodes += 1
 				nature_instances += mmi.multimesh.instance_count
 	_log("INFO" if nature_nodes > 0 else "FAIL",
