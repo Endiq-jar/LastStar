@@ -963,6 +963,15 @@ func _check_bone_cloth(world: Node) -> void:
 		_log("INFO", "BONE_CLOTH census: %s" % str(world.call("bone_cloth_census")))
 
 
+## First MultiMeshInstance3D under a node, for the material dump.
+func _first_multimesh(node: Node) -> MultiMeshInstance3D:
+	for child in node.find_children("*", "MultiMeshInstance3D", true, false):
+		var mmi := child as MultiMeshInstance3D
+		if mmi != null and mmi.multimesh != null:
+			return mmi
+	return null
+
+
 ## The environment, asserted as baked geometry.
 ##
 ## Every tree, bush, plant, rock, log, stump and blade of grass in the frame is
@@ -1026,6 +1035,40 @@ func _check_nature_pack(world: Node) -> void:
 	if nature_instances < 200:
 		_log("FAIL", "NATURE_PACK only %d nature instances in the valley - the scatter did not spawn" % nature_instances)
 	_log("INFO", "NATURE_PACK census: %s" % str(NP.census()))
+	# Material and vertex-colour dump, one line per species.
+	#
+	# A textureless model has exactly two ways to end up the wrong colour: the
+	# baked vertex colour is wrong, or the material's tint multiplies it to
+	# nothing. Both are invisible in a screenshot except as "that prop is dark",
+	# so the numbers are printed and the probe can be read instead of eyeballed.
+	var Presets = load("res://scripts/performance/vegetation_presets.gd")
+	if Presets != null:
+		for spec in Presets.species():
+			var layer: Node = null
+			if world != null:
+				layer = world.get_node_or_null("Veg_%s" % spec["name"])
+			if layer == null:
+				continue
+			var batch := _first_multimesh(layer)
+			if batch == null:
+				_log("FAIL", "NATURE_MAT %s has no MultiMesh batch" % spec["name"])
+				continue
+			var shader_mat := batch.material_override as ShaderMaterial
+			var vcol := Color.BLACK
+			if batch.multimesh.mesh is ArrayMesh:
+				var marr: Array = (batch.multimesh.mesh as ArrayMesh).surface_get_arrays(0)
+				var mcols: PackedColorArray = marr[Mesh.ARRAY_COLOR]
+				if mcols.size() > 0:
+					vcol = mcols[0]
+			if shader_mat == null:
+				_log("FAIL", "NATURE_MAT %s has no ShaderMaterial (%s)" % [spec["name"], str(batch.material_override)])
+				continue
+			_log("INFO", "NATURE_MAT %s shader=%s tint=%s wind=%s sway=%.2f vcol=%s shadow=%s" % [
+				spec["name"], str(shader_mat.shader.resource_path).get_file(),
+				str(shader_mat.get_shader_parameter("base_tint")),
+				str(shader_mat.get_shader_parameter("wind_strength")),
+				float(shader_mat.get_shader_parameter("sway_height")),
+				str(vcol), str(batch.cast_shadow)])
 
 
 func _report_palette(img: Image, label: String) -> void:

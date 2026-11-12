@@ -49,6 +49,11 @@ const Nature := preload("res://scripts/nature_pack.gd")
 ## Which model of the nature pack to instance, by NaturePack kind - "grass_2",
 ## "bush_1", "rock_4" and so on.
 @export var model_kind: String = ""
+## Whether this species casts shadows. Off by default: these are small props
+## instanced in the thousands, and each one that casts is geometry the shadow
+## pass has to draw again. The trees and boulders that shape the light are the
+## spawner's job; a pebble's shadow is not worth a second submission.
+@export var casts_shadow: bool = false
 
 var _terrain: Node
 var _player: Node3D
@@ -210,7 +215,8 @@ func _build_chunk(key: Vector2i) -> void:
 		mmi.material_override = material
 	# Grass does not cast shadows: at this density the shadow map cost dwarfs
 	# the benefit, and the terrain's own shading carries the shape.
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts_shadow \
+		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mmi.set_meta("count", transforms.size())
 	add_child(mmi)
 	_chunks[key] = mmi

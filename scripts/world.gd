@@ -1203,6 +1203,7 @@ func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 		layer.set("model_kind", spec["model"])
 		# Per-species streaming radius. Small detail does not need to exist at
 		# 130 m; see the note on the species table.
+		layer.set("casts_shadow", bool(spec.get("casts_shadow", false)))
 		layer.set("chunk_radius", int(spec["radius"]))
 		layer.set("material", mat)
 		# Fewer chunks per frame than the demo scene: the world is already

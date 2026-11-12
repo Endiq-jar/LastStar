@@ -53,7 +53,7 @@ static func species() -> Array:
 			"slope": 0.38, "radius": 3},
 		{"name": "bush", "model": "bush_1", "density": 0.030,
 			"hmin": 1.30, "hmax": 2.60, "wind": 0.10, "tint": Color(1.0, 1.0, 1.0),
-			"slope": 0.45, "radius": 4},
+			"slope": 0.45, "radius": 4, "casts_shadow": true},
 		{"name": "plants", "model": "plant_3", "density": 0.12,
 			"hmin": 1.00, "hmax": 1.80, "wind": 0.16, "tint": Color(1.0, 1.02, 0.98),
 			"slope": 0.40, "radius": 3},
