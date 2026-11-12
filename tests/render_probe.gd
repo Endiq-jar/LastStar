@@ -1269,7 +1269,7 @@ func _probe_black_shapes(world: Node) -> void:
 		_log("INFO", "DARK with nature shader=%s (%d swaps) = %.2f%%" % [
 			mode, int(built[1]), _dark_fraction(vimg) if vimg else -1.0])
 		if vimg != null:
-			vimg.save_png(out_dir.path_join("variant_%s.png" % mode))
+			vimg.save_png(_out_dir.path_join("variant_%s.png" % mode))
 		for pair in swap:
 			var gi2 := pair[0] as GeometryInstance3D
 			if is_instance_valid(gi2):
