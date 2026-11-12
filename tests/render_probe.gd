@@ -972,6 +972,58 @@ func _check_bone_cloth(world: Node) -> void:
 
 
 ## First MultiMeshInstance3D under a node, for the material dump.
+## Every GeometryInstance3D in the world that draws pack foliage.
+func _nature_batches(world: Node) -> Array[GeometryInstance3D]:
+	var found: Array[GeometryInstance3D] = []
+	if world == null:
+		return found
+	var roots: Array[Node] = []
+	for top in ["Vegetation", "GrassField"]:
+		var node := world.get_node_or_null(str(top))
+		if node != null:
+			roots.append(node)
+	for spec_name in ["border_grass", "flowers", "bush", "plants", "ferns", "pebbles", "rocks"]:
+		var layer := world.get_node_or_null("Veg_%s" % spec_name)
+		if layer != null:
+			roots.append(layer)
+	for root in roots:
+		for child in root.find_children("*", "GeometryInstance3D", true, false):
+			var gi := child as GeometryInstance3D
+			if gi != null and gi.material_override != null:
+				found.append(gi)
+	return found
+
+
+## The foliage shader with its fragment body swapped, to find which line kills
+## the colour. "flat" writes constants and ignores every input; "vcol" writes the
+## baked vertex colour with no tint and no height term. Everything else - the
+## wind, the culling, the lighting model - is the shipped shader.
+func _nature_shader_variant(mode: String) -> Shader:
+	var src := FileAccess.get_file_as_string("res://shaders/vegetation/nature_foliage.gdshader")
+	if src.is_empty():
+		return null
+	var lines := src.split("\n")
+	var out := PackedStringArray()
+	for line in lines:
+		var text := str(line)
+		if text.begins_with("\tALBEDO = col"):
+			if mode == "flat":
+				out.append("\tALBEDO = vec3(0.2, 0.8, 0.3);")
+			else:
+				out.append("\tALBEDO = COLOR.rgb;")
+			continue
+		if text.begins_with("\tEMISSION = col"):
+			if mode == "flat":
+				out.append("\tEMISSION = vec3(0.2, 0.8, 0.3);")
+			else:
+				out.append("\tEMISSION = COLOR.rgb * 0.55 + vec3(0.112, 0.124, 0.100);")
+			continue
+		out.append(text)
+	var shader := Shader.new()
+	shader.code = "\n".join(out)
+	return shader
+
+
 ## Fraction of the frame that is very dark, as a percentage.
 ##
 ## Ambient in this valley is bright enough (energy 1.35) that a surface with any
@@ -1061,6 +1113,31 @@ func _probe_black_shapes(world: Node) -> void:
 			var gi := pair[0] as GeometryInstance3D
 			if is_instance_valid(gi):
 				gi.material_override = pair[1] as Material
+
+	# The magenta test says the shapes belong to a nature batch, so the shader is
+	# what turns them black. Bisect the fragment stage: same vertex work, two
+	# different fragment bodies.
+	for mode in ["flat", "vcol"]:
+		var variant := _nature_shader_variant(str(mode))
+		if variant == null:
+			continue
+		var variant_mat := ShaderMaterial.new()
+		variant_mat.shader = variant
+		var swap: Array = []
+		for target in _nature_batches(world):
+			swap.append([target, target.material_override])
+			target.material_override = variant_mat
+		if swap.is_empty():
+			break
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var vimg := get_viewport().get_texture().get_image()
+		_log("INFO", "DARK with nature shader=%s = %.2f%%" % [
+			mode, _dark_fraction(vimg) if vimg else -1.0])
+		for pair in swap:
+			var gi2 := pair[0] as GeometryInstance3D
+			if is_instance_valid(gi2):
+				gi2.material_override = pair[1] as Material
 	var groups: Array = [
 		["Terrain"],
 		["Vegetation"],
