@@ -51,6 +51,11 @@ func _ready() -> void:
 		# shape" failure this check exists to catch, only with the numbers
 		# matching by coincidence. Structure is what distinguishes them.
 		var sig := "%.2f_%.2f_%.2f_%d" % [bb.size.x, bb.size.y, bb.size.z, idx.size() / 3]
+		# Printed for every flower, not just on failure. The check reported a
+		# duplicate on code that should not produce one, and the message named the
+		# two flowers without saying what was equal - so the next run could not
+		# distinguish a bad table from a bad signature from a stale script.
+		print("MESH_CHECK sig %-10s %s verts=%d" % [n, sig, verts.size()])
 		if seen.has(sig):
 			failures.append("flower '%s' is geometrically identical to '%s'" % [n, seen[sig]])
 		seen[sig] = n

@@ -189,7 +189,6 @@ static func flower_head(count: int, petal_w: float, belly: float, curl: float,
 
 static func _append_ring(st: SurfaceTool, count: int, petal_w: float, belly: float,
 		curl: float, pitch: float, radius: float, y_off: float) -> void:
-	var src := ArrayMesh.new()
 	# Build one petal, then instance its triangles around the ring by hand so the
 	# result is a single surface (one draw call per flower type, not per petal).
 	var verts: PackedVector3Array = _petal_verts(petal_w, belly, curl, 4)
