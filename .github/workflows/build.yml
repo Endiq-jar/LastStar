@@ -175,10 +175,18 @@ jobs:
           # otherwise a crashed compile check is indistinguishable from a clean
           # one in the only channel that survives.
           if ! grep -qE "^COMPILE_OK: " /tmp/compile.log; then
-            echo "::warning::compile check produced no COMPILE_OK - log tail follows"
-            tail -30 /tmp/compile.log | while IFS= read -r line; do
-              [ -n "$line" ] && echo "::error title=compilelog::$line"
-            done
+            echo "::warning::compile check produced no COMPILE_OK"
+            # Annotations are capped (~10 per run, and this job already needs
+            # most of them for the shader census), so the log goes to the step
+            # summary, which has no practical limit and is readable through the
+            # jobs API. Pushing it to annotations just spent the budget and
+            # still showed nothing.
+            {
+              echo "## Compile check log (no COMPILE_OK)"
+              echo '```'
+              tail -60 /tmp/compile.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
           # Shader compile failures do not stop the run either - Godot logs an
           # error and falls back to a default white material, which reads as an
