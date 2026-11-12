@@ -14,6 +14,7 @@ const VegWindScript := preload("res://scripts/performance/vegetation_wind.gd")
 const VegLayerScript := preload("res://scripts/performance/vegetation_layer.gd")
 const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
 const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
+const EntityCullerScript := preload("res://scripts/performance/entity_culler.gd")
 
 const ENEMY_COUNT := 14
 
@@ -43,6 +44,8 @@ var _perf_accum := 0.0
 var _perf_done := false
 ## Countdown of frames to wait before sampling the framebuffer once.
 var _grass_field: Node3D
+## Async occluder that decides which entities are actually on screen.
+var _culler: Node
 var _render_check_countdown := -1
 var _render_checked := false
 
@@ -82,6 +85,7 @@ func _ready() -> void:
 	_spawn_waypoints()
 	_spawn_sigils()
 	_spawn_enemies()
+	_build_entity_culler()
 	_add_audio()
 	Game.quest_changed.emit(Game.quest_text)
 	apply_quality()
@@ -887,6 +891,30 @@ func _scatter_landmarks() -> void:
 		t.tween_property(fm, "emission_energy_multiplier", 2.0, 0.5)
 		t.tween_property(fm, "emission_energy_multiplier", 3.4, 0.7)
 
+		# A roofed pavilion around the fire.
+		#
+		# Until now the valley had walls (the ruin gates, the altar ring) but no
+		# ceilings, so there was nowhere for a player to stand that was covered -
+		# and nothing for the entity culler to prove its roof test on. Four posts
+		# and a slab also turn a campfire into a shelter, which is what the note
+		# above has been calling it all along.
+		for side in [-1.0, 1.0]:
+			for front in [-1.0, 1.0]:
+				var post := MeshInstance3D.new()
+				var post_mesh := BoxMesh.new()
+				post_mesh.size = Vector3(0.18, 2.6, 0.18)
+				post.mesh = post_mesh
+				post.material_override = wood
+				post.position = Vector3(1.7 * side, 1.3, 1.7 * front)
+				camp.add_child(post)
+		var roof := MeshInstance3D.new()
+		var roof_mesh := BoxMesh.new()
+		roof_mesh.size = Vector3(4.4, 0.35, 4.4)
+		roof.mesh = roof_mesh
+		roof.material_override = wood
+		roof.position.y = 2.7
+		camp.add_child(roof)
+
 
 ## Count what the world is actually asking the renderer to draw.
 ##
@@ -919,6 +947,11 @@ func perf_census() -> String:
 			stack.append(c)
 	var out := "census meshes=%d multimeshes=%d multimesh_instances=%d lights=%d bodies=%d" % [
 		meshes, multimeshes, instances, lights, bodies]
+	# How many entities the culler is actually keeping out of the frame and out
+	# of the tick. On the main census line's tail so it survives the annotation
+	# cap in CI.
+	if _culler != null and is_instance_valid(_culler) and _culler.has_method("census"):
+		out += "\n" + str(_culler.call("census"))
 	# One line per vegetation layer, naming the mesh it actually resolved.
 	#
 	# "flowers are in the scene" and "flowers are drawn as flowers" are different
@@ -998,6 +1031,23 @@ func _spawn_enemies() -> void:
 		slime.position = Vector3(x, y + 1.2, z)
 		slime.set_element(i % 3)
 		_enemies.add_child(slime)
+
+
+func _build_entity_culler() -> void:
+	## Occlusion-cull the spawned entities on a worker thread.
+	##
+	## Registered by group rather than by handle: the slimes, sigils and waypoints
+	## are spawned by three different functions, each of which can skip a spot,
+	## and the groups are already the authoritative list of what exists (the HUD
+	## counts sigils from the same one).
+	var culler := Node.new()
+	culler.name = "EntityCuller"
+	culler.set_script(EntityCullerScript)
+	add_child(culler)
+	culler.call("setup", terrain, _props)
+	for group_name in ["enemy", "sigil", "waypoint"]:
+		culler.call("register_group", group_name)
+	_culler = culler
 
 
 func _spawn_player() -> void:

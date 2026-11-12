@@ -209,6 +209,11 @@ func _run() -> void:
 	if cam:
 		_dump_frustum(cam, world)
 
+	# --- async entity occlusion culling ------------------------------------
+	# Pure CPU, so this gates headlessly too - and it has to, because the
+	# structural probe is the job that always runs.
+	await _check_entity_culling(world)
+
 	# Compact one-liner so the grass totals survive the annotation cap: the API
 	# returns only the first ~24 annotations, and the detailed grass report runs
 	# later in the log than that.
@@ -827,6 +832,68 @@ func _check_cull_actually_culls(world: Node) -> void:
 		_log("FAIL", "CULL one batch holds %d instances; its AABB cannot be culled" % largest)
 	else:
 		_log("INFO", "CULL multimesh_batches=%d instances=%d largest_batch=%d" % [batches, total, largest])
+
+
+## Entity occlusion culling, which no screenshot can verify.
+##
+## A correctly culled entity and an entity that merely happens to be behind a
+## wall look identical in a frame, so the property has to be asserted from
+## outside the image:
+##
+##   * the culler's geometry predicates, on synthetic wall / ridge / roof cases
+##     where the answer is known in advance;
+##   * that the asynchronous pass has actually run against the live world and
+##     split the entities into visible and hidden - everything visible means it
+##     is doing nothing, everything hidden means it is rejecting the world;
+##   * that every hidden entity's visual is really suppressed, and that the
+##     entity's own cull flag agrees with the decision, since that flag is what
+##     stops its ticks.
+##
+## Runs headlessly on purpose: the structural job is the one that always runs.
+func _check_entity_culling(world: Node) -> void:
+	# Yield first, unconditionally: this makes the function a coroutine on every
+	# path, so the caller's `await` is always awaiting a real state rather than
+	# relying on what Godot does with `await` on a value that returned at once.
+	await get_tree().process_frame
+	if world == null:
+		return
+	var culler := world.get_node_or_null("EntityCuller")
+	if culler == null:
+		_log("FAIL", "ENTITY_CULL no EntityCuller - occluded entities are still drawn and still ticking")
+		return
+	var geometry: Dictionary = culler.call("self_test")
+	if bool(geometry.get("ok", false)):
+		_log("INFO", "ENTITY_CULL geometry: %s" % str(geometry.get("summary", "")))
+	else:
+		for note in geometry.get("failures", []):
+			_log("FAIL", "ENTITY_CULL geometry: %s" % str(note))
+	# The pass runs at 5 Hz and needs two consecutive misses before hiding
+	# anything, so wait for a decision instead of racing the first one.
+	var waited := 0
+	while waited < 12 and int(culler.call("stats").get("hidden", 0)) < 1:
+		await get_tree().create_timer(0.15).timeout
+		waited += 1
+	var stats: Dictionary = culler.call("stats")
+	var registered := int(stats.get("registered", 0))
+	var hidden := int(stats.get("hidden", 0))
+	var visible := int(stats.get("visible", 0))
+	var passes := int(stats.get("probes", 0))
+	if registered < 10:
+		_log("FAIL", "ENTITY_CULL only %d entit(ies) registered - the spawns are not wired to the culler" % registered)
+	if passes < 1:
+		_log("FAIL", "ENTITY_CULL the visibility pass never completed - the async probe is not running")
+	if passes >= 1 and hidden < 1:
+		_log("FAIL", "ENTITY_CULL nothing is ever hidden - every entity is drawn and ticked regardless of occlusion")
+	if passes >= 1 and visible < 1:
+		_log("FAIL", "ENTITY_CULL everything is hidden - the visibility test rejects the whole world")
+	if not bool(stats.get("consistent", false)):
+		_log("FAIL", "ENTITY_CULL an entity's cull flag disagrees with the culler's decision - its ticks did not stop")
+	if hidden > 0 and int(stats.get("render_skipped", 0)) < hidden:
+		_log("FAIL", "ENTITY_CULL %d hidden entit(ies) still have a visible visual" % (hidden - int(stats.get("render_skipped", 0))))
+	_log("INFO", "ENTITY_CULL registered=%d visible=%d hidden=%d passes=%d threads=%d grid=%d occluders=%d render_skipped=%d tick_reduced=%d" % [
+		registered, visible, hidden, passes, int(stats.get("threads", 0)),
+		int(stats.get("grid", 0)), int(stats.get("occluders", 0)),
+		int(stats.get("render_skipped", 0)), int(stats.get("tick_reduced", 0))])
 
 
 func _report_palette(img: Image, label: String) -> void:

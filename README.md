@@ -94,6 +94,14 @@ The game is written so it **cannot** show a black screen with only the HUD:
   demand, and quality tiers are reversible and remembered in `user://video.cfg`.
 * an automatic tuner samples real frame time on startup and drops to the
   Performance tier on weak hardware, and vegetation beyond ~190 m is culled.
+* **`performance/entity_culler.gd`** decides which enemies, sigils and waypoints
+  the terrain, walls and ceilings actually leave visible, on a `WorkerThreadPool`
+  task rather than on the main thread. Hidden entities are skipped by the
+  renderer and lose their AI, animation and sparkle ticks until they are in
+  sight again. It is not a frustum test: a sight line is path-traced against a
+  baked height grid and the structural AABBs, so a slime behind a ridge, a ruin
+  wall or a pavilion roof is not drawn, while one glimpsed through the gap
+  between two pillars is.
 * the world bootstrap contains **no coroutines and no GPU readbacks** — both
   could wedge the main loop on software/GL drivers.
 
@@ -156,6 +164,7 @@ scripts/
   player.gd                Movement, glide, combat, party switching, touch camera
   slime.gd                 Enemy AI + elemental reactions
   sigil.gd / waypoint_statue.gd
+  performance/entity_culler.gd  Async path-traced occlusion culling + tick gating
   hud.gd / touch_controls.gd
   fx.gd                    Tweened procedural VFX
 shaders/

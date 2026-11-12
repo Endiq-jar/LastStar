@@ -11,6 +11,8 @@ var _sparkle_timer := 2.5
 var _picked := false
 var _time := 0.0
 var _color := Color(1.0, 0.86, 0.45)
+## Set by the entity culler while the player cannot see this sigil.
+var _view_culled := false
 
 
 func _ready() -> void:
@@ -121,6 +123,22 @@ func _process(delta: float) -> void:
 	if _sparkle_timer <= 0.0:
 		_sparkle_timer = 2.5
 		FX.sparkle(get_parent(), global_position + Vector3(0, 0.8, 0), _color, 0.8)
+
+
+## Called by the entity culler when the sigil is behind geometry the player is
+## looking through. Its spin, bob, halo pulse and sparkle timer are pure
+## per-frame cost for something nobody can see, so they stop with it.
+func set_view_culled(hidden: bool) -> void:
+	if _picked or _view_culled == hidden:
+		return
+	_view_culled = hidden
+	if _mesh != null and is_instance_valid(_mesh):
+		_mesh.visible = not hidden
+	set_process(not hidden)
+
+
+func is_view_culled() -> bool:
+	return _view_culled
 
 
 func _on_body_entered(body: Node3D) -> void:

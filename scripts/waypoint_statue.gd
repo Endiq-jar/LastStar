@@ -10,6 +10,8 @@ var _activated := false
 var _time := 0.0
 var _wings: Array[Node3D] = []
 var _crystal: MeshInstance3D
+## Set by the entity culler while the player cannot see this statue.
+var _view_culled := false
 
 
 func _ready() -> void:
@@ -124,6 +126,22 @@ func _process(delta: float) -> void:
 		_crystal.rotation.y += delta * 0.9
 		_crystal.position.y = 5.0 + sin(_time * 1.6) * 0.16
 
+
+
+## Called by the entity culler when the statue is behind geometry. Hiding the
+## whole Area3D removes the plinth, spire, wings and label from the renderer;
+## collision and the body_entered pickup are untouched because visibility is a
+## drawing property, not a physics one.
+func set_view_culled(hidden: bool) -> void:
+	if _view_culled == hidden:
+		return
+	_view_culled = hidden
+	visible = not hidden
+	set_process(not hidden)
+
+
+func is_view_culled() -> bool:
+	return _view_culled
 
 
 func _on_body_entered(body: Node3D) -> void:

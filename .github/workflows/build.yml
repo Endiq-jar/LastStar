@@ -223,6 +223,11 @@ jobs:
           tail -25 /tmp/structure.log | while IFS= read -r line; do
             echo "::notice::$line"
           done
+          # Culling and cost numbers, surfaced as their own annotations: they
+          # are measurements, and the annotation channel is the only part of a
+          # step log that is reliably readable from a review context.
+          grep -E "^PROBE_INFO: (ENTITY_CULL|PERF census)" /tmp/structure.log | head -4 \
+            | while IFS= read -r line; do echo "::notice title=measurement::$line"; done || true
           grep -E "^PROBE_" /tmp/structure.log || {
             # The probe scene itself failed to load or compile. Surface the
             # reason here instead of "produced no result", which says nothing
@@ -401,7 +406,7 @@ jobs:
           # Annotations are capped at ~24 per check run, so only the lines that
           # actually diagnose something are emitted. The full log is uploaded as
           # an artifact for anything else.
-          grep -E "PROBE_(FAIL|WARN)|alt view|side view|TOON_MAT|PLAYER_TREE|PLAYER_MESHES|PART |MESH_Y|character is|player chest" \
+          grep -E "PROBE_(FAIL|WARN)|ENTITY_CULL|alt view|side view|TOON_MAT|PLAYER_TREE|PLAYER_MESHES|PART |MESH_Y|character is|player chest" \
             /tmp/probe.log | head -14 \
             | while IFS= read -r line; do echo "::notice title=probe::$line"; done
           grep -E "PROBE_INFO: (size=|alt view)" /tmp/probe.log | \
