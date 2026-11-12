@@ -510,6 +510,15 @@ func _run() -> void:
 			img3.save_png(out_dir.path_join("world_side.png"))
 			_log("INFO", "side view differs=%.1f%% from main" % (_image_difference(img, img3) * 100.0))
 
+	# --- what is black in the meadow? ---------------------------------------
+	#
+	# The first frames of the nature pack had large black shapes scattered
+	# through the grass that no material dump could explain: the vertex colours,
+	# the shader and the tint were all correct on every species. Rather than
+	# guess, hide one population at a time and measure how much of the frame
+	# goes black - a shape that disappears with a population belongs to it.
+	await _probe_black_shapes(world)
+
 	# --- character close-up -------------------------------------------------
 	# A frame of the character from the front at conversational distance. The
 	# gameplay camera cannot answer "is the model correct" - it answers "is the
@@ -964,6 +973,58 @@ func _check_bone_cloth(world: Node) -> void:
 
 
 ## First MultiMeshInstance3D under a node, for the material dump.
+## Fraction of the frame that is very dark, as a percentage.
+func _dark_fraction(img: Image) -> float:
+	var w := img.get_width()
+	var h := img.get_height()
+	var step := maxi(1, h / 180)
+	var dark := 0
+	var total := 0
+	for y in range(int(h * 0.25), h, step):
+		for x in range(0, w, step):
+			var c := img.get_pixel(x, y)
+			if maxf(c.r, maxf(c.g, c.b)) < 0.055:
+				dark += 1
+			total += 1
+	return 100.0 * float(dark) / maxf(1.0, float(total))
+
+
+## Hides one population at a time and reports the frame's dark fraction.
+func _probe_black_shapes(world: Node) -> void:
+	if world == null:
+		return
+	await get_tree().process_frame
+	var base_img := get_viewport().get_texture().get_image()
+	if base_img == null:
+		return
+	var base := _dark_fraction(base_img)
+	_log("INFO", "DARK frame dark=%.2f%% (nothing hidden)" % base)
+	var groups := [
+		["Veg_border_grass"],
+		["Veg_plants", "Veg_ferns"],
+		["Veg_bush", "Veg_flowers"],
+		["GrassField"],
+		["Vegetation"],
+	]
+	for group in groups:
+		var hidden: Array[Node] = []
+		for wanted in group:
+			var node := world.get_node_or_null(str(wanted))
+			if node is Node3D:
+				(node as Node3D).visible = false
+				hidden.append(node)
+		if hidden.is_empty():
+			continue
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var img := get_viewport().get_texture().get_image()
+		var frac := _dark_fraction(img) if img != null else -1.0
+		_log("INFO", "DARK without %s = %.2f%%" % [str(group), frac])
+		for node in hidden:
+			(node as Node3D).visible = true
+	await get_tree().process_frame
+
+
 func _first_multimesh(node: Node) -> MultiMeshInstance3D:
 	for child in node.find_children("*", "MultiMeshInstance3D", true, false):
 		var mmi := child as MultiMeshInstance3D
