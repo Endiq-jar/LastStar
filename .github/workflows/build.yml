@@ -349,11 +349,19 @@ jobs:
         id: meshes
         run: |
           set -uo pipefail
+          # The exit code is captured *before* the greps, then re-raised at the
+          # end. Swallowing it with `|| true` is what made this gate pass a run
+          # in which it had printed "MESH_CHECK FAIL: flower 'yarrow' is
+          # geometrically identical to 'star'" - the step concluded successfully,
+          # so the always-last enforcement step never fired. A gate that reports
+          # a failure and exits 0 is the worst of both.
           timeout -k 10 240 /opt/godot/godot --headless --path . \
-            res://tests/mesh_check.tscn > /tmp/mesh.log 2>&1 || true
+            res://tests/mesh_check.tscn > /tmp/mesh.log 2>&1
+          MESH_RC=$?
           grep -E "^MESH_CHECK" /tmp/mesh.log | head -40 || true
           grep -E "^MESH_CHECK" /tmp/mesh.log | head -12 \
             | while IFS= read -r line; do echo "::notice title=mesh::$line"; done || true
+          exit $MESH_RC
 
       - name: Report rendered frame
         if: always()

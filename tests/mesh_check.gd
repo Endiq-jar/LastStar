@@ -44,7 +44,13 @@ func _ready() -> void:
 		var bb := _bounds(verts)
 		# Round to a centimetre: two silhouettes that agree to 1 cm at these
 		# sizes are the same silhouette, whatever the table calls them.
-		var sig := "%.2f_%.2f_%.2f" % [bb.size.x, bb.size.y, bb.size.z]
+		#
+		# The triangle count is part of the signature, not decoration. Extent
+		# alone called an 18-petal flat umbel identical to a 5-petal star because
+		# both reach the same radius - which is exactly the "twenty names, one
+		# shape" failure this check exists to catch, only with the numbers
+		# matching by coincidence. Structure is what distinguishes them.
+		var sig := "%.2f_%.2f_%.2f_%d" % [bb.size.x, bb.size.y, bb.size.z, idx.size() / 3]
 		if seen.has(sig):
 			failures.append("flower '%s' is geometrically identical to '%s'" % [n, seen[sig]])
 		seen[sig] = n
