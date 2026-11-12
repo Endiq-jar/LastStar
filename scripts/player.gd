@@ -283,7 +283,11 @@ func _update_contact_shadow() -> void:
 ## How high the spring arm may be lifted when it is crushed against terrain.
 ## About one character height: enough to clear a slope, small enough that the
 ## view is still recognisably the authored third-person camera.
-const CAM_LIFT_MAX := 2.4
+## The cap has to exceed the worst burial, not the typical one. The measured
+## frame had the lens 2.97 m under the surface; at a 2.4 m cap the lift could not
+## reach it and the camera stayed 2.59 m down, still inside the hill. A limit
+## that cannot reach the failure it exists for is not a safety margin.
+const CAM_LIFT_MAX := 4.5
 ## Minimum height the lens should keep above the ground beneath it.
 ##
 ## The camera hangs behind and above the pivot, so on flat ground it clears the
