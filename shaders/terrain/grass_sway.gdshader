@@ -93,8 +93,8 @@ void vertex() {
 	// ---- view cull ------------------------------------------------------
 	//
 	// Two tests, both evaluated from the instance origin, so every vertex of a
-	// quad reaches the same answer and the branch below is perfectly coherent
-	// (no divergence, no wasted work on the far side of it).
+	// quad reaches the same answer - no divergence, and the multiply can be
+	// hoisted out of the work that follows.
 	//
 	//   1. Behind the camera. Signed distance along the view direction, with a
 	//      6 m margin so a blade that straddles the near plane - part of it
@@ -107,23 +107,32 @@ void vertex() {
 	// the instance buffer untouched - no reallocation, no popping of the
 	// transform array, and the degenerate triangles cost the rasteriser
 	// essentially nothing.
+	//
+	// This cannot be an early `return`: Godot's shader language rejects
+	// `return` in the vertex processor outright ("Using 'return' in the
+	// 'vertex' processor function is incorrect"), and it is a hard compile
+	// failure that takes the whole material to white rather than a warning.
+	// So view_keep is folded into v_cull at the bottom of this function, next
+	// to the near-clear and sightline terms it belongs with.
 	float view_depth = dot(origin - cam_origin, cam_forward);
 	float view_keep = smoothstep(-6.0, 3.0, view_depth);
 	float field_dist = length(origin.xz - view_origin.xz);
 	view_keep *= 1.0 - smoothstep(176.0, 182.0, field_dist);
-	if (view_keep <= 0.0) {
-		VERTEX = vec3(0.0);
-		v_tint = 0.0;
-		v_height = 0.0;
-		v_cull = 0.0;
-		return;
-	}
+
+	// Everything below is scaled by view_keep, so a blade behind the camera
+	// collapses to the instance origin and the remaining per-vertex work in
+	// this function becomes arithmetic on a point. The point of the cull is to
+	// save the *subtraction of the vertex from the frustum*, which happens
+	// after this function returns regardless; what it saves here is the wind
+	// solve, the sightline solve and four smoothsteps for roughly half the
+	// scene's instances.
+	float height_keep = height * view_keep;
 
 	// Two overlapping waves: a slow gust field plus a faster ripple, both
 	// driven by world position so neighbouring chunks move as one meadow.
 	float wave = sin(origin.x * 0.19 + origin.z * 0.15 - TIME * wind_speed * 1.7);
 	float gust = sin(origin.x * 0.043 - TIME * 0.55 + origin.z * 0.031);
-	float sway = (wave * 0.62 + gust * 0.38) * wind_strength * height * 1.7;
+	float sway = (wave * 0.62 + gust * 0.38) * wind_strength * height_keep * 1.7;
 	vec2 dir = normalize(wind_dir);
 	VERTEX.x += dir.x * sway;
 	VERTEX.z += dir.y * sway;
@@ -174,8 +183,9 @@ void vertex() {
 	v_cull *= smoothstep(player_clear * 0.6, player_clear, player_dist);
 	v_cull *= smoothstep(0.16, 0.52, sightline_dist);
 	// The view cull from the top of this function, folded in rather than
-	// applied as a separate multiply so the near-clear and the sightline clear
-	// keep working exactly as before when the instance survives it.
+	// applied as a separate multiply. NOTE: v_cull == 0 makes fragment()
+	// `discard`, and a discard is far cheaper than rasterising a collapsed
+	// quad - so a culled blade must reach exactly 0, not merely ~0.
 	v_cull *= view_keep;
 	VERTEX *= v_cull;
 }

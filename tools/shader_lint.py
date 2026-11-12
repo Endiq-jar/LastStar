@@ -15,6 +15,11 @@ in it without noticing.
   * A GDScript-style `func` is a syntax error too.
   * Camera built-ins are fragment-stage only; using one in vertex() fails to
     compile on the Compatibility renderer.
+  * `return` is illegal in vertex() and fragment() - "Using 'return' in the
+    'vertex' processor function is incorrect". It is a hard compile failure
+    that silently white-materials the surface, and it cost a CI cycle.
+  * `discard` and `return` are the two things an early exit is made of, so the
+    check looks for both rather than just the one that has bitten so far.
 
 Exit code 1 if anything is found, so it can gate locally as well as in CI.
 """
@@ -55,6 +60,15 @@ def check(path: pathlib.Path) -> None:
             problems.append(f"{path}:{number}: 'func' is GDScript, not GLSL")
         if re.search(r"\bvar\s+\w+\s*:", code):
             problems.append(f"{path}:{number}: 'var' is GDScript, not GLSL")
+        # No early exits from a vertex()/fragment() body. Godot's shader
+        # language has no statement-level `return` there: the compiler rejects
+        # the whole program and the material falls back to white, which reads
+        # as an art bug rather than a compile error.
+        if in_vertex and re.search(r"^\s*return\s*;", code):
+            problems.append(
+                f"{path}:{number}: 'return' is not allowed in the vertex "
+                f"processor - fold the condition into a multiplier"
+            )
 
         # Built-ins whose type is easy to get wrong, where a wrong type does not
         # fail loudly: Godot logs a shader error and draws the surface with a
