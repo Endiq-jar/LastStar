@@ -321,10 +321,15 @@ static func material(kind: String, wind: float = -1.0, tint: Color = Color.WHITE
 	m.set_shader_parameter("wind_strength", sway)
 	m.set_shader_parameter("sway_height", maxf(height_of(kind), 0.05))
 	m.set_shader_parameter("tint_variation", 0.10)
-	# Rocks and wood do not transmit light; leaves and blades do.
+	# Rocks and wood do not transmit light; leaves and blades do. The same split
+	# applies to the root-to-tip darkening - it exists to anchor a blade in the
+	# soil, and on a boulder it just makes the bottom third look dirty - and to
+	# the rim, which is a leaf edge catching the sky and on stone reads as a glow.
 	var soft := sway > 0.015
 	m.set_shader_parameter("backlight_scale", 0.35 if soft else 0.0)
 	m.set_shader_parameter("roughness_value", 0.90 if soft else 0.96)
+	m.set_shader_parameter("base_darken", 0.30 if soft else 0.0)
+	m.set_shader_parameter("rim_strength", 0.35 if soft else 0.08)
 	_materials[key] = m
 	return m
 

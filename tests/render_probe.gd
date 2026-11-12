@@ -448,14 +448,8 @@ func _run() -> void:
 	else:
 		_log("INFO", "ground contrast: not measurable in this frame")
 	_check_blob(img, "gameplay")
-	# --- what is black in the meadow? ---------------------------------------
-	#
-	# The first frames of the nature pack had large black shapes scattered
-	# through the grass that no material dump could explain: the vertex colours,
-	# the shader and the tint were all correct on every species. Rather than
-	# guess, hide one population at a time and measure how much of the frame
-	# goes black - a shape that disappears with a population belongs to it.
-	await _probe_black_shapes(world)
+	# Nothing in the frame may be black foliage. See _check_black_props.
+	await _check_black_props()
 	_log("INFO", "size=%dx%d mean_luma=%.3f nonblack=%.1f%% distinct_colours=%d sky_blue=%.1f%%" % [
 		img.get_width(), img.get_height(), stats["luma"],
 		stats["nonblack"] * 100.0, stats["colours"], stats["sky"] * 100.0])
@@ -972,12 +966,23 @@ func _check_bone_cloth(world: Node) -> void:
 
 
 ## First MultiMeshInstance3D under a node, for the material dump.
+func _first_multimesh(node: Node) -> MultiMeshInstance3D:
+	for child in node.find_children("*", "MultiMeshInstance3D", true, false):
+		var mmi := child as MultiMeshInstance3D
+		if mmi != null and mmi.multimesh != null:
+			return mmi
+	return null
+
+
 ## The same mesh and the same material, drawn once as a plain MeshInstance3D and
 ## once as a one-instance MultiMesh, both a couple of metres in front of the
 ## camera, with the pixel in the middle of each read back.
 ##
-## If the mesh is green in one and black in the other, the fault is in the
-## instancing path and not in the bake; if both are black, it is the shader.
+## This is the direct test of "do the pack's baked vertex colours reach the
+## shader", which is the question that cost the most time on this asset: a
+## black silhouette in a screenshot reads equally well as a shadow, an unlit
+## material or a missing texture, and none of those was it. A green number here
+## means the whole chain - bake, mesh, MultiMesh, shader - is intact.
 func _probe_colour_path(world: Node) -> void:
 	if world == null:
 		return
@@ -1027,19 +1032,19 @@ func _probe_colour_path(world: Node) -> void:
 	_log("INFO", "COLOUR multimesh = %s" % _colour_text(inst_colour))
 	if inst_colour.y < 55.0:
 		_log("FAIL", "COLOUR a MultiMesh instance of the same mesh renders as %s" % _colour_text(inst_colour))
-	inst.visible = false
 
-	# And the same MultiMesh with instance colours on and set to white: if that
-	# is what brings the vertex colour back, the batch path in Godot 4.3 is
-	# multiplying by the instance colour buffer, not reading the mesh's.
-	mm.use_colors = true
-	mm.set_instance_color(0, Color(1, 1, 1, 1))
-	inst.visible = true
+	# And with custom data on, which is how every vegetation layer used to be
+	# built and is what broke it.
+	mm.use_custom_data = true
+	mm.set_instance_custom_data(0, Color(0.5, 0.0, 0.0, 0.0))
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_log("INFO", "COLOUR multimesh use_colors = %s" % _colour_text(_centre_colour()))
+	var custom_colour := _centre_colour()
+	_log("INFO", "COLOUR multimesh with custom data = %s (the layer path; must match the line above)" % _colour_text(custom_colour))
+	if custom_colour.y < 55.0:
+		_log("FAIL", "COLOUR custom data on a MultiMesh costs the mesh its vertex colours (%s) - the vegetation layers must not use it" % _colour_text(custom_colour))
+
 	inst.visible = false
-	plain.visible = false
 	await get_tree().process_frame
 	plain.queue_free()
 	inst.queue_free()
@@ -1067,110 +1072,23 @@ func _colour_text(c: Vector3) -> String:
 	return "(%d, %d, %d)" % [int(c.x), int(c.y), int(c.z)]
 
 
-## Every GeometryInstance3D in the world that draws pack foliage.
-func _nature_batches(world: Node) -> Array[GeometryInstance3D]:
-	var found: Array[GeometryInstance3D] = []
-	if world == null:
-		return found
-	var roots: Array[Node] = []
-	for top in ["Vegetation", "GrassField"]:
-		var node := world.get_node_or_null(str(top))
-		if node != null:
-			roots.append(node)
-	for spec_name in ["border_grass", "flowers", "bush", "plants", "ferns", "pebbles", "rocks"]:
-		var layer := world.get_node_or_null("Veg_%s" % spec_name)
-		if layer != null:
-			roots.append(layer)
-	for root in roots:
-		for child in root.find_children("*", "GeometryInstance3D", true, false):
-			var gi := child as GeometryInstance3D
-			if gi != null and gi.material_override != null:
-				found.append(gi)
-	return found
-
-
-## The foliage shader with one or two lines swapped, to find which one kills the
-## colour. Returns the shader and the number of lines it actually replaced: a
-## variant that changed nothing is not evidence.
-##
-##   flat   - constant albedo and emission, every input ignored
-##   vcol   - the baked vertex colour, no tint and no height term
-##   novary - the shipped body with `col` forced to grey (no varyings involved)
-##   novertex - shipped body, but vertex() returns immediately
-##
-## "raw" and "abs" wrote light built-ins in unshaded mode, which does not
-## compile - their black result was the error material, not evidence. They are
-## kept out of the run list for that reason.
-func _nature_shader_variant(mode: String) -> Array:
-	var src := FileAccess.get_file_as_string("res://shaders/vegetation/nature_foliage.gdshader")
-	if src.is_empty():
-		return [null, 0]
-	var swaps := {}
-	var render_line := ""
-	match mode:
-		"flat":
-			swaps = {
-				"\tALBEDO = col": "\tALBEDO = vec3(0.2, 0.8, 0.3);",
-				"\tEMISSION = col": "\tEMISSION = vec3(0.2, 0.8, 0.3);",
-			}
-		"vcol":
-			swaps = {
-				"\tALBEDO = col": "\tALBEDO = COLOR.rgb;",
-				"\tEMISSION = col": "\tEMISSION = COLOR.rgb * 0.55 + vec3(0.112, 0.124, 0.100);",
-			}
-		"novary":
-			swaps = {"\tvec3 col = COLOR.rgb": "\tvec3 col = vec3(0.5, 0.5, 0.5);"}
-		"raw":
-			render_line = "render_mode cull_disabled, unshaded;"
-			swaps = {
-				"\tALBEDO = col": "\tALBEDO = COLOR.rgb;",
-				"\tEMISSION = col": "\tEMISSION = vec3(0.0);",
-			}
-		"noinverse":
-			swaps = {"\tVERTEX = (inverse(MODEL_MATRIX)": "\t// VERTEX left in model space"}
-		"novertex":
-			swaps = {
-				"void vertex() {": "void vertex() { return;",
-				"\tALBEDO = col": "\tALBEDO = COLOR.rgb;",
-				"\tEMISSION = col": "\tEMISSION = COLOR.rgb * 0.55 + vec3(0.112, 0.124, 0.100);",
-			}
-		"abs":
-			render_line = "render_mode cull_disabled, unshaded;"
-			swaps = {
-				"\tALBEDO = col": "\tALBEDO = abs(COLOR.rgb) * 3.0;",
-				"\tEMISSION = col": "\tEMISSION = vec3(0.0);",
-			}
-		_:
-			return [null, 0]
-	var out := PackedStringArray()
-	var replaced := 0
-	for line in src.split("\n"):
-		var text := str(line)
-		if render_line != "" and text.begins_with("render_mode"):
-			out.append(render_line)
-			replaced += 1
-			continue
-		var handled := false
-		for key in swaps:
-			if text.begins_with(str(key)):
-				out.append(str(swaps[key]))
-				replaced += 1
-				handled = true
-				break
-		if not handled:
-			out.append(text)
-	if replaced == 0:
-		return [null, 0]
-	var shader := Shader.new()
-	shader.code = "\n".join(out)
-	return [shader, replaced]
+## How much of the frame is near-black. Foliage is drawn with an emissive fill,
+## so a batch of it cannot be near-black unless something upstream ate its
+## vertex colours - which is exactly what happened, and what took a dozen round
+## trips to find because a black silhouette in a screenshot reads equally well
+## as a shadow, an unlit material or a missing texture. The number settles it.
+func _check_black_props() -> void:
+	await get_tree().process_frame
+	var img := get_viewport().get_texture().get_image()
+	if img == null:
+		return
+	var dark := _dark_fraction(img)
+	_log("INFO", "DARK %.2f%% of the frame is near-black" % dark)
+	if dark > 6.0:
+		_log("FAIL", "BLACK_PROPS %.1f%% of the frame is near-black inside the nature batches - the vertex colours are not reaching the shader" % dark)
 
 
 ## Fraction of the frame that is very dark, as a percentage.
-##
-## Ambient in this valley is bright enough (energy 1.35) that a surface with any
-## albedo at all cannot land here - only geometry with no light response and no
-## emission can. So the threshold can be generous without catching shadows.
 func _dark_fraction(img: Image) -> float:
 	var w := img.get_width()
 	var h := img.get_height()
@@ -1185,185 +1103,6 @@ func _dark_fraction(img: Image) -> float:
 			total += 1
 	return 100.0 * float(dark) / maxf(1.0, float(total))
 
-
-## Hides one population at a time and reports the frame's dark fraction.
-##
-## A shape that disappears with a population belongs to it; a shape that stays
-## is something the world does not know it is drawing.
-func _probe_black_shapes(world: Node) -> void:
-	if world == null:
-		return
-	await get_tree().process_frame
-	var base_img := get_viewport().get_texture().get_image()
-	if base_img == null:
-		return
-	var base_frac := _dark_fraction(base_img)
-	_log("INFO", "DARK frame dark=%.2f%% (nothing hidden)" % base_frac)
-	# Gate. Foliage is drawn with an emissive fill, so a batch of it cannot be
-	# near-black unless something upstream ate its vertex colours. The frame that
-	# shipped with the first nature build sat at 22% and looked like "some props
-	# are in shadow"; this number would have said exactly what it was.
-	if base_frac > 6.0:
-		_log("FAIL", "BLACK_PROPS %.1f%% of the frame is near-black inside the nature batches - the vertex colours are not reaching the shader" % base_frac)
-
-	# Is it a shadow? One line, one unambiguous answer: a shadow cannot exist
-	# once the sun stops casting, and geometry does not care.
-	var sun_node: DirectionalLight3D = null
-	for found in world.find_children("*", "DirectionalLight3D", true, false):
-		sun_node = found as DirectionalLight3D
-		if sun_node != null:
-			break
-	if sun_node != null:
-		var shadows_were := sun_node.shadow_enabled
-		sun_node.shadow_enabled = false
-		await get_tree().process_frame
-		await get_tree().process_frame
-		var noshadow := get_viewport().get_texture().get_image()
-		_log("INFO", "DARK with shadows off = %.2f%%" % (_dark_fraction(noshadow) if noshadow else -1.0))
-		sun_node.shadow_enabled = shadows_were
-		await get_tree().process_frame
-
-	# And is it drawn by a nature batch? Paint every foliage batch a flat
-	# unshaded magenta - if the shapes were these meshes, they turn magenta.
-	var paint := Shader.new()
-	paint.code = "shader_type spatial;\nrender_mode unshaded;\nvoid fragment() { ALBEDO = vec3(1.0, 0.05, 0.9); }"
-	var paint_mat := ShaderMaterial.new()
-	paint_mat.shader = paint
-	var painted: Array[GeometryInstance3D] = []
-	var restore: Array = []
-	for top in ["Vegetation", "GrassField"]:
-		var root := world.get_node_or_null(top)
-		if root == null:
-			continue
-		for child in root.find_children("*", "GeometryInstance3D", true, false):
-			var gi := child as GeometryInstance3D
-			if gi != null and gi.material_override != null:
-				restore.append([gi, gi.material_override])
-				gi.material_override = paint_mat
-				painted.append(gi)
-	for spec_name in ["border_grass", "flowers", "bush", "plants", "ferns", "pebbles", "rocks"]:
-		var layer := world.get_node_or_null("Veg_%s" % spec_name)
-		if layer == null:
-			continue
-		for child in layer.find_children("*", "GeometryInstance3D", true, false):
-			var gi := child as GeometryInstance3D
-			if gi != null and gi.material_override != null:
-				restore.append([gi, gi.material_override])
-				gi.material_override = paint_mat
-				painted.append(gi)
-	if not painted.is_empty():
-		await get_tree().process_frame
-		await get_tree().process_frame
-		var painted_img := get_viewport().get_texture().get_image()
-		_log("INFO", "DARK with %d nature batches painted magenta = %.2f%%" % [
-			painted.size(), _dark_fraction(painted_img) if painted_img else -1.0])
-		for pair in restore:
-			var gi := pair[0] as GeometryInstance3D
-			if is_instance_valid(gi):
-				gi.material_override = pair[1] as Material
-
-	# The magenta test says the shapes belong to a nature batch, so the shader is
-	# what turns them black. Bisect the fragment stage: same vertex work, two
-	# different fragment bodies.
-	for mode in ["flat", "vcol", "novary", "novertex", "noinverse"]:
-		var built := _nature_shader_variant(str(mode))
-		var variant := built[0] as Shader
-		if variant == null:
-			_log("WARN", "DARK variant %s could not be built" % mode)
-			continue
-		var variant_mat := ShaderMaterial.new()
-		variant_mat.shader = variant
-		var swap: Array = []
-		for target in _nature_batches(world):
-			swap.append([target, target.material_override])
-			target.material_override = variant_mat
-		if swap.is_empty():
-			break
-		await get_tree().process_frame
-		await get_tree().process_frame
-		var vimg := get_viewport().get_texture().get_image()
-		_log("INFO", "DARK with nature shader=%s (%d swaps) = %.2f%%" % [
-			mode, int(built[1]), _dark_fraction(vimg) if vimg else -1.0])
-		if vimg != null:
-			vimg.save_png(_out_dir.path_join("variant_%s.png" % mode))
-		for pair in swap:
-			var gi2 := pair[0] as GeometryInstance3D
-			if is_instance_valid(gi2):
-				gi2.material_override = pair[1] as Material
-
-	# Does the black go with the material? Every layer's override is replaced by
-	# a freshly built one - same shader, same tint, no wind - and the frame is
-	# measured again. A frame that goes bright names the material; a frame that
-	# stays black names the instance data.
-	var NP2 = load("res://scripts/nature_pack.gd")
-	var swap2: Array = []
-	for spec_name in ["border_grass", "flowers", "bush", "plants", "ferns", "pebbles", "rocks"]:
-		var layer2 := world.get_node_or_null("Veg_%s" % spec_name)
-		if layer2 == null or NP2 == null:
-			continue
-		var kind2 := str(layer2.get("model_kind"))
-		if kind2 == "":
-			continue
-		var fresh_mat = NP2.material(kind2, 0.0)
-		if fresh_mat == null:
-			continue
-		for child in layer2.find_children("*", "MultiMeshInstance3D", true, false):
-			var batch2 := child as MultiMeshInstance3D
-			if batch2 != null and batch2.material_override != null:
-				swap2.append([batch2, batch2.material_override])
-				batch2.material_override = fresh_mat
-	if not swap2.is_empty():
-		await get_tree().process_frame
-		await get_tree().process_frame
-		var fresh_img := get_viewport().get_texture().get_image()
-		_log("INFO", "DARK with %d layer batches on a fresh no-wind material = %.2f%%" % [
-			swap2.size(), _dark_fraction(fresh_img) if fresh_img else -1.0])
-		for pair in swap2:
-			var gi3 := pair[0] as GeometryInstance3D
-			if is_instance_valid(gi3):
-				gi3.material_override = pair[1] as Material
-
-	await _probe_colour_path(world)
-	var groups: Array = [
-		["Terrain"],
-		["Vegetation"],
-		["GrassField"],
-		["Props"],
-		["Veg_border_grass"],
-		["Veg_flowers"],
-		["Veg_bush"],
-		["Veg_plants"],
-		["Veg_ferns"],
-		["Veg_pebbles"],
-		["Veg_rocks"],
-		["Player"],
-	]
-	for group in groups:
-		var hidden: Array[Node] = []
-		for wanted in group:
-			var node := world.get_node_or_null(str(wanted))
-			if node is Node3D:
-				(node as Node3D).visible = false
-				hidden.append(node)
-		if hidden.is_empty():
-			_log("INFO", "DARK %s: not in the tree" % str(group))
-			continue
-		await get_tree().process_frame
-		await get_tree().process_frame
-		var img := get_viewport().get_texture().get_image()
-		var frac := _dark_fraction(img) if img != null else -1.0
-		_log("INFO", "DARK without %s = %.2f%%" % [str(group), frac])
-		for node in hidden:
-			(node as Node3D).visible = true
-	await get_tree().process_frame
-
-
-func _first_multimesh(node: Node) -> MultiMeshInstance3D:
-	for child in node.find_children("*", "MultiMeshInstance3D", true, false):
-		var mmi := child as MultiMeshInstance3D
-		if mmi != null and mmi.multimesh != null:
-			return mmi
-	return null
 
 
 ## The environment, asserted as baked geometry.
