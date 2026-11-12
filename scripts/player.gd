@@ -283,7 +283,14 @@ func _update_contact_shadow() -> void:
 ## How high the spring arm may be lifted when it is crushed against terrain.
 ## About one character height: enough to clear a slope, small enough that the
 ## view is still recognisably the authored third-person camera.
-const CAM_LIFT_MAX := 1.15
+const CAM_LIFT_MAX := 2.4
+## Minimum height the lens should keep above the ground beneath it.
+##
+## The camera hangs behind and above the pivot, so on flat ground it clears the
+## terrain comfortably. On a slope it does not: with the arm at full extension
+## behind a player standing on a hillside, the lens can be several metres inside
+## the hill it is looking out of.
+const CAM_CLEARANCE := 0.75
 var _arm_lift := 0.0
 
 
@@ -322,8 +329,28 @@ func _update_camera_occlusion(delta: float) -> void:
 	# climbs over the slope instead of grating along it. It is applied smoothly
 	# and only in proportion to how crushed the arm already is, so an open field
 	# keeps the authored camera exactly and nothing pops.
-	var crush := clampf(1.0 - arm_len / maxf(CAM_DISTANCE, 0.001), 0.0, 1.0)
-	var want_lift := crush * crush * CAM_LIFT_MAX
+	# The lift cannot key off the arm being *crushed*, which was my first
+	# attempt and it did nothing: measured hit_len=3.90 on the frame the camera
+	# was three metres underground, because a spring arm only reports a hit that
+	# lies inside its own sweep. Grass, slopes and the hill behind the player are
+	# simply not in that line, so the arm stays at full length and the camera is
+	# buried with no signal that anything is wrong.
+	#
+	# What the camera actually needs is ground clearance - a separate question
+	# from whether something is between it and the player. Ask the terrain
+	# directly: how far is the lens above the surface beneath it?
+	var want_lift := 0.0
+	var terr := _terrain()
+	if terr != null and terr.has_method("surface_height_at"):
+		var gx := _camera.global_position.x
+		var gz := _camera.global_position.z
+		var ground: float = terr.surface_height_at(gx, gz)
+		var clearance := _camera.global_position.y - ground
+		want_lift = clampf(CAM_CLEARANCE - clearance, 0.0, CAM_LIFT_MAX)
+		# A surface can also be between the lens and the pivot without the lens
+		# being under it; the crushed-arm case is still worth lifting for.
+		var crush := clampf(1.0 - arm_len / maxf(CAM_DISTANCE, 0.001), 0.0, 1.0)
+		want_lift = maxf(want_lift, crush * crush * CAM_LIFT_MAX * 0.6)
 	_arm_lift = lerpf(_arm_lift, want_lift, 1.0 - exp(-6.0 * delta))
 	_spring.position.y = _arm_lift
 
