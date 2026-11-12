@@ -57,6 +57,8 @@ var _pitch: float = -0.18
 var _target_pitch: float = -0.18
 var _pivot: Node3D
 var _spring: SpringArm3D
+var _contact_shadow: MeshInstance3D
+var _contact_shadow_base_y := 0.045
 var _camera: Camera3D
 var _double_jump_used := false
 var _gliding := false
@@ -71,6 +73,11 @@ var wander: Wander
 ## body that begins a frame intersecting geometry as "already handled" and can
 ## slide it straight through the mesh.
 const SPAWN_CLEARANCE := 1.6
+## Height of the character's soles in her own local space. Derived from
+## CharacterBuilder: leg origin 0.80, boot centre -0.55 from that, boot 0.40 tall,
+## so the sole is 0.80 - 0.55 - 0.20 = 0.05. The collision capsule's bottom is
+## pinned to this value so she stands ON the ground rather than 3 cm above it.
+const CHARACTER_SOLE_Y := 0.05
 
 var _attack_cd := 0.0
 var _skill_cd := 0.0
@@ -121,13 +128,98 @@ func _build_rig() -> void:
 	rig = CharacterBuilder.build(self, data)
 	element_id = int(data["element_id"])
 
+	# The capsule is the body's floor, and it has to be the SAME floor as her soles.
+	#
+	# A CapsuleShape3D's `height` is its total height including both caps, so a
+	# 1.72 capsule centred at y=0.88 puts its bottom at 0.88 - 0.86 = 0.02. Her
+	# soles are at 0.05 (leg at 0.80, boot at -0.55, boot 0.40 tall). The two never
+	# agreed, and rather than subtract 3 cm the number was eyeballed - the
+	# character has been resting on her ankles ever since, which is the floating
+	# step visible in every gameplay frame.
+	#
+	# Solved instead of guessed: the capsule is placed so its lowest point is
+	# exactly CHARACTER_SOLE_Y.
+	const CAPSULE_RADIUS := 0.32
+	const CAPSULE_HEIGHT := 1.72
 	var col := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
-	shape.radius = 0.32
-	shape.height = 1.72
+	shape.radius = CAPSULE_RADIUS
+	shape.height = CAPSULE_HEIGHT
 	col.shape = shape
-	col.position.y = 0.88
+	col.position.y = CHARACTER_SOLE_Y + CAPSULE_HEIGHT * 0.5
 	add_child(col)
+
+	_build_contact_shadow()
+
+
+## A soft blob shadow under her feet.
+##
+## Measured cause: the probe reports a sole-to-ground gap of -0.07 m, i.e. she is
+## already slightly INTO the ground, and she still reads as hovering. The float is
+## not a placement error, it is the absence of a contact shadow - a character with
+## no shadow cue under her feet separates from the ground no matter how precisely
+## she is placed on it. That is why four earlier attempts at moving her up and
+## down never changed the impression.
+##
+## This replaces shadow-map casting for the character. A real cast shadow at the
+## compatibility renderer's resolution is a spiky, acne-ridden blob that looks
+## worse than none; a gradient decal is smooth, costs one quad, and is the
+## standard solution in this art style.
+func _build_contact_shadow() -> void:
+	var quad := PlaneMesh.new()
+	quad.size = Vector2(1.45, 1.45)
+	_contact_shadow = MeshInstance3D.new()
+	_contact_shadow.name = "ContactShadow"
+	_contact_shadow.mesh = quad
+	# NO rotation. PlaneMesh in Godot 4 lies in the XZ plane facing +Y already, so
+	# the -90 degrees about X that "seems obviously right" for a ground decal stands
+	# it bolt upright - edge-on to the camera, a one-pixel line, invisible. That is
+	# why the blob never appeared in a single frame after I added it.
+	_contact_shadow.position.y = 0.045
+	# Alpha blend, NOT multiply.
+	#
+	# BLEND_MODE_MUL multiplies dst by the source COLOUR and ignores alpha
+	# entirely, so the soft radial texture I generated was ignored and the quad
+	# rendered as a solid black rectangle on the ground - a far worse artefact
+	# than the missing shadow it was meant to replace. Alpha blending with a
+	# black albedo and a radial alpha is what gives the soft blob.
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = Color(0.06, 0.07, 0.09, 1.0)
+	mat.albedo_texture = _shadow_texture()
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	# The texture carries the falloff in RGB and the strength in A; multiplying
+	# the albedo by it keeps the blob dark without it going opaque at the rim.
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	_contact_shadow.material_override = mat
+	# It is decoration: never let it write depth or be picked up by the probe's
+	# "what is near the camera" pass as a suspicious unshaded object.
+	_contact_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_contact_shadow)
+	# Remember the resting height; _process keeps the blob on the ground beneath
+	# her rather than at a fixed offset in her own space, so it does not sink into
+	# a slope or hover over a crest.
+	_contact_shadow_base_y = _contact_shadow.position.y
+
+
+func _shadow_texture() -> Texture2D:
+	## A radial falloff, soft at the rim and darkest at the centre, generated once.
+	var size := 64
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	for y in range(size):
+		for x in range(size):
+			var uv := Vector2(float(x) + 0.5, float(y) + 0.5) / float(size) * 2.0 - Vector2.ONE
+			var d := clampf(uv.length(), 0.0, 1.0)
+			# Smooth, and never fully black: a hard black disc reads as a hole.
+			# Dark at the middle, transparent at the rim. Both the colour and the
+			# alpha carry the falloff so the blob is a shadow rather than a
+			# darkening decal.
+			var t := 1.0 - smoothstep(0.0, 1.0, d)
+			var a := t * t * 0.85
+			img.set_pixel(x, y, Color(0.05, 0.06, 0.08, a))
+	return ImageTexture.create_from_image(img)
 
 
 func _build_camera() -> void:
@@ -167,7 +259,48 @@ func _build_camera() -> void:
 	_spring.add_child(_camera)
 
 
-func _update_camera_occlusion() -> void:
+func _update_contact_shadow() -> void:
+	## Keep the blob on the ground under her feet.
+	##
+	## She walks over terrain that changes height constantly, so a blob parented at
+	## a fixed height in her local space would sink into the ground on a crest and
+	## hover in a dip. Resolve the real surface under her and sit on it, and fade it
+	## out while she is airborne so it does not stay glued to her boots mid-jump.
+	if _contact_shadow == null:
+		return
+	var terr := _terrain()
+	if terr == null or not terr.has_method("surface_height_at"):
+		return
+	var ground: float = terr.surface_height_at(global_position.x, global_position.z)
+	var offset: float = ground - global_position.y + _contact_shadow_base_y
+	_contact_shadow.position.y = offset
+	var air: float = maxf(0.0, global_position.y - ground)
+	var mat := _contact_shadow.material_override as StandardMaterial3D
+	if mat != null:
+		mat.albedo_color.a = clampf(1.0 - air * 0.5, 0.0, 1.0)
+
+
+## How high the spring arm may be lifted when it is crushed against terrain.
+## About one character height: enough to clear a slope, small enough that the
+## view is still recognisably the authored third-person camera.
+## The cap has to exceed the worst burial, not the typical one. The measured
+## frame had the lens 2.97 m under the surface; at a 2.4 m cap the lift could not
+## reach it and the camera stayed 2.59 m down, still inside the hill. A limit
+## that cannot reach the failure it exists for is not a safety margin.
+const CAM_LIFT_MAX := 4.5
+## Minimum height the lens should keep above the ground beneath it.
+##
+## The camera hangs behind and above the pivot, so on flat ground it clears the
+## terrain comfortably. On a slope it does not: with the arm at full extension
+## behind a player standing on a hillside, the lens can be several metres inside
+## the hill it is looking out of.
+const CAM_CLEARANCE := 0.75
+var _arm_lift := 0.0
+## Last computed lift target, for the probe to compare against what was applied.
+var _arm_want := 0.0
+
+
+func _update_camera_occlusion(delta: float) -> void:
 	## When a wall or the terrain pushes the spring arm right up against the
 	## character, the camera ends up inside the model and the screen reads as a
 	## flat dark shape. Cull the character in that case so the world stays
@@ -186,6 +319,63 @@ func _update_camera_occlusion() -> void:
 	var hit := _spring.get_hit_length()
 	var arm_len := hit if hit > 0.001 else CAM_DISTANCE
 	vis.visible = arm_len > CAM_DISTANCE * 0.45
+
+	# Lift the arm when it has been crushed against terrain.
+	#
+	# A spring arm can only shorten along its own direction, so when the player
+	# stands on a slope with her back to the hill the arm has nowhere to go: it
+	# collapses to a few tens of centimetres, the camera ends up inside the
+	# hillside, and the bottom of the frame becomes an unlit slab of terrain
+	# filling half the screen with nothing in it. The rendered probe caught it
+	# exactly - camera y 23.58, the ground 6 m in front of it at y 26.51 - so the
+	# camera was three metres underground looking out of the hill.
+	#
+	# Shortening alone cannot fix that, because the geometry is in the way, not
+	# the distance. Raising the arm changes what is in the way: the sightline
+	# climbs over the slope instead of grating along it. It is applied smoothly
+	# and only in proportion to how crushed the arm already is, so an open field
+	# keeps the authored camera exactly and nothing pops.
+	# The lift cannot key off the arm being *crushed*, which was my first
+	# attempt and it did nothing: measured hit_len=3.90 on the frame the camera
+	# was three metres underground, because a spring arm only reports a hit that
+	# lies inside its own sweep. Grass, slopes and the hill behind the player are
+	# simply not in that line, so the arm stays at full length and the camera is
+	# buried with no signal that anything is wrong.
+	#
+	# What the camera actually needs is ground clearance - a separate question
+	# from whether something is between it and the player. Ask the terrain
+	# directly: how far is the lens above the surface beneath it?
+	#
+	# Measure against the *un-lifted* camera, not the current one. Keying the
+	# correction off the camera's actual height makes it a fixed point: each frame
+	# it lifts part of the way, then re-measures a camera that has already been
+	# lifted and finds a smaller error. It converges to half the needed lift and
+	# stops - the measured lift was 0.36 with a 2.97 m burial, and raising the cap
+	# from 2.4 to 4.5 changed it by exactly nothing, because the cap was never what
+	# was binding.
+	var want_lift := 0.0
+	var terr := _terrain()
+	if terr != null and terr.has_method("surface_height_at"):
+		var gx := _camera.global_position.x
+		var gz := _camera.global_position.z
+		var ground: float = terr.surface_height_at(gx, gz)
+		var base_y := _camera.global_position.y - _arm_lift
+		var clearance := base_y - ground
+		want_lift = clampf(CAM_CLEARANCE - clearance, 0.0, CAM_LIFT_MAX)
+		# A surface can also be between the lens and the pivot without the lens
+		# being under it; the crushed-arm case is still worth lifting for.
+		var crush := clampf(1.0 - arm_len / maxf(CAM_DISTANCE, 0.001), 0.0, 1.0)
+		want_lift = maxf(want_lift, crush * crush * CAM_LIFT_MAX * 0.6)
+	# A lens inside the terrain is a hard failure, not a camera preference - the
+	# frame is a slab of unlit rock with the level missing behind it. Easing into
+	# that correction over a second is the wrong trade, so while the lens is
+	# actually underground it snaps, and only shallow corrections are smoothed.
+	# The measured run had a 2.97 m burial and the eased version had reached 0.58 m
+	# by capture time.
+	var rate := 26.0 if want_lift > _arm_lift + 0.5 else 6.0
+	_arm_lift = lerpf(_arm_lift, want_lift, 1.0 - exp(-rate * delta))
+	_spring.position.y = _arm_lift
+	_arm_want = want_lift
 
 
 func _visual_node() -> Node3D:
@@ -340,7 +530,8 @@ func _physics_process(delta: float) -> void:
 	_yaw = lerp_angle(_yaw, _target_yaw, 1.0 - exp(-16.0 * delta))
 	_pitch = lerpf(_pitch, _target_pitch, 1.0 - exp(-16.0 * delta))
 	_pivot.rotation = Vector3(_pitch, _yaw, 0.0)
-	_update_camera_occlusion()
+	_update_camera_occlusion(delta)
+	_update_contact_shadow()
 
 	_attack_cd = maxf(0.0, _attack_cd - delta)
 	_skill_cd = maxf(0.0, _skill_cd - delta)
@@ -525,6 +716,17 @@ func _update_animation(delta: float, speed: float, on_floor: bool, sprinting: bo
 	torso.position.y = lerpf(torso.position.y, absf(sin(_anim_phase)) * 0.03, 12.0 * delta)
 
 
+## Fire a one-shot from the Ambience audio node, if there is one.
+##
+## Every combat hit was silent. audio_director.gd has had play_hit() the whole
+## time - a noise burst that is exactly the right sound - and nothing ever called
+## it, so the most frequent event in the game made no noise at all.
+func _play_sfx(method: String) -> void:
+	var amb := get_parent().get_node_or_null("Ambience") if get_parent() != null else null
+	if amb != null and amb.has_method(method):
+		amb.call(method)
+
+
 func _do_attack() -> void:
 	if _attack_cd > 0.0 or Game.is_paused:
 		return
@@ -549,6 +751,8 @@ func _do_attack() -> void:
 			continue
 		var to_enemy: Vector3 = (enemy as Node3D).global_position - global_position
 		if to_enemy.length() < 2.6 and to_enemy.normalized().dot(forward) > 0.25:
+			# Only on a real hit, so the sound is information rather than noise.
+			_play_sfx("play_hit")
 			if enemy.has_method("take_hit"):
 				enemy.take_hit(power, element_id, forward)
 
@@ -702,6 +906,3 @@ func skill_ready_ratio() -> float:
 	var cd: float = float(Game.character()["skill_cd"])
 	return 1.0 - clampf(_skill_cd / maxf(cd, 0.01), 0.0, 1.0)
 
-
-func set_control_enabled(enabled: bool) -> void:
-	set_physics_process(enabled)

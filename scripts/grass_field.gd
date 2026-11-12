@@ -14,17 +14,27 @@ extends Node3D
 ## instance count. Everything is one draw call per chunk.
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
-const VIEW_CHUNKS := 5            ## radius, in chunks (5 * 26 = 130 m)
+## Radius, in chunks. 5 * 26 = 130 m, which with the shader's dissolve put a
+## visible arc of bare terrain at the edge of the meadow. Raised to 7 (182 m) so
+## the field runs past the point where blades stop being resolvable.
+const VIEW_CHUNKS := 7
 ## Instances per 26 m chunk. Near chunks were 3400 - about five tufts per square
 ## metre - drawn as 2.1 m quads, which left visible gaps between them and read as
 ## blotches of green on bare ground rather than a carpet. Roughly doubled to close
 ## that up. The far tiers stay cheap because each tuft there covers more screen
 ## area.
-const BLADES_NEAR := 9000         ## instances in a chunk adjacent to the player
-const BLADES_MID := 3600
-const BLADES_FAR := 1100
-const MAX_CHUNKS := 81            ## (2*5+1)^2, hard cap on live chunks
-const SEA_MARGIN := 2.4           ## metres above water level where grass starts
+const BLADES_NEAR := 14000        ## instances in a chunk adjacent to the player
+const BLADES_MID := 5200
+const BLADES_FAR := 1500
+## Hard cap on live chunks. Must be at least (2*VIEW_CHUNKS+1)^2 or the field
+## silently stops growing: the cap was written for a radius of 5 and stayed at 81
+## when the radius became 7, which needs 225. Without this the outer ring would
+## simply never be built and the "grass everywhere" change would do nothing past
+## 130 m while looking correct in the code.
+const MAX_CHUNKS := 225
+## Metres above water level where grass starts. 2.4 left a bare sand ring round
+## every shore; 0.9 keeps blades out of the water but lets the meadow reach it.
+const SEA_MARGIN := 0.9
 
 ## Two crossed quads per tuft, so a tuft has volume from every angle.
 ## Tuft footprint and height in metres. The height matters more than it looks:
@@ -45,7 +55,14 @@ var _blade_mesh: Mesh
 var _material: ShaderMaterial
 var _last_center := Vector2i(9999, 9999)
 var _build_budget := 3             ## chunks built per frame, to avoid hitches
-var _enabled := true
+## Multiplies every tier's instance count. This is the real density control.
+##
+## set_density_scale() used to write _build_budget and nothing else, so the
+## "density" setting only changed how many chunks were streamed per frame - the
+## blade counts were identical at every tier. A phone that dropped to
+## Performance therefore grew the same meadow as a desktop, which is exactly
+## backwards, and the quality menu's promise was never wired to anything.
+var _density := 1.0
 ## Diagnostics: why blades were rejected, so a density regression is explainable
 ## instead of a mystery number.
 var _rej_water := 0
@@ -84,7 +101,7 @@ func _build_resources() -> void:
 	_blade_mesh = quad
 
 	_material = ShaderMaterial.new()
-	var shader := load("res://shaders/grass_sway.gdshader")
+	var shader := load("res://shaders/terrain/grass_sway.gdshader")
 	if shader != null:
 		_material.shader = shader
 		var tex := load("res://icons/grass/tuft.png")
@@ -97,7 +114,7 @@ func _build_resources() -> void:
 
 
 func _process(_delta: float) -> void:
-	if not _enabled or _player == null or _terrain == null:
+	if _player == null or _terrain == null:
 		return
 	# Push the camera position for the near-blade cull. The shader cannot read a
 	# camera built-in in its vertex stage (those are fragment-only and using one
@@ -156,10 +173,42 @@ func _queue_around(center: Vector2i) -> void:
 			_chunks.erase(key)
 
 
+## True when a chunk lies entirely behind the camera and so cannot draw.
+##
+## The shader culls per instance, which is what removes blades behind the lens
+## from an already-built chunk. This is the cheaper filter one level up: a chunk
+## that is entirely behind the camera should never be *built* in the first
+## place. The player walks forward, so a third of the ring is queued, built,
+## uploaded and then culled every time they move - paying full CPU cost for
+## geometry that provably contributes nothing.
+##
+## Conservative by SIGHT_CULL_MARGIN: a chunk is only skipped if the whole of
+## it is behind a plane pushed that far back, so a chunk the camera can still
+## see at the edge of a wide FOV - or that holds the character in view when the
+## camera swings - is always built. False negatives cost a chunk that gets built
+## and culled later; false positives would be a hole in the meadow, so the test
+## errs toward building.
+const SIGHT_CULL_MARGIN := 34.0
+
+
+func _behind_camera(key: Vector2i) -> bool:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return false
+	var fwd := -cam.global_basis.z
+	var c := Vector3((float(key.x) + 0.5) * CHUNK_SIZE, 0.0,
+		(float(key.y) + 0.5) * CHUNK_SIZE)
+	# Half-diagonal of a chunk, so the test covers every corner of it.
+	var reach := CHUNK_SIZE * 0.7072
+	return (c - cam.global_position).dot(fwd) < -(reach + SIGHT_CULL_MARGIN)
+
+
 func _build_chunk(key: Vector2i) -> void:
 	if _terrain == null:
 		return
 	if _chunks.size() >= MAX_CHUNKS:
+		return
+	if _behind_camera(key):
 		return
 	# Distance is measured from where the player is *now*: chunks are queued in
 	# batches and the player keeps moving while they are built.
@@ -189,18 +238,64 @@ func _build_chunk(key: Vector2i) -> void:
 	# Taller further out hides the reduced density without turning the mid ring
 	# into reeds.
 	var height_scale := 1.0 + clampf(float(dist) * 0.045, 0.0, 0.22)
+	count = maxi(1, int(round(float(count) * _density)))
 	_tier_counts[count] = int(_tier_counts.get(count, 0)) + 1
+	# Placement runs in tufts, not independent blades.
+	#
+	# Every blade was an independent uniform random point, which is the definition
+	# of a statistically flat carpet: no clumping, no gaps, no scale between a
+	# single blade and the whole chunk. Real grass grows in tufts, and at the
+	# distances this field is seen the tuft is the unit the eye reads - a blade is
+	# sub-pixel past about 15 m.
+	#
+	# So each iteration drops a tuft centre on the noise field and then places a
+	# small cluster of blades around it. The total blade count is unchanged, so
+	# this costs nothing; what changes is that density now varies at 1 m scale as
+	# well as at the 40 m scale of the existing _noise patches.
+	var tuft_size := 3 + int(rng.randf() * 5.0)
+	var tuft_radius := 0.16 + rng.randf() * 0.30
+	var cx := origin_x + rng.randf() * CHUNK_SIZE
+	var cz := origin_z + rng.randf() * CHUNK_SIZE
+	var in_tuft := 0
 	for i in range(count):
 		_tried += 1
-		var x := origin_x + rng.randf() * CHUNK_SIZE
-		var z := origin_z + rng.randf() * CHUNK_SIZE
-		var h: float = _terrain.get_height_at(x, z)
+		# Start a new tuft once this one is full, or immediately on the first blade.
+		# A tuft whose centre lands on rejected ground simply places nothing, which
+		# is correct - a tuft on a cliff is not grass.
+		if in_tuft >= tuft_size:
+			in_tuft = 0
+			tuft_size = 3 + int(rng.randf() * 5.0)
+			tuft_radius = 0.16 + rng.randf() * 0.30
+			cx = origin_x + rng.randf() * CHUNK_SIZE
+			cz = origin_z + rng.randf() * CHUNK_SIZE
+		in_tuft += 1
+		# Offset within the tuft, denser toward the centre: a tuft is a bundle
+		# rising from one root, not a disc of grass cut with a cookie cutter.
+		var ang := rng.randf() * TAU
+		var rad := tuft_radius * pow(rng.randf(), 0.65)
+		var x := cx + cos(ang) * rad
+		var z := cz + sin(ang) * rad
+		# surface_height_at(), not get_height_at(): the grass has to sit on the
+		# bumpy mesh the camera actually sees, not on the smooth analytic field
+		# the collision uses. Those differ by up to the sagitta of a 3 m triangle,
+		# which is exactly enough for a tuft to hover with air under it.
+		var h: float = _terrain.surface_height_at(x, z) if _terrain.has_method("surface_height_at") \
+			else _terrain.get_height_at(x, z)
 		# Grass grows on gentle ground above the shoreline, not on cliffs,
 		# not underwater and not on the high rock/snow bands.
-		if h > 58.0:
+		# 58 -> 92 m. The old ceiling stopped grass well below the rock and snow
+		# bands, so every hill above the valley floor was bare terrain - the
+		# single largest reason the world read as "a meadow patch surrounded by
+		# empty mountains". 92 m is where the terrain shader's own rock blend
+		# takes over, so the two agree instead of leaving a gap.
+		if h > 92.0:
 			_rej_height += 1
 			continue
-		if _terrain.get_slope_at(x, z) > 0.52:
+		# 0.52 -> 0.78. At 0.52 the field skipped roughly 27 degrees of slope, which
+		# is most of a hilly valley - the grass stopped wherever the ground started
+		# to rise, and the hillsides above it were bare. 0.78 (~38 degrees) still
+		# keeps blades off cliffs and scree.
+		if _terrain.get_slope_at(x, z) > 0.78:
 			_rej_slope += 1
 			continue
 		# Exclude actual water, not a circle around it. The old blanket
@@ -216,8 +311,15 @@ func _build_chunk(key: Vector2i) -> void:
 		if h < SEA_MARGIN:
 			_rej_water += 1
 			continue
-		var s := rng.randf_range(0.75, 1.45) * height_scale
-		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s))
+		# Outer blades of a tuft are shorter and lean outward; the tallest blades
+		# are at the centre. This is what stops a tuft reading as a cylinder of
+		# identical quad cards.
+		var centre_bias := 1.0 - clampf(rad / maxf(tuft_radius, 0.001), 0.0, 1.0)
+		var s := rng.randf_range(0.70, 1.42) * height_scale * (0.82 + centre_bias * 0.38)
+		var lean := (1.0 - centre_bias) * 0.22
+		var basis := Basis(Vector3.UP, ang + rng.randf_range(-0.5, 0.5))
+		basis = basis * Basis(Vector3(cos(ang), 0.0, sin(ang)), lean)
+		basis = basis.scaled(Vector3(s, s, s))
 		# The quad is centred on its origin, so it has to be lifted by half its
 		# height (times the instance scale) or the bottom half sinks into the
 		# ground and the tuft reads as half a blade.
@@ -253,11 +355,21 @@ func _push_view_params() -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam != null:
 		_material.set_shader_parameter("cam_origin", cam.global_position)
+		# Forward is -Z of the camera basis. Handed to the shader as a uniform
+		# because the camera built-ins are fragment-stage only, and the vertex
+		# stage is where the behind-camera cull has to happen.
+		_material.set_shader_parameter("cam_forward", -cam.global_basis.z)
+	if _player != null:
+		_material.set_shader_parameter("view_origin", _player.global_position)
 	if _player != null:
 		# The player node's origin is at her feet; lift the clearing centre to her
 		# waist so the smoothstep removes grass around her body, not below it.
 		_material.set_shader_parameter("player_origin", _player.global_position + Vector3(0, 0.9, 0))
-		_material.set_shader_parameter("player_clear", 1.6)
+		# 1.6 m carved a 3.2 m circle of bare ground around her feet, which is the
+		# naked ring the character appears to be standing in the middle of. Only
+		# the character of the clearing is needed - enough that blades do not grow
+		# through her - and 0.95 m still leaves her boots and shins clear.
+		_material.set_shader_parameter("player_clear", 0.95)
 
 
 ## Total live blades, for the performance tuner and the probe.
@@ -275,17 +387,33 @@ func chunk_count() -> int:
 
 
 func diagnostics() -> String:
-	return "tried=%d water=%d height=%d slope=%d tiers(near/mid/far)=%d/%d/%d" % [
-		_tried, _rej_water, _rej_height, _rej_slope,
-		int(_tier_counts.get(2600, 0)), int(_tier_counts.get(1300, 0)),
-		int(_tier_counts.get(520, 0))]
+	# The tier keys were hard-coded 2600/1300/520 - numbers from an older density
+	# curve that no longer exist. `_tier_counts` is keyed by the actual per-chunk
+	# instance count, so it reported 0/0/0 on a field of 276,811 blades. A
+	# diagnostic that always reads zero is worse than none: it looks like the
+	# blades are not being placed at all.
+	#
+	# Count live chunks by tier instead, derived from the same constants the
+	# builder uses, so this cannot drift again.
+	var near := 0
+	var mid := 0
+	var far := 0
+	for key in _chunks.keys():
+		var d := (key as Vector2i) - _last_center
+		var dist := Vector2(d).length()
+		if dist <= 1.5:
+			near += 1
+		elif dist <= 3.0:
+			mid += 1
+		else:
+			far += 1
+	var placed := 0
+	for v in _tier_counts.values():
+		placed += int(v)
+	return "tried=%d placed=%d chunks=%d water=%d height=%d slope=%d tiers(near/mid/far)=%d/%d/%d" % [
+		_tried, placed, _chunks.size(), _rej_water, _rej_height, _rej_slope,
+		near, mid, far]
 
-
-func set_enabled(on: bool) -> void:
-	_enabled = on
-	visible = on
-	if on and _player != null:
-		_refresh(true)
 
 
 func focus_at(point: Vector3) -> void:
@@ -313,6 +441,16 @@ func focus_at(point: Vector3) -> void:
 
 
 func set_density_scale(scale: float) -> void:
-	## Used by the quality tuner: 1.0 = full, 0.5 = half the blades.
-	_build_budget = maxi(1, int(round(4.0 * scale)))
+	## Used by the quality tuner: 1.0 = full, 0.65 = Balanced, 0.35 = Performance.
+	##
+	## Only affects chunks built AFTER the call, so existing geometry is rebuilt
+	## by dropping the ring and streaming it again - otherwise the player would
+	## see the density change only once they had walked far enough to cycle every
+	## chunk, which at 26 m chunks and 130 m of view is well over a minute.
+	_build_budget = maxi(2, int(round(4.0 * scale)))
 	visible = scale > 0.01
+	if is_equal_approx(scale, _density):
+		return
+	_density = scale
+	if _player != null:
+		_last_center = Vector2i(9999, 9999)

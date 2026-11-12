@@ -170,9 +170,6 @@ func character() -> Dictionary:
 	return PARTY[party_index]
 
 
-func character_at(i: int) -> Dictionary:
-	return PARTY[clampi(i, 0, PARTY.size() - 1)]
-
 
 func max_hp() -> float:
 	return float(character()["max_hp"])
@@ -251,7 +248,7 @@ func next_character() -> void:
 
 
 func _on_party_down() -> void:
-	toast.emit("%s is down — returning to the last waypoint." % character()["name"])
+	toast.emit("%s is down — waking at %s." % [character()["name"], last_waypoint_name])
 	# Revive the whole party at half health, like a Genshin statue heal.
 	for i in range(health.size()):
 		health[i] = float(PARTY[i]["max_hp"]) * 0.5

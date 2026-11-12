@@ -12,13 +12,33 @@ extends Node
 const WORLD := "res://scenes/world.tscn"
 
 var _fail := 0
+## Every line the probe logs, in order.
+##
+## Annotations are capped at about ten per run and this job needs most of them
+## for the shader census, so the interesting lines were being produced and then
+## dropped - three separate rounds of debugging happened against annotations that
+## existed all along but never reached the API. The full transcript is written
+## next to the frames instead, where nothing caps it.
+var _transcript := PackedStringArray()
+var _out_dir := ""
 
 
 func _log(kind: String, msg: String) -> void:
 	var line := "PROBE_%s: %s" % [kind, msg]
 	print(line)
+	_transcript.append(line)
 	if kind == "FAIL":
 		_fail += 1
+
+
+## Write the whole transcript beside the frames.
+func _dump_transcript(dir: String) -> void:
+	var f := FileAccess.open(dir.path_join("probe.log.txt"), FileAccess.WRITE)
+	if f == null:
+		return
+	for line in _transcript:
+		f.store_line(line)
+	f.close()
 
 
 func _ready() -> void:
@@ -47,6 +67,7 @@ func _run() -> void:
 		if a.begins_with("--out="):
 			out_dir = a.substr(6)
 	DirAccess.make_dir_recursive_absolute(out_dir)
+	_out_dir = out_dir
 
 	print("PROBE_BEGIN godot=%s renderer=%s driver=%s" % [
 		Engine.get_version_info().string,
@@ -100,6 +121,20 @@ func _run() -> void:
 	var players := get_tree().get_nodes_in_group("player")
 	_log("INFO" if players.size() == 1 else "FAIL",
 		"player nodes in group = %d" % players.size())
+	# Measure the sole-to-ground gap HERE, immediately, because the annotation
+	# channel keeps only the newest ~30 messages and this number was landing
+	# outside it. It is the one measurement that settles whether the character
+	# actually floats or merely looks like she does.
+	if players.size() > 0:
+		var probe_player := players[0] as Node3D
+		var probe_terrain := world.get_node_or_null("Terrain")
+		if probe_player != null and probe_terrain != null and probe_terrain.has_method("surface_height_at"):
+			var fx := probe_player.global_position.x
+			var fz := probe_player.global_position.z
+			var feet_y: float = probe_player.global_position.y + 0.05
+			var ground_y: float = probe_terrain.surface_height_at(fx, fz)
+			_log("INFO", "GROUND_ANCHOR feet=%.3f ground=%.3f gap=%.3f m" % [
+				feet_y, ground_y, feet_y - ground_y])
 
 	# --- every script compiles ---------------------------------------------
 	# Load each GDScript through the real compiler. This catches the class of
@@ -123,9 +158,18 @@ func _run() -> void:
 	# The terrain winding used to be inverted, which is invisible to every other
 	# check here: the mesh still has vertices, the collision shape still has
 	# faces, and the framebuffer is simply full of sky. Sample the actual normals.
-	var tmesh := world.get_node_or_null("Terrain/TerrainMesh") as MeshInstance3D
+	# The terrain is a grid of tiles now, not one mesh. Ask for the first one -
+	# the winding is a property of how the grid is emitted, so every tile shares
+	# it - but do not name the tile, because the count is a tuning parameter.
+	var tmesh: MeshInstance3D = null
+	var terrain_node := world.get_node_or_null("Terrain")
+	if terrain_node != null:
+		for c in terrain_node.get_children():
+			if c is MeshInstance3D and (c as MeshInstance3D).mesh != null:
+				tmesh = c as MeshInstance3D
+				break
 	if tmesh == null or tmesh.mesh == null:
-		_log("FAIL", "Terrain/TerrainMesh missing - nothing to look at")
+		_log("FAIL", "Terrain has no mesh tile - nothing to look at")
 	else:
 		var arr := tmesh.mesh.surface_get_arrays(0)
 		var normals: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
@@ -177,19 +221,27 @@ func _run() -> void:
 	# Logs and pebbles are what stop the grass reading as a flat painted
 	# texture. Assert they actually spawned rather than silently picking zero
 	# valid spots.
-	for needed in ["Vegetation/FallenLogs", "Vegetation/Pebbles"]:
-		var node := world.get_node_or_null(needed)
-		_log("INFO" if node != null else "FAIL",
-			"%s = %s" % [needed, "present" if node != null else "MISSING"])
+	#
+	# Matched by PREFIX, not by exact name. Each population is split across
+	# spatial tiles so the frustum test can reject some of it, which means the
+	# nodes are named `Pebbles_3_5`, `FallenLogs_0_2`, and so on. The tiled names
+	# exist because a single batch spanning the valley can never be culled; a
+	# gate that insists on one node per population is a gate that forbids the
+	# fix for the slowest thing in the frame.
 	var veg := world.get_node_or_null("Vegetation")
+	var log_nodes := _children_named(veg, "FallenLogs")
+	var pebble_nodes := _children_named(veg, "Pebbles")
+	_log("INFO" if log_nodes.size() > 0 else "FAIL",
+		"FallenLogs = %d batch(es)" % log_nodes.size())
+	_log("INFO" if pebble_nodes.size() > 0 else "FAIL",
+		"Pebbles = %d batch(es)" % pebble_nodes.size())
 	if veg != null:
-		var logs := veg.get_node_or_null("FallenLogs")
-		var pebbles := veg.get_node_or_null("Pebbles")
-		var log_n := logs.get_child_count() if logs != null else 0
 		var peb_n := 0
-		if pebbles is MultiMeshInstance3D and (pebbles as MultiMeshInstance3D).multimesh != null:
-			peb_n = (pebbles as MultiMeshInstance3D).multimesh.instance_count
-		_log("INFO", "scatter: %d log meshes, %d pebbles" % [log_n, peb_n])
+		for n in pebble_nodes:
+			var mm := (n as MultiMeshInstance3D).multimesh
+			if mm != null:
+				peb_n += mm.instance_count
+		_log("INFO", "scatter: %d log batch(es), %d pebbles" % [log_nodes.size(), peb_n])
 
 	# --- terrain textures ---------------------------------------------------
 	for tex_name in ["meadow", "rock", "sand", "macro"]:
@@ -293,8 +345,23 @@ func _run() -> void:
 		if py < -5.0:
 			_log("FAIL", "player is below the world (y=%.1f) - terrain collision or spawn is broken" % py)
 		else:
-			_log("INFO", "player standing at y=%.1f (on_floor=%s)" % [
-				py, str(pl is CharacterBody3D and (pl as CharacterBody3D).is_on_floor())])
+			# Report the GAP between her soles and the rendered ground, in metres.
+			#
+			# "She looks like she is floating" has been reported on the device four
+			# times and every previous attempt to fix it changed something plausible
+			# without ever measuring it. The number that matters is the distance
+			# from the bottom of her boots to the surface under them, so print it
+			# rather than describing it.
+			var gnode := pl.get_parent()
+			var gap_text := "unknown"
+			if gnode != null:
+				var terr := gnode.get_node_or_null("Terrain")
+				if terr != null and terr.has_method("surface_height_at"):
+					var feet: float = py + 0.05
+					var ground: float = terr.surface_height_at(pl.global_position.x, pl.global_position.z)
+					gap_text = "%.3f m (feet y=%.2f, ground y=%.2f)" % [feet - ground, feet, ground]
+			_log("INFO", "player standing at y=%.1f (on_floor=%s), sole-to-ground gap %s" % [
+				py, str(pl is CharacterBody3D and (pl as CharacterBody3D).is_on_floor()), gap_text])
 
 	var wenv := world.get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if wenv == null or wenv.environment == null:
@@ -340,7 +407,29 @@ func _run() -> void:
 		_finish(_fail)
 		return
 	img.save_png(out_dir.path_join("world.png"))
+
+	# What is actually under the camera's feet?
+	#
+	# The gameplay frame has a large, flat, untextured slab across the bottom
+	# third, and it reads as a bare apron rather than as meadow. Two very
+	# different causes look identical in a screenshot - the terrain shader
+	# printing flat there, or something else entirely (a decal, a plane, a
+	# mis-scaled chunk) covering it - and eyeballing it cost rounds on the
+	# grass/terrain mix-up already. So ask the physics space what is down there.
+	_probe_near_ground(world, cam)
 	var stats := _analyse(img)
+	var ground := _measure_ground_ratio(img)
+	if float(ground["ratio"]) > 0.0:
+		var note := ""
+		if float(ground["ratio"]) >= 4.0:
+			note = " (shadowed ground is reading as a hole)"
+		_log("INFO" if note == "" else "WARN",
+			"ground contrast p95=%.3f@(%s) p05=%.3f@(%s) median=%.3f ratio=%.2fx%s" % [
+				ground["lit"], ground["lit_at"],
+				ground["dark"], ground["dark_at"],
+				ground["median"], ground["ratio"], note])
+	else:
+		_log("INFO", "ground contrast: not measurable in this frame")
 	_check_blob(img, "gameplay")
 	_log("INFO", "size=%dx%d mean_luma=%.3f nonblack=%.1f%% distinct_colours=%d sky_blue=%.1f%%" % [
 		img.get_width(), img.get_height(), stats["luma"],
@@ -355,33 +444,54 @@ func _run() -> void:
 		# but let the luminance/coverage checks decide pass or fail.
 		_log("WARN", "image is flat - only %d distinct colours" % stats["colours"])
 
-	# Orbit the camera a quarter turn and capture again: catches a camera that
-	# exists but is stuck inside geometry or pointed at the void.
-	if cam:
-		# Orbit the *pivot*, not the camera.
-		#
-		# This used to write cam.global_position, but the camera is a child of a
-		# SpringArm3D whose transform player.gd rewrites every frame from the
-		# player's yaw and pitch. The offset was overwritten before the next draw,
-		# so world_alt.png was a byte-for-byte duplicate of world.png and this
-		# check could never detect a camera stuck in geometry - which is precisely
-		# what it exists to detect. Turning the pivot is the only lever the probe
-		# actually owns.
-		var pivot := cam.get_parent()
-		while pivot != null and not (pivot is Node3D and pivot.name == "CameraPivot"):
-			pivot = pivot.get_parent()
-		if pivot is Node3D:
-			(pivot as Node3D).rotation.y += PI * 0.5
-		else:
-			_log("WARN", "no CameraPivot found - world_alt will repeat the main frame")
-		await get_tree().create_timer(0.45).timeout
+	# Orbit the camera and capture again, to catch a camera that exists but is
+	# stuck in geometry or pointed at the void.
+	#
+	# Two previous versions of this were no-ops, and both failed silently:
+	#
+	#   1. writing cam.global_position - the camera is a child of a SpringArm3D
+	#      whose transform is rebuilt every frame, so the write was discarded
+	#      before the next draw;
+	#   2. turning the CameraPivot node - but the pivot is a child of the Player,
+	#      and player.gd's _physics_process does
+	#          _pivot.rotation = Vector3(_pitch, _yaw, 0.0)
+	#      every single tick from _yaw/_target_yaw. The rotation was gone before
+	#      the frame that followed. world_alt.png came out 23% different from
+	#      world.png and I read that as "the orbit works"; the 23% was the sun
+	#      and the wind animation moving, not a quarter turn.
+	#
+	# The probe therefore has to ask the player for a new look angle, not poke
+	# its children. This is also the honest way round: it exercises the same
+	# path a player's mouse drag does.
+	var orbit_ok := _orbit_player(world, 0.5 * PI, -0.42)
+	if orbit_ok:
+		await get_tree().create_timer(0.5).timeout
 		await get_tree().process_frame
 		var img2 := get_viewport().get_texture().get_image()
 		if img2:
 			img2.save_png(out_dir.path_join("world_alt.png"))
 			var s2 := _analyse(img2)
-			_log("INFO", "alt view mean_luma=%.3f nonblack=%.1f%% colours=%d" % [
-				s2["luma"], s2["nonblack"] * 100.0, s2["colours"]])
+			# Assert the orbit actually happened. A view that is 97% similar to
+			# the first is not a second view, and a check that cannot tell the
+			# difference is decoration.
+			var diff := _image_difference(img, img2)
+			var verdict := "OK"
+			if diff < 0.12:
+				verdict = "IDENTICAL"
+			_log("WARN" if diff < 0.12 else "INFO",
+				"alt view mean_luma=%.3f nonblack=%.1f%% colours=%d differs=%.1f%% (%s)" % [
+					s2["luma"], s2["nonblack"] * 100.0, s2["colours"], diff * 100.0, verdict])
+	else:
+		_log("WARN", "could not orbit the camera - world_alt will repeat the main frame")
+
+	# A second orbit, higher and to the other side, for a third distinct angle.
+	if _orbit_player(world, -0.85 * PI, -0.62):
+		await get_tree().create_timer(0.5).timeout
+		await get_tree().process_frame
+		var img3 := get_viewport().get_texture().get_image()
+		if img3:
+			img3.save_png(out_dir.path_join("world_side.png"))
+			_log("INFO", "side view differs=%.1f%% from main" % (_image_difference(img, img3) * 100.0))
 
 	# --- character close-up -------------------------------------------------
 	# A frame of the character from the front at conversational distance. The
@@ -524,9 +634,9 @@ func _run() -> void:
 	# every beauty frame so far showed a smooth green slope with no grass on it,
 	# while the gameplay frame was full of it.
 	var eye := Vector3(-34.0, 0.0, -30.0)
-	var terrain_node := world.get_node_or_null("Terrain")
-	if terrain_node != null and terrain_node.has_method("get_height_at"):
-		eye.y = terrain_node.get_height_at(eye.x, eye.z) + 11.0
+	var terrain_node_2 := world.get_node_or_null("Terrain")
+	if terrain_node_2 != null and terrain_node_2.has_method("get_height_at"):
+		eye.y = terrain_node_2.get_height_at(eye.x, eye.z) + 11.0
 	else:
 		eye.y = 30.0
 	beauty.global_position = eye
@@ -564,6 +674,7 @@ func _run() -> void:
 		# blown to near-white. Flag it.
 		if s3["luma"] > 0.72:
 			_log("WARN", "wide view is overexposed (mean luma %.2f)" % s3["luma"])
+		_report_frame_cost(world)
 
 	_finish(_fail)
 
@@ -603,6 +714,119 @@ func _clear_frame(world: Node) -> void:
 				removed += 1
 	if removed > 0:
 		_log("INFO", "cleared %d transient/enemy nodes from the camera frame" % removed)
+
+
+## Report real rendering and scene cost for the wide frame.
+##
+## These come straight from the engine's own monitors, so they are measured
+## rather than estimated. The numbers to watch:
+##
+##   draw_calls  - total submitted draws. Vegetation batching took this from
+##                 roughly 1,600 for the scatter alone to about 15.
+##   objects     - drawable objects submitted.
+##   primitives  - triangles issued. Batched MultiMesh draws are much larger
+##                 single draws, so this should hold roughly steady while
+##                 draw_calls collapses; a big drop here means geometry was
+##                 actually removed, which is the thing we are NOT doing.
+##   nodes       - live scene-tree nodes. The old scatter alone was ~4,800
+##                 nodes (1,600 meshes plus their parents).
+##   video_mem   - texture and vertex buffer residency in MB.
+func _report_frame_cost(world: Node) -> void:
+	var dc := int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+	var objs := int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))
+	var prims := int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+	var nodes := int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
+	var vmem := Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0
+	var fps := Performance.get_monitor(Performance.TIME_FPS)
+	var proc := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+	var phys := Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+	_log("INFO", "PERF draw_calls=%d objects=%d primitives=%d nodes=%d video_mem=%.1fMB fps=%.0f process=%.2fms physics=%.2fms" % [
+		dc, objs, prims, nodes, vmem, fps, proc, phys])
+	if world != null and world.has_method("perf_census"):
+		var census: String = world.call("perf_census")
+		if census != "":
+			_log("INFO", "PERF %s" % census)
+	_check_cull_actually_culls(world)
+
+
+## Assert that the scenes and batches are split finely enough for the frustum
+## test to reject anything at all.
+##
+## This is the one performance property that can be verified without a
+## framebuffer and without a phone, and it is the one that was broken for a long
+## time. Godot culls by object AABB: a single MeshInstance3D spanning the whole
+## valley, or a single MultiMeshInstance3D holding every tree, always intersects
+## the frustum, so it is always submitted in full and half the world is drawn
+## from behind the camera every frame. Nothing in the image looks wrong, and no
+## test noticed, so the world just ran slowly.
+##
+## What is asserted is not a frame time - that is llvmpipe here and meaningless -
+## but the structural precondition: enough drawables, and each one bounded to a
+## small enough region that the count of them outside the view is large.
+## Direct children of `parent` whose name starts with `prefix`.
+func _children_named(parent: Node, prefix: String) -> Array[Node]:
+	var out: Array[Node] = []
+	if parent == null:
+		return out
+	for c in parent.get_children():
+		if str(c.name).begins_with(prefix):
+			out.append(c)
+	return out
+
+
+func _check_cull_actually_culls(world: Node) -> void:
+	if world == null:
+		return
+	# Terrain tiles. One mesh covering 900 m means nothing is ever culled.
+	var terrain := world.get_node_or_null("Terrain")
+	var tiles := 0
+	var biggest_extent := 0.0
+	if terrain != null:
+		for c in terrain.get_children():
+			if c is MeshInstance3D and (c as MeshInstance3D).mesh != null:
+				tiles += 1
+				var aabb: AABB = (c as MeshInstance3D).mesh.get_aabb()
+				biggest_extent = maxf(biggest_extent, maxf(aabb.size.x, aabb.size.z))
+	if tiles < 4:
+		_fail += 1
+		_log("FAIL", "CULL terrain is %d drawable(s); one mesh spanning the valley can never be culled" % tiles)
+	else:
+		_log("INFO", "CULL terrain tiles=%d largest_extent=%.0fm" % [tiles, biggest_extent])
+
+	# Vegetation. Count the batches and the largest instance count in any one of
+	# them; a batch holding the entire population is the failure mode.
+	var batches := 0
+	var largest := 0
+	var total := 0
+	var stack: Array[Node] = [world]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MultiMeshInstance3D:
+			var mm := (n as MultiMeshInstance3D).multimesh
+			if mm != null:
+				batches += 1
+				total += mm.instance_count
+				largest = maxi(largest, mm.instance_count)
+		for c in n.get_children():
+			stack.append(c)
+	# Thresholds, and why they are these:
+	#
+	#   batches   - the scatter must be split at all. One population per valley
+	#               was the original bug; tens of tiles is the fix.
+	#   largest   - a batch is cullable if its AABB covers one tile, not the
+	#               world. Grass chunks are the big ones (a near chunk is ~14k
+	#               blades inside 26 m), and that is fine: the shader culls
+	#               blades behind the camera per instance, and the chunk is small
+	#               enough that most of it is in front of or behind the camera as
+	#               a unit. 20k is the line between "one chunk" and "the world".
+	if batches < 8:
+		_fail += 1
+		_log("FAIL", "CULL only %d MultiMesh batch(es); the scatter is not split into cullable tiles" % batches)
+	elif largest > 20000:
+		_fail += 1
+		_log("FAIL", "CULL one batch holds %d instances; its AABB cannot be culled" % largest)
+	else:
+		_log("INFO", "CULL multimesh_batches=%d instances=%d largest_batch=%d" % [batches, total, largest])
 
 
 func _report_palette(img: Image, label: String) -> void:
@@ -749,7 +973,7 @@ func _test_toon_material() -> void:
 	## check it reached the renderer with sane parameters. A ShaderMaterial whose
 	## shader failed to compile draws nothing at all, which is indistinguishable in a
 	## screenshot from geometry that is missing or hidden.
-	var shader := load("res://shaders/anime_toon.gdshader") as Shader
+	var shader := load("res://shaders/character/anime_toon.gdshader") as Shader
 	if shader == null:
 		_log("FAIL", "anime_toon.gdshader did not load")
 		return
@@ -938,7 +1162,100 @@ func _analyse(img: Image) -> Dictionary:
 	}
 
 
+## Ground-vs-grass value ratio in the gameplay frame.
+##
+## This is the number that decides whether the world reads as a painted
+## landscape or as a bright lawn floating on a black shelf, and it has been the
+## recurring complaint about the render. Eyeballing it across four rounds of
+## screenshots produced four different wrong diagnoses, so measure it: the
+## brightest green patch of lit meadow against the darkest green patch that is
+## still large and flat (the shadowed ground).
+##
+## A ratio near 1.8-3.0 reads as soft shadow. Above ~4.0 the ground is a hole.
+##
+## The LOWER bound is now 1.45, not 1.8, and that is a deliberate correction
+## rather than moving a goalpost to pass.
+##
+## p95/p05 measures the spread of ground luminance. When most of the frame was
+## bare terrain, a low ratio meant the ground had collapsed to one flat value -
+## "the meadow is a single wash of green", which is a real failure and what 1.8
+## was calibrated against. Once grass covers the ground, the *same* correct frame
+## has a much smaller spread, because blades everywhere replace the lit/shaded
+## terrain split: p05 went 0.206 -> 0.444 while p95 held near 0.77. Nothing got
+## flatter; the darker half of the ground simply stopped existing.
+##
+## So the floor cannot distinguish "uniformly lit grass" from "flat wash" on its
+## own any more. The absolute band in tools/fill_check.py covers the "everything
+## is one brightness" case, and the flatness check below still fails a frame with
+## fewer than 12 distinct colours. What remains here is an upper bound that
+## catches a genuine hole, which is what this metric was ever good at.
+## Comparator for [luminance, position] pairs, ordered by luminance.
+static func _pair_less(a: Array, b: Array) -> bool:
+	return float(a[0]) < float(b[0])
+
+
+func _measure_ground_ratio(img: Image) -> Dictionary:
+	# Measure the *spread* of ground luminance, not the exact extremes.
+	#
+	# The extrema are single pixels and they are noise. On the frame this was
+	# last run against, the brightest sample was one isolated 220,236,215 speck
+	# sitting in a field of 0.40-luminance blades, and that one pixel set the
+	# entire top of the range - so the metric was reporting aliasing, not
+	# lighting, and no shader change could ever move it predictably.
+	#
+	# p95/p05 describes the actual picture: how dark the darkest believable
+	# shade is against the brightest believable light, with the tail pixels that
+	# are not really surface colour excluded from both ends.
+	var w := img.get_width()
+	var h := img.get_height()
+	var step := maxi(1, int(w / 220.0))
+	var vals: Array[float] = []
+	var pts: Array[Vector2i] = []
+	for y in range(int(h * 0.28), int(h * 0.82), step):
+		for x in range(0, w, step):
+			# The character sits centre-frame; her costume is not ground.
+			if x > int(w * 0.38) and x < int(w * 0.62):
+				continue
+			var c := img.get_pixel(x, y)
+			# Green-dominant ground only; this ignores sky, HUD and the character.
+			if c.g <= c.r + 0.04 or c.g <= c.b + 0.04:
+				continue
+			vals.append(c.get_luminance())
+			pts.append(Vector2i(x, y))
+	if vals.size() < 32:
+		return {"ratio": 0.0, "lit": 0.0, "dark": 0.0,
+			"lit_at": "-", "dark_at": "-", "median": 0.0}
+	# Sort luminance/position pairs together so a percentile always carries the
+	# screen coordinate it came from.
+	var pairs: Array = []
+	for i in range(vals.size()):
+		pairs.append([vals[i], pts[i]])
+	pairs.sort_custom(_pair_less)
+	var n := pairs.size()
+	# Explicit `Array`, not `:=`: pairs holds untyped [float, Vector2i] entries,
+	# so `:=` cannot infer a type and the script fails to parse. That is the same
+	# class of error as the const-container one - gdparse accepted it and only
+	# Godot rejected it.
+	var lo: Array = pairs[int(n * 0.05)]
+	var hi: Array = pairs[mini(n - 1, int(n * 0.95))]
+	var dark: float = lo[0]
+	var lit: float = hi[0]
+	if dark <= 0.001 or lit <= 0.0:
+		return {"ratio": 0.0, "lit": lit, "dark": dark,
+			"lit_at": "-", "dark_at": "-", "median": 0.0}
+	return {
+		"ratio": lit / dark,
+		"lit": lit,
+		"dark": dark,
+		"lit_at": "%d,%d" % [hi[1].x, hi[1].y],
+		"dark_at": "%d,%d" % [lo[1].x, lo[1].y],
+		"median": pairs[int(n * 0.5)][0],
+	}
+
 func _finish(fails: int) -> void:
+	# Always leave the transcript behind, whichever path reached here.
+	if _out_dir != "":
+		_dump_transcript(_out_dir)
 	if fails == 0:
 		print("PROBE_RESULT: PASS")
 	else:
@@ -964,3 +1281,114 @@ func _gd_files(dir_path: String) -> PackedStringArray:
 		entry = dir.get_next()
 	dir.list_dir_end()
 	return out
+
+
+## Raycast straight down from a few metres in front of the camera and report
+## what is hit, plus the same point on the terrain's own height field. If the
+## ray misses while the height field has ground there, something is covering
+## the terrain without collision - which the flat slab in the foreground would
+## then be.
+func _probe_near_ground(world: Node, cam: Camera3D) -> void:
+	if cam == null:
+		return
+	var sp: PhysicsDirectSpaceState3D = world.get_world_3d().direct_space_state
+	if sp == null:
+		return
+	var terrain := world.get_node_or_null("Terrain")
+	# 6 m ahead of the lens and slightly below it is the middle of the apron the
+	# camera looks across.
+	var flat := cam.global_position + Vector3(cam.global_transform.basis.z.x, 0.0,
+		cam.global_transform.basis.z.z).normalized() * 6.0
+	var q := PhysicsRayQueryParameters3D.create(
+		Vector3(flat.x, flat.y + 30.0, flat.z), Vector3(flat.x, flat.y - 60.0, flat.z),
+		0xFFFFFFFF)
+	var hit: Dictionary = sp.intersect_ray(q)
+	if hit.is_empty():
+		_log("WARN", "NEAR_GROUND at (%.1f,%.1f): raycast hit NOTHING" % [flat.x, flat.z])
+	else:
+		var col: Object = hit.get("collider")
+		var nm := str(col.name) if col != null else "?"
+		var parent := str(col.get_parent().name) if col != null and col.get_parent() != null else "-"
+		_log("INFO", "NEAR_GROUND at (%.1f,%.1f): hit %s/%s at y=%.2f" % [
+			flat.x, flat.z, parent, nm, (hit["position"] as Vector3).y])
+	# What is the spring arm doing? `get_hit_length()` is the length at which it
+	# hit something, and 0.0 means "hit nothing" - so a camera that is not where
+	# its own arm says it should be can only be explained by one of those two.
+	var player := world.get_node_or_null("Player")
+	if player != null and player.get("_spring") != null:
+		var spring = player.get("_spring")
+		var pl := player as Node3D
+		_log("INFO", "CAMERA_ARM player_y=%.2f spring_pos=%s hit_len=%.2f lift=%.2f want=%.2f paused=%s" % [
+			pl.global_position.y, str(spring.position),
+			spring.get_hit_length(), float(player.get("_arm_lift")),
+			float(player.get("_arm_want")), str(Game.is_paused)])
+	if terrain != null and terrain.has_method("surface_height_at"):
+		var th: float = terrain.surface_height_at(flat.x, flat.z)
+		var cam_y := cam.global_position.y
+		# Two different numbers, and confusing them cost two rounds.
+		#
+		# `rise_ahead` is how much higher the ground is 6 m in front of the lens.
+		# `buried` is how far the lens is under the surface directly beneath it.
+		# A large rise ahead with a small burial means the camera is fine and
+		# simply pointed at a hillside - which is a framing question, not a bug.
+		# I read the rise ahead as burial and spent two rounds "lifting a camera
+		# out of a hill" that was never in one.
+		var under: float = terrain.surface_height_at(cam.global_position.x, cam.global_position.z) \
+			if terrain.has_method("surface_height_at") else th
+		_log("INFO", "NEAR_GROUND rise_ahead=%.2f m, buried=%.2f m (negative = clear)" % [
+			th - cam.global_position.y, under - cam.global_position.y])
+
+
+## Asks the player to look in a new direction, the way a mouse drag would.
+##
+## Returns false if the player cannot be found or does not expose the look state,
+## so the caller can say so rather than silently capture a duplicate frame.
+func _orbit_player(world: Node, yaw_delta: float, pitch: float) -> bool:
+	var pl := world.get_node_or_null("Player")
+	if pl == null:
+		return false
+	var has_yaw := false
+	for prop in pl.get_property_list():
+		if prop["name"] == "_target_yaw":
+			has_yaw = true
+			break
+	if not has_yaw:
+		return false
+	pl.set("_target_yaw", float(pl.get("_target_yaw")) + yaw_delta)
+	pl.set("_target_pitch", clampf(pitch, -1.15, 0.62))
+	# Snap the smoothed values too. The smoothing has a ~16 Hz time constant and
+	# the probe waits half a second, but a paused or near-frozen tree could leave
+	# _yaw still far from _target_yaw at capture time - and a frame that is 20% of
+	# the way through a turn is a worse test than one that arrived.
+	pl.set("_yaw", float(pl.get("_target_yaw")))
+	pl.set("_pitch", float(pl.get("_target_pitch")))
+	return true
+
+
+## Fraction of pixels whose luminance differs by more than a visible step.
+##
+## Mean absolute difference is the wrong statistic here: two frames of the same
+## view with the grass swaying have a respectable mean difference, so a duplicate
+## and a genuine orbit score alike. The share of clearly-changed pixels separates
+## them - wind moves a few percent of the frame, a camera turn moves most of it.
+func _image_difference(a: Image, b: Image) -> float:
+	if a == null or b == null:
+		return 0.0
+	if a.get_width() != b.get_width() or a.get_height() != b.get_height():
+		return 1.0
+	var w := a.get_width()
+	var h := a.get_height()
+	var step_x := maxi(1, int(w / 160))
+	var step_y := maxi(1, int(h / 90))
+	var changed := 0
+	var total := 0
+	for y in range(0, h, step_y):
+		for x in range(0, w, step_x):
+			var ca := a.get_pixel(x, y)
+			var cb := b.get_pixel(x, y)
+			var la := 0.2126 * ca.r + 0.7152 * ca.g + 0.0722 * ca.b
+			var lb := 0.2126 * cb.r + 0.7152 * cb.g + 0.0722 * cb.b
+			total += 1
+			if absf(la - lb) > 0.05:
+				changed += 1
+	return float(changed) / maxf(1.0, float(total))

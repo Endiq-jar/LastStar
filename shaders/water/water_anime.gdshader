@@ -56,6 +56,9 @@ void fragment() {
 	col += vec3(1.0, 0.98, 0.85) * sparkle * glint_strength;
 
 	ALBEDO = col;
+	// lint:allow-transparent - water is the one surface here that genuinely
+	// needs the blended pipeline; it is a single large sheet, not thousands of
+	// overlapping cards, so the sorting cost is bounded.
 	ALPHA = mix(opacity, 0.97, fres);
 	ROUGHNESS = mix(0.12, 0.03, fres);
 	METALLIC = 0.0;

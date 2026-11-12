@@ -132,6 +132,34 @@ renderer/rendering_method.web="gl_compatibility"
 ; 2D-only supersampling off; 3D MSAA stays light for mobile fill rate.
 anti_aliasing/quality/msaa_3d=0
 anti_aliasing/quality/screen_space_aa=0
+
+; Shadow atlas: 2048 on mobile, not the 4096 default.
+;
+; The atlas is one texture whose size is fixed at boot and paid whether the
+; shadows in it are pixel-perfect or full of empty space. Our whole shadow rig
+; is one 190 m directional map; at the engine default of 4096 that is 64 MB of
+; VRAM on a phone, spent to describe a valley that fills maybe half of it and
+; to produce a contact shadow under the character that is a few dozen pixels
+; wide either way. 2048 quarters the memory for no visible difference at these
+; distances, and on the Compatibility renderer it also quarters the clear and
+; the resolve of the shadow target every frame.
+rendering/lights_and_shadows/directional_shadow/size=2048
+rendering/lights_and_shadows/directional_shadow/size.mobile=2048
+rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality=1
+rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile=0
+
+; Depth prepass. Compatibility has no deferred path, so translucent-free
+; forward shading re-runs the fragment shader for every blade of grass that a
+; later opaque surface covers. A prepass resolves depth first and lets the
+; ground, the trees and the rocks reject the grass fragments hidden behind
+; them before the grass shader ever runs. That is worth real milliseconds in a
+; scene where the meadow is the most expensive surface on screen and most of it
+; is behind a hillside.
+rendering/driver/depth_prepass/enable=true
+
+; Mesh LOD bias: keep Godot's automatic mesh LOD, but start it later so it does
+; not visibly simplify the character at arm's length on a small screen.
+rendering/mesh_lod/lod_change/threshold_pixels=2.0
 ; Android export requires ETC2/ASTC import to be enabled.
 textures/default_filters/anisotropic_filtering_level=2
 textures/vram_compression/import_etc2_astc=true

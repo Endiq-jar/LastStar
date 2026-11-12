@@ -3,7 +3,6 @@ extends Node3D
 ## (wind-gliders' arches, crystal formations, ruins), spawns enemies, sigils
 ## and waypoint statues, runs the day/night cycle and weather.
 
-const FX := preload("res://scripts/fx.gd")
 const SlimeScript := preload("res://scripts/slime.gd")
 const SigilScript := preload("res://scripts/sigil.gd")
 const WaypointScript := preload("res://scripts/waypoint_statue.gd")
@@ -11,6 +10,10 @@ const WaterScript := preload("res://scripts/water_plane.gd")
 const PlayerScript := preload("res://scripts/player.gd")
 const AudioDirectorScript := preload("res://scripts/audio_director.gd")
 const GrassFieldScript := preload("res://scripts/grass_field.gd")
+const VegWindScript := preload("res://scripts/performance/vegetation_wind.gd")
+const VegLayerScript := preload("res://scripts/performance/vegetation_layer.gd")
+const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
+const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
 
 const ENEMY_COUNT := 14
 
@@ -22,8 +25,14 @@ var _rng := RandomNumberGenerator.new()
 var _props: Node3D
 var _enemies: Node3D
 var _collectibles: Node3D
+## One hundredth of a day is about 15 in-game minutes with the default cycle
+## speed - finer than the lighting curve moves perceptibly, coarse enough that
+## the environment is rewritten a few times a second instead of every frame.
+const DAY_UPDATE_STEP := 0.01
 var _day_time: float = 0.32
 var _day_speed: float = 0.0055
+## Last _day_time value whose lighting was actually pushed to the engine.
+var _day_applied := -1.0
 var _time := 0.0
 ## True once _ready() finished wiring the environment, sun and player.
 var _built := false
@@ -67,11 +76,12 @@ func _ready() -> void:
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
 	_build_spawn_glade()
+	# Clouds are drawn by shaders/sky/sky_anime.gdshader now, not spawned as 3D
+	# billboards - see the note there on why billboards could not be placed.
 	_scatter_landmarks()
 	_spawn_waypoints()
 	_spawn_sigils()
 	_spawn_enemies()
-	_spawn_clouds()
 	_add_audio()
 	Game.quest_changed.emit(Game.quest_text)
 	apply_quality()
@@ -223,9 +233,17 @@ func apply_quality() -> void:
 	var veg := get_node_or_null("Vegetation")
 
 	# --- shadows -----------------------------------------------------------
+	#
+	# Performance used to switch the sun's shadow map off completely. That single
+	# line is the whole "the character is floating on nothing" problem: with no
+	# shadow map there is no contact shadow under her, no cast shadow from the
+	# hills, and no self-shadowing anywhere. The world flattens into pure ambient
+	# and every object looks pasted on. A short-radius shadow map is one of the
+	# cheapest things on the GPU and it is the single most important depth cue in
+	# the frame, so no tier turns it off now - the tiers only shorten its reach.
 	if tier == 1:
-		sun.shadow_enabled = false
-		sun.directional_shadow_max_distance = 120.0
+		sun.shadow_enabled = true
+		sun.directional_shadow_max_distance = 70.0
 	elif compat:
 		# Compatibility shadows are cheap but not free; keep the radius short.
 		sun.shadow_enabled = true
@@ -242,8 +260,39 @@ func apply_quality() -> void:
 		_grass_field.call("set_density_scale", 1.0 if tier >= 2 else (0.65 if tier == 0 else 0.35))
 
 	# --- vegetation ---------------------------------------------------------
+	#
+	# Performance used to set the whole Vegetation node invisible: every tree,
+	# rock, flower and shrub in the valley vanished and the player was left on
+	# bare terrain with a few far-off waypoints. That is why the phone screenshots
+	# look like an empty green plane with props scattered on it while the desktop
+	# renders have hillsides full of trees. Thinning the scatter is a fair trade;
+	# deleting the entire world's dressing is not, so no tier does that now.
 	if veg:
-		veg.visible = tier != 1
+		veg.visible = true
+		if veg.has_method("set_detail_scale"):
+			veg.call("set_detail_scale", 1.0 if tier >= 2 else (0.8 if tier == 0 else 0.55))
+
+	# --- resolution scale ----------------------------------------------------
+	#
+	# The single most effective lever on a fill-rate-bound mobile GPU, and the
+	# one the quality tiers were missing entirely. Every earlier tier changed
+	# how much geometry existed; none changed how many pixels the screen has.
+	# Rendering the 3D pass at 0.8x and letting the canvas upscale costs a
+	# little softness on a 6-inch screen and removes a third of the fragment
+	# work - which is where the grass, the terrain shader and the shadow
+	# resolve all actually live.
+	#
+	# 3D scaling on the Compatibility renderer only became available in 4.3,
+	# which is the version pinned in project.godot, so this is safe on the
+	# GLES3 path the phone build uses. It is a no-op rather than an error on any
+	# driver that refuses it.
+	match tier:
+		1:
+			_set_3d_scale(0.75)
+		0:
+			_set_3d_scale(0.9)
+		_:
+			_set_3d_scale(1.0)
 
 	if env == null:
 		return
@@ -284,6 +333,18 @@ func apply_quality() -> void:
 	_grade_env(env)
 
 
+func _set_3d_scale(scale: float) -> void:
+	## 3D buffer resolution as a fraction of the window. 2D (the HUD) stays at
+	## native, so text and buttons keep their crispness while the world behind
+	## them renders cheaper - which is the whole reason to scale here rather
+	## than dropping the viewport size.
+	var vp := get_viewport()
+	if vp == null:
+		return
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = scale
+
+
 func _env_msaa(mode: RenderingServer.ViewportMSAA) -> void:
 	RenderingServer.viewport_set_msaa_3d(get_viewport().get_viewport_rid(), mode)
 
@@ -293,19 +354,31 @@ func _setup_environment() -> void:
 	env.background_mode = Environment.BG_SKY
 
 	var sky := Sky.new()
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.15, 0.32, 0.66)
-	sky_mat.sky_horizon_color = Color(0.74, 0.88, 1.0)
-	sky_mat.sky_curve = 0.11
-	sky_mat.sky_energy_multiplier = 1.15
-	# The ground half of a procedural sky is only seen below the horizon, but a
-	# pitch-black or blown-out value there shows up in reflections and fog, so
-	# keep it a soft hazy green-blue.
-	sky_mat.ground_bottom_color = Color(0.30, 0.44, 0.40)
-	sky_mat.ground_horizon_color = Color(0.64, 0.78, 0.90)
-	sky_mat.ground_curve = 0.06
-	sky_mat.sun_angle_max = 26.0
-	sky_mat.sun_curve = 0.10
+	# The stock ProceduralSkyMaterial only gives a two-colour gradient, and the
+	# published wide shot read exactly like one: 85% of the frame was a flat blue
+	# wash with no clouds, no haze band at the ridge and no sun anywhere in it.
+	# shaders/sky/sky_anime.gdshader gives the stacked horizon haze and an analytic sun
+	# disc that tracks the directional light, for a few smoothsteps per sky pixel.
+	# preload, not load, so the export dependency scanner is guaranteed to pick
+	# the shader up and ship it in the APK.
+	var sky_mat := ShaderMaterial.new()
+	sky_mat.shader = preload("res://shaders/sky/sky_anime.gdshader")
+	# Tuned here rather than left at the shader defaults so the values that shape
+	# the frame live next to the rest of the lighting rig.
+	sky_mat.set_shader_parameter("zenith_color", Color(0.10, 0.28, 0.68))
+	sky_mat.set_shader_parameter("horizon_color", Color(0.86, 0.93, 1.0))
+	sky_mat.set_shader_parameter("glow_strength", 0.45)
+	sky_mat.set_shader_parameter("band_strength", 0.11)
+	sky_mat.set_shader_parameter("gradient_power", 0.52)
+	# Cloud layer. The height is deliberately far above the terrain rim: the
+	# layer is projected, so what matters is that it is high enough that its
+	# perspective converges slowly, not that it clears any particular hill.
+	sky_mat.set_shader_parameter("cloud_height", 1250.0)
+	sky_mat.set_shader_parameter("cloud_scale", 0.0021)
+	sky_mat.set_shader_parameter("cloud_coverage", 0.34)
+	sky_mat.set_shader_parameter("cloud_opacity", 0.95)
+	sky_mat.set_shader_parameter("cloud_color", Color(1.0, 1.0, 1.0))
+	sky_mat.set_shader_parameter("cloud_shadow_color", Color(0.74, 0.80, 0.90))
 	sky.sky_material = sky_mat
 	env.sky = sky
 	# Ambient was 1.15 here, then recomputed every frame to 0.85-1.40 by the
@@ -361,12 +434,20 @@ func _setup_environment() -> void:
 	sun.light_color = Color(1.0, 0.95, 0.86)
 	# Matches the daytime value the day/night pass computes.
 	sun.light_energy = 1.35
-	sun.light_angular_distance = 0.4
+	# A wider angular diameter is the only thing that actually softens a
+	# directional shadow: shadow_blur only feathers the edge of a hard silhouette,
+	# and at 0.4 degrees the sun was effectively a point source, so the character
+	# cast a crisp black cut-out with razor edges. That is what made her look
+	# superimposed on the ground rather than standing on it. The real sun is about
+	# 0.53 degrees, but stylised open worlds exaggerate it considerably to get a
+	# soft contact shadow - 1.6 keeps the terminator readable and gives a shadow
+	# that fades out rather than ending.
+	sun.light_angular_distance = 1.6
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	sun.directional_shadow_max_distance = 220.0
 	sun.directional_shadow_split_1 = 0.13
-	sun.shadow_blur = 1.4
+	sun.shadow_blur = 2.2
 	sun.light_specular = 0.8
 	sun.rotation_degrees = Vector3(-34, -52, 0)
 
@@ -376,7 +457,23 @@ func _process(delta: float) -> void:
 	if Game.is_paused or not _built:
 		return
 	_day_time = fposmod(_day_time + delta * _day_speed, 1.0)
-	_update_time_of_day()
+	# _update_time_of_day() was called every single frame, and it is not a cheap
+	# function: it writes ~20 Environment properties, reassigns the sun's
+	# rotation, colour and energy, and re-applies the whole colour grade. Every
+	# one of those is an engine-side setter that dirties the environment and, for
+	# the sky, re-sends shader uniforms to the GPU - so the cost is not the
+	# GDScript, it is that the renderer re-uploaded lighting state 60 times a
+	# second to describe a sun that moves about a degree per minute.
+	#
+	# The projected-set getter for the environment is a full redraw of the
+	# lighting rig, and on the target phone it was a measurable slice of a frame
+	# budget that had nothing to spare. Nothing in here changes perceptibly
+	# faster than a hundredth of a day, so that is the resolution it is updated
+	# at. _set_beauty_time() still calls it directly, so the render probe gets a
+	# deterministic frame.
+	if absf(_day_time - _day_applied) >= DAY_UPDATE_STEP or _day_applied < 0.0:
+		_day_applied = _day_time
+		_update_time_of_day()
 	# One-shot black-frame check, a few frames in (no renderer awaits).
 	if not _render_checked and _render_check_countdown >= 0:
 		_render_check_countdown -= 1
@@ -483,6 +580,20 @@ func _update_time_of_day() -> void:
 		mat.sky_energy_multiplier = lerpf(1.15, 1.0, warmth)
 		mat.ground_horizon_color = mat.sky_horizon_color
 		mat.ground_bottom_color = Color(0.20, 0.26, 0.22).lerp(Color(0.28, 0.24, 0.22), warmth)
+	elif sky != null and sky.sky_material is ShaderMaterial:
+		# Same intent for the painted sky: deepen the zenith and push the horizon
+		# toward peach as the sun drops, so the whole frame moves together. The sun
+		# disc and halo need no help - the shader reads LIGHT0 directly, so they
+		# follow the light on their own.
+		var sm := sky.sky_material as ShaderMaterial
+		sm.set_shader_parameter("zenith_color",
+			Color(0.10, 0.28, 0.68).lerp(Color(0.13, 0.20, 0.46), warmth))
+		sm.set_shader_parameter("horizon_color",
+			Color(0.86, 0.93, 1.0).lerp(Color(1.0, 0.83, 0.66), warmth))
+		# The warm band is subtle at noon and broad and strong at dawn/dusk.
+		sm.set_shader_parameter("glow_strength", lerpf(0.42, 0.78, warmth))
+		sm.set_shader_parameter("horizon_glow",
+			Color(1.0, 0.94, 0.80).lerp(Color(1.0, 0.70, 0.42), warmth))
 
 	_grade_env(env, warmth)
 
@@ -500,8 +611,17 @@ func _grade_env(env: Environment, warmth: float = 0.5) -> void:
 	if env == null:
 		return
 	env.adjustment_enabled = true
-	env.adjustment_saturation = lerpf(1.04, 1.12, warmth)
-	env.adjustment_contrast = lerpf(1.08, 1.13, warmth)
+	# Raised to give the "more saturated" look, but the ceiling is deliberate.
+	#
+	# The old warning - that global saturation clips the most saturated surface in
+	# the frame while leaving everything else alone - is still true and is why this
+	# is 1.24 and not 1.45. The excess saturation the user is asking for comes from
+	# the albedo (the greens were moved to a true green hue, and the rock now has
+	# real texture instead of flat grey), so the grade only has to finish the job.
+	# Pushed further, the meadow clips to a single flat green and the rock does not
+	# move at all - the specific failure the previous comment was written about.
+	env.adjustment_saturation = lerpf(1.14, 1.22, warmth)
+	env.adjustment_contrast = lerpf(1.10, 1.15, warmth)
 	env.adjustment_brightness = lerpf(1.0, 1.02, warmth)
 
 
@@ -514,6 +634,14 @@ func _build_lake() -> void:
 
 
 func _height(x: float, z: float) -> float:
+	# Routed through TerrainGenerator.ground_point() rather than get_height_at().
+	# The analytic field is smooth; the rendered mesh is not, and it sags up to a
+	# few decimetres below the analytic surface across each 3 m triangle. Every
+	# placement in this file - the player spawn, the glade, waypoints, sigils -
+	# was asked for the analytic height, so all of them floated. ground_point()
+	# exists for exactly this and had no caller.
+	if terrain and terrain.has_method("ground_point"):
+		return terrain.call("ground_point", x, z, 0.0).y
 	if terrain and terrain.has_method("get_height_at"):
 		return terrain.get_height_at(x, z)
 	return 0.0
@@ -549,9 +677,8 @@ func _build_spawn_glade() -> void:
 	altar.add_child(disc)
 
 	var stone := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(1.0, 2.2, 0.6)
-	stone.mesh = box
+	# A monolith with a taper, not a 1x2.2x0.6 box.
+	stone.mesh = VegMeshes.trunk(2.2, 0.55, 0.30, 0.10, 5)
 	var sm := StandardMaterial3D.new()
 	# 0.82 albedo under a 1.3-energy sun clipped to white; these read as blank
 	# white slabs. A weathered grey stone matches the rock band on the terrain.
@@ -566,11 +693,15 @@ func _build_spawn_glade() -> void:
 	for i in range(6):
 		var a := TAU * float(i) / 6.0
 		var pillar := MeshInstance3D.new()
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.9, _rng.randf_range(3.4, 5.2), 0.9)
+		# A tapered, slightly leaning stone column instead of a box. Still
+		# rectangular in plan - these are built ruins, not boulders - but with a
+		# taper, a lean and a real rock texture, which is the difference between
+		# "standing stone" and "grey rectangle".
+		var ph := _rng.randf_range(3.4, 5.2)
+		var mesh := VegMeshes.trunk(ph, 0.46, 0.18, _rng.randf_range(-0.06, 0.06), 6)
 		pillar.mesh = mesh
 		pillar.material_override = sm
-		pillar.position = center + Vector3(cos(a) * 9.0, mesh.size.y * 0.5 - 0.4, sin(a) * 9.0)
+		pillar.position = center + Vector3(cos(a) * 9.0, -0.4, sin(a) * 9.0)
 		pillar.rotation_degrees = Vector3(0, rad_to_deg(a) + 8.0, _rng.randf_range(-5.0, 5.0))
 		_props.add_child(pillar)
 
@@ -578,8 +709,12 @@ func _build_spawn_glade() -> void:
 		body.collision_layer = 1
 		body.collision_mask = 0
 		var col := CollisionShape3D.new()
+		# BoxShape sized from the column's own height and radius. The old code read
+		# `mesh.size`, which only exists on BoxMesh - a generated ArrayMesh has no
+		# such property, so this had to be rewritten with the pillar rather than
+		# left to fail at runtime.
 		var shape := BoxShape3D.new()
-		shape.size = mesh.size
+		shape.size = Vector3(0.92, ph, 0.92)
 		col.shape = shape
 		body.add_child(col)
 		pillar.add_child(body)
@@ -592,10 +727,44 @@ func _build_spawn_glade() -> void:
 	add_child(light)
 
 
+## Weathered stone, textured and triplanar.
+##
+## Every stone structure in the world used a bare StandardMaterial3D with a flat
+## albedo, on BoxMesh primitives - which is why the altar ring and the ruin gates
+## read as grey cardboard rectangles standing in the grass. A box with no texture
+## at all is the single most obvious "placeholder" shape there is.
+##
+## The texture is the same painted rock the terrain uses, sampled triplanar so the
+## boxes get rock detail on all six faces without any per-face UV work, and
+## dark_notch vertex-colouring is off because these meshes have no vertex colours.
+func _stone_material() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.60, 0.62, 0.66)
+	m.roughness = 0.92
+	m.metallic = 0.0
+	var tex := _load_stone_tex("res://textures/terrain/rock.png")
+	if tex != null:
+		m.albedo_texture = tex
+		m.uv1_triplanar = true
+		# 0.35 tiles the 512px rock roughly every 3 m, which reads as boulder-scale
+		# texture on a 1 m pillar rather than as fine noise.
+		m.uv1_scale = Vector3(0.35, 0.35, 0.35)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return m
+
+
+func _load_stone_tex(path: String) -> Texture2D:
+	if not ResourceLoader.exists(path):
+		push_warning("LastStar: missing stone texture " + path)
+		return null
+	var t := load(path)
+	if t is Texture2D:
+		return t as Texture2D
+	return null
+
+
 func _scatter_landmarks() -> void:
-	var stone_mat := StandardMaterial3D.new()
-	stone_mat.albedo_color = Color(0.56, 0.58, 0.63)
-	stone_mat.roughness = 0.85
+	var stone_mat := _stone_material()
 
 	# Wind arches: tall broken gates that read like Genshin's ruins.
 	for i in range(7):
@@ -614,13 +783,13 @@ func _scatter_landmarks() -> void:
 		_props.add_child(gate)
 		for side in [-1.0, 1.0]:
 			var pillar := MeshInstance3D.new()
-			var box := BoxMesh.new()
-			box.size = Vector3(1.4, 8.5, 1.4)
-			pillar.mesh = box
+			pillar.mesh = VegMeshes.trunk(8.5, 0.72, 0.22, 0.05 * side, 7)
 			pillar.material_override = stone_mat
-			pillar.position = Vector3(2.6 * side, 4.25, 0)
+			pillar.position = Vector3(2.6 * side, 0.0, 0)
 			gate.add_child(pillar)
 		var lintel := MeshInstance3D.new()
+		# The lintel stays a box - a fallen gate's crossbeam was a cut block - but
+		# it now carries the rock texture like the pillars it sits on.
 		var box2 := BoxMesh.new()
 		box2.size = Vector3(7.0, 1.1, 1.6)
 		lintel.mesh = box2
@@ -702,15 +871,71 @@ func _scatter_landmarks() -> void:
 		fire.material_override = fm
 		fire.position.y = 0.4
 		camp.add_child(fire)
-		var fire_light := OmniLight3D.new()
-		fire_light.light_color = Color(1.0, 0.6, 0.25)
-		fire_light.light_energy = 2.4
-		fire_light.omni_range = 8.0
-		fire_light.position.y = 1.0
-		camp.add_child(fire_light)
-		var t := fire_light.create_tween().set_loops()
-		t.tween_property(fire_light, "light_energy", 1.6, 0.5)
-		t.tween_property(fire_light, "light_energy", 2.6, 0.7)
+		# Campfire glow is emissive only - no OmniLight3D.
+		#
+		# Six campfires across the valley each added a real-time point light to a
+		# renderer with no clustered lighting, so all six were evaluated per pixel
+		# on every lit surface that overlapped their range. The fire mesh below is
+		# already unshaded and emissive at 3x; the light added almost nothing to
+		# the image and a permanent cost to the frame.
+		#
+		# If a genuine ground-glow is wanted later, the cheap version is a single
+		# unshaded additive decal quad lying on the terrain, not a light.
+		# Flicker the fire's own emission instead of a light's energy. Same visual
+		# read, no lighting cost. The tween loops for the life of the node.
+		var t := fire.create_tween().set_loops()
+		t.tween_property(fm, "emission_energy_multiplier", 2.0, 0.5)
+		t.tween_property(fm, "emission_energy_multiplier", 3.4, 0.7)
+
+
+## Count what the world is actually asking the renderer to draw.
+##
+## Walks the live tree once (probe only, never per frame) and tallies drawable
+## nodes, how many of them are batched MultiMeshes and how many instances those
+## batches carry. This is the number that says whether vegetation batching
+## worked: the scatter used to be one node per prop, so `meshes` was ~1,600 and
+## `multimesh_instances` was 0.
+func perf_census() -> String:
+	var meshes := 0
+	var multimeshes := 0
+	var instances := 0
+	var lights := 0
+	var bodies := 0
+	var stack: Array[Node] = [self]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MultiMeshInstance3D:
+			multimeshes += 1
+			var mm := (n as MultiMeshInstance3D).multimesh
+			if mm != null:
+				instances += mm.instance_count
+		elif n is MeshInstance3D:
+			meshes += 1
+		if n is Light3D:
+			lights += 1
+		if n is StaticBody3D or n is CharacterBody3D or n is Area3D:
+			bodies += 1
+		for c in n.get_children():
+			stack.append(c)
+	var out := "census meshes=%d multimeshes=%d multimesh_instances=%d lights=%d bodies=%d" % [
+		meshes, multimeshes, instances, lights, bodies]
+	# One line per vegetation layer, naming the mesh it actually resolved.
+	#
+	# "flowers are in the scene" and "flowers are drawn as flowers" are different
+	# claims, and for two commits only the first was true: the layer fell through
+	# to a rock for every kind it did not recognise and the species table asked
+	# for "crossed" anyway. Vertex counts make the difference visible - a flower
+	# cluster is hundreds of vertices, a rock sphere is a few dozen.
+	for spec in VegPresets.species():
+		var n := "Veg_%s" % spec["name"]
+		var layer := get_node_or_null(n)
+		if layer == null or not layer.has_method("census"):
+			continue
+		var c: Dictionary = layer.call("census")
+		out += "\nVEG_LAYERS %s kind=%s mesh=%s verts=%s chunks=%s instances=%s" % [
+			spec["name"], c.get("mesh_kind", "?"), c.get("mesh_class", "?"),
+			c.get("mesh_verts", 0), c.get("chunks", 0), c.get("instances", 0)]
+	return out
 
 
 func _spawn_waypoints() -> void:
@@ -806,6 +1031,84 @@ func _build_grass_field() -> void:
 	add_child(field)
 	field.call("setup", t, player)
 	_grass_field = field
+	_build_environment_vegetation(t, player)
+
+
+## The five authored leaf silhouettes, one per leaf layer instance.
+const LEAF_VARIETIES := ["lance", "oval", "round", "needle", "lobed"]
+
+
+func _build_environment_vegetation(t: Node, player: Node3D) -> void:
+	## The authored environment species: border grass, flowers, bushes, fallen
+	## leaves and pebbles, plus a second grass layer that shares one material.
+	##
+	## The original grass field above stays in place - it is the dense carpet
+	## directly under the player and it works. This adds the variety on top of it
+	## that a meadow needs to stop reading as a single green plane, and it does so
+	## as batched MultiMeshes so the prop count does not become draw calls.
+	##
+	## One wind driver node owns every foliage material. The GPU does the wind;
+	## the driver's entire cost is one uniform write per material per frame.
+	var wind := Node.new()
+	wind.name = "VegetationWind"
+	wind.set_script(VegWindScript)
+	add_child(wind)
+	wind.call("set_player", player)
+
+	for spec in VegPresets.species():
+		# The base grass carpet is already handled by GrassField, which is tuned
+		# to the player's position and streams differently. Skip the duplicate.
+		if spec["name"] == "grass":
+			continue
+		var tex: Texture2D = VegPresets.texture(spec["tex"])
+		if tex == null:
+			push_warning("LastStar: missing vegetation texture %s" % spec["tex"])
+			continue
+		var mat: ShaderMaterial = VegPresets.material_for(
+			spec["name"], spec["wind"], spec["tint"])
+		mat.set_shader_parameter("albedo_texture", tex)
+		wind.call("register_material", mat)
+
+		var layer := Node3D.new()
+		layer.name = "Veg_%s" % spec["name"]
+		layer.set_script(VegLayerScript)
+		add_child(layer)
+		# Density with a per-species falloff. A flat density across a limited
+		# radius would leave a visible wall at the edge of each small layer, which
+		# reads far worse than the detail simply thinning out. Grass holds its
+		# density to the streaming edge; small props taper.
+		layer.set("density", float(spec["density"]))
+		layer.set("min_height", spec["hmin"])
+		layer.set("max_height", spec["hmax"])
+		layer.set("max_slope", spec["slope"])
+		layer.set("mesh_kind", spec["mesh"])
+		# Variant selection for the generated cluster meshes. `hash` is stable
+		# within a run but not across platforms, so it is only used to pick a
+		# variant, never for placement.
+		# Solid geometry needs three changes from a foliage card: no alpha cutout,
+		# no wind sway, and a tiled albedo. Set here rather than in the material
+		# cache because material_for() is shared per (species, wind, tint) and the
+		# rock texture is not interchangeable with a leaf sprite.
+		# Typed, not inferred. `spec` is an untyped Dictionary, so `spec["mesh"]`
+		# has no static type and `var solid := ... in [...]` fails Godot's analyser
+		# with "Cannot infer the type of solid variable" - at load time, which kills
+		# the whole world script. gdparse and undeclared.py both accept it.
+		var solid: bool = str(spec["mesh"]) in ["rock", "boulder", "trunk"]
+		if solid:
+			mat.set_shader_parameter("solid", 1.0)
+			mat.set_shader_parameter("uv_scale", Vector2(2.2, 2.2))
+			mat.set_shader_parameter("rim_strength", 0.18)
+		layer.set("mesh_variant", absi(hash(spec["name"])) % 8)
+		layer.set("seed_for_mesh", absi(hash(spec["name"])) % 97 + 1)
+		layer.set("leaf_variety", LEAF_VARIETIES[absi(hash(spec["name"])) % LEAF_VARIETIES.size()])
+		# Per-species streaming radius. Small detail does not need to exist at
+		# 130 m; see the note on the species table.
+		layer.set("chunk_radius", int(spec["radius"]))
+		layer.set("material", mat)
+		# Fewer chunks per frame than the demo scene: the world is already
+		# building terrain, enemies and the grass field on the same frames.
+		layer.set("chunks_per_frame", 1)
+		layer.call("setup", t, player, hash(spec["name"]))
 
 
 func _add_audio() -> void:
@@ -815,72 +1118,3 @@ func _add_audio() -> void:
 	add_child(audio)
 
 
-func _spawn_clouds() -> void:
-	## Soft billboard clouds drifting above the valley.
-	##
-	## These used to be plain unshaded white quads. With no texture and no
-	## falloff they rendered as solid blue-white rectangles hanging in the sky -
-	## the single most "this is a prototype" thing in the whole scene. Each
-	## cloud is now a cluster of soft procedural puffs that fade at the rim.
-	var tex := _cloud_texture()
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
-	mat.billboard_keep_scale = true
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.albedo_texture = tex
-	# Clouds are lit by the sky, not emissive. 0.55 alpha over a bright blue sky
-	# gave near-white puffs that read as paper cut-outs; slightly bluer and
-	# fainter lets them sit inside the sky.
-	mat.albedo_color = Color(0.96, 0.97, 1.0, 0.42)
-
-	# More clusters, spread as long horizontal bands rather than scattered
-	# blobs: cloud in an open sky reads as layered streaks near the horizon, and
-	# a dozen round puffs at random heights read as marbles stuck to the sky.
-	for i in range(34):
-		var cluster := Node3D.new()
-		cluster.position = Vector3(
-			_rng.randf_range(-680.0, 680.0),
-			_rng.randf_range(150.0, 260.0),
-			_rng.randf_range(-680.0, 680.0))
-		# Flatten the cluster along Y so it has a cloud's proportions.
-		cluster.scale = Vector3(1.0, 0.55, 1.0)
-		# 4-7 overlapping puffs of different sizes make a believable cloud.
-		var puffs := _rng.randi_range(4, 7)
-		for p in range(puffs):
-			var cloud := MeshInstance3D.new()
-			var quad := QuadMesh.new()
-			var s := _rng.randf_range(90.0, 210.0)
-			quad.size = Vector2(s, s * 0.34)
-			cloud.mesh = quad
-			cloud.material_override = mat
-			# Spread mostly along X: clouds stretch sideways, not in depth.
-			cloud.position = Vector3(
-				_rng.randf_range(-0.95, 0.95) * s,
-				_rng.randf_range(-0.04, 0.04) * s,
-				_rng.randf_range(-0.22, 0.22) * s)
-			cloud.rotation.y = _rng.randf() * TAU
-			cloud.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			cluster.add_child(cloud)
-		add_child(cluster)
-
-
-func _cloud_texture() -> Texture2D:
-	## A radial soft blob, generated once: opaque in the middle, transparent at
-	## the rim, with a little noise so the edge is not a clean circle.
-	var size := 96
-	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
-	var noise := FastNoiseLite.new()
-	noise.frequency = 0.055
-	noise.seed = 7
-	var half := float(size) * 0.5
-	for y in range(size):
-		for x in range(size):
-			var nx := (float(x) + 0.5 - half) / half
-			var ny := (float(y) + 0.5 - half) / half
-			var r := sqrt(nx * nx + ny * ny)
-			# Soft edge, pushed in and out by noise.
-			var edge := 1.0 - smoothstep(0.45, 1.0, r + noise.get_noise_2d(x, y) * 0.14)
-			img.set_pixel(x, y, Color(1, 1, 1, clampf(edge, 0.0, 1.0)))
-	return ImageTexture.create_from_image(img)

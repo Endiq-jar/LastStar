@@ -10,7 +10,6 @@ var _activated := false
 var _time := 0.0
 var _wings: Array[Node3D] = []
 var _crystal: MeshInstance3D
-var _light: OmniLight3D
 
 
 func _ready() -> void:
@@ -27,13 +26,12 @@ func _ready() -> void:
 	add_child(shape)
 
 	var stone := ShaderMaterial.new()
-	stone.shader = load("res://shaders/anime_toon.gdshader")
+	stone.shader = load("res://shaders/character/anime_toon.gdshader")
 	# 0.86 read as a blank white cut-out standing in the meadow; stone in this
 	# world sits around 0.5 and gets its brightness from the sun.
 	stone.set_shader_parameter("albedo_color", Color(0.52, 0.55, 0.62))
 	stone.set_shader_parameter("shadow_tint", Color(0.6, 0.66, 0.95))
 	stone.set_shader_parameter("rim_strength", 0.4)
-	stone.set_shader_parameter("spec_energy", 0.2)
 
 	var glow := StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -101,12 +99,10 @@ func _ready() -> void:
 		pivot.add_child(wing)
 		_wings.append(pivot)
 
-	_light = OmniLight3D.new()
-	_light.light_color = Color(0.55, 0.9, 1.0)
-	_light.light_energy = 1.4
-	_light.omni_range = 9.0
-	_light.position.y = 4.0
-	add_child(_light)
+	# No point light. Same reasoning as the sigils, slimes and campfires: this
+	# renderer has no clustered lighting, so a 9 m OmniLight on every waypoint is
+	# charged per pixel across everything it overlaps. The activated crystal below
+	# is emissive and unshaded, which is what actually reads as "lit".
 
 	var label := Label3D.new()
 	label.text = statue_name
@@ -127,8 +123,7 @@ func _process(delta: float) -> void:
 	if _crystal:
 		_crystal.rotation.y += delta * 0.9
 		_crystal.position.y = 5.0 + sin(_time * 1.6) * 0.16
-	if _light:
-		_light.light_energy = (2.0 if _activated else 1.2) + sin(_time * 2.2) * 0.3
+
 
 
 func _on_body_entered(body: Node3D) -> void:

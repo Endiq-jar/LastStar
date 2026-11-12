@@ -15,7 +15,15 @@ extends Node
 ##   godot --headless --path . res://tests/compile_check.tscn
 
 const DIRS := ["res://scripts", "res://tests"]
-const SHADER_DIRS := ["res://shaders"]
+# All shaders now live under res://shaders/<category>/, which is the layout the
+# brief asks for. The walker below is recursive because DirAccess.get_files()
+# lists a single directory: when the library was flat this did not matter, and as
+# soon as it was nested an un-recursive walk skipped almost all of it while CI
+# reported green.
+#
+# `res://assets/shaders` is kept in the list only so that a stale path left behind
+# by a future edit is walked and fails loudly, rather than being silently ignored.
+const SHADER_DIRS := ["res://shaders", "res://assets/shaders"]
 
 
 func _ready() -> void:
@@ -84,11 +92,20 @@ func _run() -> void:
 func _files(dirs: Array, suffix: String) -> Array[String]:
 	var out: Array[String] = []
 	for d in dirs:
-		var da := DirAccess.open(d)
-		if da == null:
-			continue
-		for f in da.get_files():
-			if f.ends_with(suffix):
-				out.append(d.path_join(f))
+		_walk(d, suffix, out)
 	out.sort()
 	return out
+
+
+## Recurse, because the shader library is nested by category. The previous
+## single-level listing meant res://assets/shaders/**/*.gdshader was never
+## compiled in CI at all - the check passed by not looking.
+func _walk(dir_path: String, suffix: String, out: Array[String]) -> void:
+	var da := DirAccess.open(dir_path)
+	if da == null:
+		return
+	for f in da.get_files():
+		if f.ends_with(suffix):
+			out.append(dir_path.path_join(f))
+	for sub in da.get_directories():
+		_walk(dir_path.path_join(sub), suffix, out)

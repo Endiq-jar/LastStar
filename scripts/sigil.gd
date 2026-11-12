@@ -5,10 +5,11 @@ extends Area3D
 const FX := preload("res://scripts/fx.gd")
 
 var _mesh: Node3D
-var _light: OmniLight3D
+var _halo: MeshInstance3D
+var _halo_mat: StandardMaterial3D
+var _sparkle_timer := 2.5
 var _picked := false
 var _time := 0.0
-var _base_y := 0.0
 var _color := Color(1.0, 0.86, 0.45)
 
 
@@ -78,17 +79,24 @@ func _ready() -> void:
 	halo.material_override = hm
 	halo.rotation_degrees = Vector3(24, 0, 0)
 	_mesh.add_child(halo)
+	_halo = halo
+	_halo_mat = hm
 
-	_light = OmniLight3D.new()
-	_light.light_color = _color
-	_light.light_energy = 2.2
-	_light.omni_range = 7.0
-	_light.shadow_enabled = false
-	_light.position = Vector3(0, 0.7, 0)
-	add_child(_light)
+	# No per-sigil OmniLight3D.
+	#
+	# Each sigil used to carry a real-time point light. There are twelve of them
+	# in the valley at once, and this renderer is `gl_compatibility`, which has no
+	# clustered light path: every forward-lit object evaluates every light that
+	# reaches it, per pixel. Twelve extra lights is a large, permanent cost paid
+	# on every blade of grass, every tree and every metre of terrain in the
+	# valley, all to make a 0.4 m crystal look bright.
+	#
+	# The halo below is already an emissive, additive, unshaded quad - it reads as
+	# glow without lighting anything. The pulse that used to drive the light now
+	# drives the halo's emission energy and scale instead, which costs one uniform
+	# write and no lighting pass.
 
 	body_entered.connect(_on_body_entered)
-	_base_y = position.y
 	_time = randf() * TAU
 
 
@@ -98,8 +106,20 @@ func _process(delta: float) -> void:
 	_time += delta
 	_mesh.rotation.y += delta * 1.4
 	_mesh.position.y = 0.4 + sin(_time * 1.8) * 0.22
-	_light.light_energy = 1.9 + sin(_time * 2.6) * 0.5
-	if fmod(_time, 0.5) < delta:
+	# Drive the halo instead of the (now removed) light.
+	if _halo != null and is_instance_valid(_halo):
+		var pulse := 1.9 + sin(_time * 2.6) * 0.5
+		_halo.scale = Vector3.ONE * (0.94 + 0.06 * sin(_time * 2.6))
+		if _halo_mat != null:
+			_halo_mat.emission_energy_multiplier = pulse
+	# The sparkle burst was fired twice a second, per sigil. Each call allocates
+	# particle nodes and then frees them, so twelve sigils were spawning and
+	# destroying roughly 24 bursts a second for the whole session - a steady drip
+	# of allocations and scene-tree churn that only ever showed up as stutter.
+	# It is now one burst every 2.5 s, which reads as the same ambient twinkle.
+	_sparkle_timer -= delta
+	if _sparkle_timer <= 0.0:
+		_sparkle_timer = 2.5
 		FX.sparkle(get_parent(), global_position + Vector3(0, 0.8, 0), _color, 0.8)
 
 
@@ -107,6 +127,10 @@ func _on_body_entered(body: Node3D) -> void:
 	if _picked or not body.is_in_group("player"):
 		return
 	_picked = true
+	# Stop ticking this node entirely. The tween below still animates it away,
+	# but there is no reason to keep running sin() and a smoke check every frame
+	# for a sigil that no longer exists in the world.
+	set_process(false)
 	Game.collect_sigil()
 	FX.heal_burst(get_parent(), global_position + Vector3(0, 0.8, 0), _color)
 	_play_chime()
@@ -116,7 +140,6 @@ func _on_body_entered(body: Node3D) -> void:
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(_mesh, "scale", Vector3.ZERO, 0.4)
-	tw.tween_property(_light, "light_energy", 0.0, 0.4)
 	tw.chain().tween_callback(queue_free)
 
 

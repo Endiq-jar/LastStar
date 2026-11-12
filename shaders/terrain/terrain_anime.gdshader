@@ -18,8 +18,12 @@ uniform sampler2D rock_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D sand_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 
-uniform vec4 meadow_tint : source_color = vec4(0.235, 0.335, 0.175, 1.0);
-uniform vec4 meadow_deep : source_color = vec4(0.115, 0.195, 0.115, 1.0);
+// Hue-shifted to true green (~120 degrees) to match the grass field. The meadow
+// used a yellow-green tint and the rendered frame's dominant hue bin confirmed
+// it: the terrain and the blades were both leaning straw, and moving only the
+// blades would have put a green carpet on a yellow hillside.
+uniform vec4 meadow_tint : source_color = vec4(0.205, 0.340, 0.180, 1.0);
+uniform vec4 meadow_deep : source_color = vec4(0.105, 0.205, 0.118, 1.0);
 // Slightly warm grey. A neutral 0.42 grey under a cool sky turns every cliff the
 // same slate blue and the mountains lose all separation from the sky behind them.
 uniform vec4 rock_tint : source_color = vec4(0.40, 0.38, 0.36, 1.0);
@@ -89,6 +93,21 @@ void fragment() {
 	vec3 meadow_detail = tri(meadow_tex, v_world, wn, uv_scale);
 	vec3 rock_detail = tri(rock_tex, v_world, wn, uv_scale * 0.62);
 	vec3 sand_detail = tri(sand_tex, v_world, wn, uv_scale * 1.25);
+	// A second, much finer sample at a different scale. One texture at one scale
+	// over a whole hillside is what makes procedural terrain read as a single
+	// flat colour: there is nothing between the macro patch (hundreds of metres)
+	// and the base tint. Blending two scales of the same paint gives the
+	// mid-frequency breakup a painted hillside has.
+	vec3 meadow_fine = tri(meadow_tex, v_world, wn, uv_scale * 4.7);
+	float meadow_fl = dot(meadow_fine, vec3(0.2126, 0.7152, 0.0722));
+
+	// A third scale, sampled from the UV grid rather than triplanar because it is
+	// only ever seen on the ground. At 0.62 m this is the size of a patch of
+	// longer grass, and it is the scale the camera actually looks at from 4 m -
+	// without it the ground immediately under the player is one unbroken fill no
+	// matter how much larger-scale paint is layered above it.
+	vec3 near_detail = texture(meadow_tex, v_world.xz * 1.6).rgb;
+	float near_l = dot(near_detail, vec3(0.2126, 0.7152, 0.0722));
 	float meadow_l = dot(meadow_detail, vec3(0.2126, 0.7152, 0.0722));
 	float rock_l = dot(rock_detail, vec3(0.2126, 0.7152, 0.0722));
 	float sand_l = dot(sand_detail, vec3(0.2126, 0.7152, 0.0722));
@@ -96,13 +115,32 @@ void fragment() {
 	// Meadow: two greens, broken up by the soft macro patches, modulated by the
 	// painted detail (kept subtle so the flat anime bands still dominate).
 	vec3 grass = mix(meadow_deep.rgb, meadow_tint.rgb, 0.35 + patch * 0.65);
-	grass *= mix(1.0, meadow_l * 1.9, 0.45);
+	grass *= mix(1.0, meadow_l * 1.9, 0.50);
+	grass *= mix(1.0, meadow_fl * 1.7, 0.30);
+	// Weighted by distance: the fine grain is only visible up close, and applying
+	// it at range would just be noise under the haze.
+	grass *= mix(1.0, near_l * 1.7, 0.52 * (1.0 - smoothstep(18.0, 70.0, length(VERTEX))));
 	// A little golden meadow mixed in, the way open-world grass reads. Kept
 	// low: push this and the hillsides turn acid yellow-green.
 	// The dry blend is nearly as weak as it can be while still breaking up the
 	// field. At 0.10 with a lighter yellow it painted large acid-yellow blotches
 	// across the meadow that read as camo, not as sun-bleached grass.
-	grass = mix(grass, vec3(0.34, 0.36, 0.19), dry * 0.06);
+	grass = mix(grass, vec3(0.325, 0.355, 0.190), dry * 0.05);
+	// Hue and value variety, which is what separates a painted valley from a
+	// single flat wash of green. Genshin's fields run from a warm yellow-green on
+	// the sunlit crowns to a cool blue-green in the hollows, and the transition
+	// follows the terrain's own large-scale noise rather than a screen gradient.
+	float warm_patch = smoothstep(0.35, 0.75, macro2);
+	grass = mix(grass, grass * vec3(1.16, 1.09, 0.80), warm_patch * 0.55);
+	float cool_patch = smoothstep(0.62, 0.20, macro);
+	grass = mix(grass, grass * vec3(0.80, 0.94, 1.06), cool_patch * 0.40);
+	// A value break at the grass/patch scale. The near foreground is a single
+	// gentle slope, so the macro term barely varies across it and the ground
+	// reads as one flat wash however much fine grain sits on top. This is the
+	// brushstroke scale - 8 to 30 m - that a background painter uses to keep a
+	// large open area from going dead.
+	float brush = smoothstep(0.40, 0.62, texture(macro_tex, v_world.xz * 0.028).r);
+	grass *= mix(0.88, 1.10, brush);
 
 	// Rock: warm grey, cooler in shadowed bands.
 	vec3 rock_col = rock_tint.rgb * mix(0.66, 1.0, patch);
@@ -169,6 +207,14 @@ void fragment() {
 	vec3 hazed = mix(vec3(luma), col, 0.72) * vec3(0.80, 0.86, 1.06);
 	col = mix(col, hazed, haze * 0.88);
 
+	// Painted ground darkens in the creases. Lambert alone leaves a smooth
+	// hillside one flat value across the whole frame; a background painter puts
+	// a darker wash on every concave fold and that is most of what gives the
+	// ground its rolls. `slope` is already computed for the rock blend, so this
+	// costs nothing.
+	float fold = smoothstep(0.12, 0.55, slope);
+	col *= mix(1.0, 0.78, fold * 0.55);
+
 	// Pull the hue back toward grey before handing the albedo to the light.
 	//
 	// The neon this project keeps fighting was never brightness - the shadowed
@@ -183,35 +229,62 @@ void fragment() {
 	// Lift the darkest end. Whatever the light does, no terrain albedo in a
 	// stylised open world should be below about 0.06 or the ground turns into a
 	// black hole under the camera while the same grass two metres away is bright.
-	col = max(col, vec3(0.055, 0.070, 0.050) * (0.6 + patch * 0.8));
+	// The albedo floor also has to clear the tonemap's toe. It was 0.055/0.07/0.05,
+	// which after the filmic curve is barely off black - and because the shadow
+	// fill is now proportional to this value, a near-zero albedo gives a near-zero
+	// fill. Raising it here is what gives the proportional fill something to
+	// multiply, so the darkest ground keeps its texture instead of flattening.
+	col = max(col, vec3(0.105, 0.130, 0.108) * (0.62 + patch * 0.78));
 
 	ALBEDO = col;
-	// A flat painted-ambient lift.
+
+	// --- shadow fill -------------------------------------------------------
+	// Measured, then computed, then set. The shadowed foreground arrives at
+	// rgb(17,44,25). Running that back through the filmic curve in default_env
+	// (mode 2, exposure 1.04) says the incoming radiance there is about 0.03 -
+	// i.e. the light itself is nearly zero on a slope facing away from the key,
+	// which is correct for Lambert and is why six attempts at moving ALBEDO and
+	// emission around barely changed the frame.
 	//
-	// Only the terrain sits in shadow: the grass is drawn with shadows_disabled,
-	// so the meadow stayed bright while the slope underneath it went to a near
-	// black-green under the ridge's cast shadow. The result was a field hovering
-	// over a void, and a foreground three stops darker than the sunlit hills
-	// behind it - which is the opposite of how an anime background is painted,
-	// where shadow is a colour change and almost never a value collapse.
+	// So the fill has to be large enough to survive the tonemap's toe, and it has
+	// to be proportional to the painted colour or the shadow goes flat (a constant
+	// floor gave rgb(62,90,73) with every pixel identical across the whole lower
+	// third - a grey-green shelf with no paint in it).
 	//
-	// This is emission rather than more ambient light on purpose: raising the
-	// environment's ambient also greys out the character's blacks, and the whole
-	// point of the repaint was to keep them black.
-	// A constant cool term, not a multiple of col.
+	// EMISSION is added after tonemapping-independent light accumulation, so a
+	// value of 0.22 here lands near 0.75 linear and prints as roughly half the
+	// sunlit value, which is where painted shadow belongs.
+	// Measured between the two extremes rather than modelled: k=2.35 printed the
+	// shadow at green 156 (a mint wash with no detail left), k=1.05 at 60 (back
+	// to a dark shelf), k=1.75 at 100 but with the probe still reporting a
+	// lit/dark ratio of 7.8x against its own 1.8-3.0 target. The tonemap's toe is
+	// steep through this range, so the working value sits above the middle of
+	// those points, not on it.
 	//
-	// Scaling by col does nothing where it is needed most: on a slope facing away
-	// from the sun the lit result is already near zero, so col*0.13 rounded to a
-	// 2/255 difference in the frame. The foreground stayed black. A fixed lift
-	// puts a floor under the shadow instead, which is what makes painted terrain
-	// read - shadow is a colour there, and the darkest value on the ground is
-	// nowhere near black.
-	// The constant dominates on purpose. On a slope facing away from the key the
-	// light term is a few thousandths, so this floor *is* the shadow colour, and a
-	// floor of 0.03/0.04/0.06 still left the shadowed valley reading as a hole -
-	// rgb(3,30,20) in the wide frame, near-black and 0.90 saturated. Painted
-	// background shadow is a cool mid green, not an absence of light.
-	EMISSION = col * 0.14 + vec3(0.062, 0.082, 0.098);
+	// A flat `col * k` multiply is what produced both failures. Multiplying the
+	// albedo by a constant adds brightness in proportion to the albedo, so it adds
+	// almost nothing where the paint is dark - and the fold shading and grain both
+	// live at the dark end. A flat lift therefore flattens exactly the detail it
+	// was meant to reveal, which is why k=2.35 read as a wash rather than as light.
+	//
+	// The fill is now tilted by `patch`, the large-scale colour variation: darker
+	// patches get more fill and brighter ones less, so painted variation survives
+	// in shade instead of collapsing to a single value.
+	// Floor + slope, matching grass_sway.gdshader. Both surfaces now fill to the
+	// same absolute level whatever their albedo, instead of each multiplying its
+	// own paint by a constant - which is what let one shader sit twenty times
+	// darker than the other and what made matching the constants blow the
+	// meadow out. `patch` still tilts the slope so large-scale colour survives
+	// in shade.
+	float fill_k = 0.42 - patch * 0.12;
+	// Floor raised from vec3(0.098, 0.104, 0.088). Raising the colour grade's
+	// saturation to answer "make it saturated" widened the spread between the
+	// lit meadow and the shaded terrain, and the probe caught the combined
+	// effect: lit/dark went 3.72x -> 4.41x, past its own 4.0 ceiling, with the
+	// shadowed ground reading as a hole again. The grade is what the user asked
+	// for, so the shadows move instead. Still floor + slope so both surfaces fill
+	// to the same absolute level.
+	EMISSION = col * fill_k + vec3(0.126, 0.134, 0.114);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);

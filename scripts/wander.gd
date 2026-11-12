@@ -12,7 +12,6 @@ extends RefCounted
 ## through repeated use. Light is the casting resource (Game.energy).
 
 signal slots_changed()
-signal spell_learned(id: String)
 signal spell_levelled(id: String, level: int)
 signal spell_cast(id: String)
 
@@ -20,7 +19,6 @@ const MAX_SLOTS := 5
 const MAX_SPELL_LEVEL := 30
 
 ## Element ids match Game.PARTY[x]["element_id"].
-const ELEMENT_NAMES := ["Anemo", "Pyro", "Electro", "Hydro", "Cryo", "Geo", "Arcane"]
 
 ## The starter codex. `cost` is Light, `power` multiplies the character's attack,
 ## `radius` is the effect area in metres (0 = single target / projectile).
@@ -161,20 +159,6 @@ func known(id: String) -> bool:
 	return id != "" and levels.has(id) and CATALOGUE.has(id)
 
 
-func learn(id: String) -> bool:
-	if not CATALOGUE.has(id) or levels.has(id):
-		return false
-	levels[id] = 1
-	spell_learned.emit(id)
-	# Drop it into the first free slot so it is immediately usable.
-	for i in range(MAX_SLOTS):
-		if slots[i] == "":
-			slots[i] = id
-			slots_changed.emit()
-			break
-	return true
-
-
 func level_of(id: String) -> int:
 	return int(levels.get(id, 0))
 
@@ -220,11 +204,14 @@ func can_cast(id: String, light: float) -> bool:
 	return light >= float(spell(id)["cost"])
 
 
+## Start a cooldown and record mastery progress. Returns the spell data.
+## True when the spell is known and off cooldown. The HUD had this same
+## expression inlined; one predicate means "ready" cannot drift from
+## "castable" the way it did for the Light/cooldown ordering bug.
 func is_ready(id: String) -> bool:
 	return known(id) and cooldown_left(id) <= 0.0
 
 
-## Start a cooldown and record mastery progress. Returns the spell data.
 func begin_cast(id: String) -> Dictionary:
 	var data := spell(id)
 	if data.is_empty():

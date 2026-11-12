@@ -7,7 +7,6 @@ extends Control
 @onready var party_row: HBoxContainer = %PartyRow
 @onready var quality_btn: Button = %QualityButton
 
-var _diorama: Node3D
 var _pivot: Node3D
 var _time := 0.0
 var _sigils: Array[Node3D] = []
@@ -124,7 +123,7 @@ func _build_diorama() -> void:
 	sphere.rings = 24
 	ground.mesh = sphere
 	var gm := ShaderMaterial.new()
-	gm.shader = load("res://shaders/anime_toon.gdshader")
+	gm.shader = load("res://shaders/character/anime_toon.gdshader")
 	gm.set_shader_parameter("albedo_color", Color(0.45, 0.72, 0.38))
 	gm.set_shader_parameter("shadow_tint", Color(0.55, 0.66, 0.92))
 	gm.set_shader_parameter("rim_strength", 0.5)
@@ -152,7 +151,7 @@ func _build_diorama() -> void:
 		crown_mesh.height = 4.2 - i * 0.5
 		crown.mesh = crown_mesh
 		var lm := ShaderMaterial.new()
-		lm.shader = load("res://shaders/anime_toon.gdshader")
+		lm.shader = load("res://shaders/character/anime_toon.gdshader")
 		lm.set_shader_parameter("albedo_color", Color(0.42, 0.76, 0.36))
 		lm.set_shader_parameter("rim_strength", 0.8)
 		crown.material_override = lm

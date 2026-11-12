@@ -215,6 +215,12 @@ func _on_editor_close() -> void:
 func _on_editor_pick(id: String) -> void:
 	wander.set_slot(_editor_slot, id)
 	_editor.visible = false
+	# Assigning a spell is the one unambiguous "that worked" moment in the UI, and
+	# it was silent. audio_director.gd has had play_ui_chime() unused since it was
+	# written; this is the interaction it was for.
+	var amb := get_tree().get_first_node_in_group("ambience")
+	if amb != null and amb.has_method("play_ui_chime"):
+		amb.call("play_ui_chime")
 
 
 func _build_book_button() -> void:
@@ -378,11 +384,23 @@ func _cast_slot(i: int) -> void:
 	if id == "":
 		Game.toast.emit("Empty spell slot — long press to assign")
 		return
-	if not Game.spend_energy(float(wander.spell(id)["cost"])):
-		Game.toast.emit("Not enough Light")
-		return
+	# Order matters, and it was wrong.
+	#
+	# This spent the Light, *then* checked the cooldown - so casting a spell that
+	# was still recharging burned its full cost and did nothing. The player gets a
+	# "recharging" toast and a silently drained energy bar.
+	#
+	# The check itself duplicated Wander.can_cast(), which had been sitting unused
+	# since it was written. Using it puts the ordered logic in one place and lets
+	# the wheel stay a UI.
 	if wander.cooldown_left(id) > 0.0:
 		Game.toast.emit("%s is recharging" % wander.spell(id)["name"])
+		return
+	if not wander.can_cast(id, Game.energy):
+		Game.toast.emit("Not enough Light")
+		return
+	if not Game.spend_energy(float(wander.spell(id)["cost"])):
+		Game.toast.emit("Not enough Light")
 		return
 	var data: Dictionary = wander.begin_cast(id)
 	Game.spell_cast.emit(id, data)
@@ -421,7 +439,7 @@ func _refresh() -> void:
 			_glyphs[i].text = "+"
 		var bg := _slots[i].get_node_or_null("Bg") as Panel
 		if bg:
-			var ready_now: bool = known and wander.cooldown_left(id) <= 0.0
+			var ready_now: bool = known and wander.is_ready(id)
 			bg.add_theme_stylebox_override("panel", _slot_style(known, ready_now))
 		_sweeps[i].queue_redraw()
 	_book_icon.modulate = Color(1, 1, 1, 1)
