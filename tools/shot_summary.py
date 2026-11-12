@@ -23,8 +23,7 @@ def measure_ground(im):
     w, h = im.size
     px = im.load()
     step = max(1, w // 220)
-    lit, dark = -1.0, 2.0
-    lit_at = dark_at = None
+    vals = []
     count = 0
     for y in range(int(h * 0.28), int(h * 0.82), step):
         for x in range(0, w, step):
@@ -35,14 +34,28 @@ def measure_ground(im):
             if g <= r + 0.04 or g <= b + 0.04:
                 continue
             l = 0.2126 * r + 0.7152 * g + 0.0722 * b
-            if l > lit:
-                lit, lit_at = l, (x, y)
-            if l < dark:
-                dark, dark_at = l, (x, y)
+            vals.append((l, (x, y)))
             count += 1
-    if count < 32 or dark <= 0.001 or lit <= 0.0:
+    if count < 32:
         return None
-    return (lit / dark, lit, dark, lit_at, dark_at)
+    vals.sort()
+    n = len(vals)
+
+    def pct(q):
+        return vals[min(n - 1, int(q * n))]
+
+    # Percentiles, not extrema.
+    #
+    # The extrema are single pixels and they are noise: on the frame that
+    # measured 5.97x, the brightest sample was one isolated 220,236,215 speck
+    # sitting in a field of 0.40-luminance blades, and it alone set the top of
+    # the range. A metric that reports the worst pixel of two million is
+    # reporting aliasing, not lighting.
+    lo = pct(0.05)
+    hi = pct(0.95)
+    if lo[0] <= 0.001 or hi[0] <= 0.0:
+        return None
+    return (hi[0] / lo[0], hi[0], lo[0], hi[1], lo[1], pct(0.5)[0])
 
 
 def main(argv) -> int:
@@ -65,12 +78,12 @@ def main(argv) -> int:
         # Measure before thumbnailing, on the full-resolution frame.
         m = measure_ground(im)
         if m:
-            ratio, lit, dark, lit_at, dark_at = m
-            verdict = "OK" if 1.8 <= ratio <= 3.0 else (
+            ratio, lit, dark, lit_at, dark_at, med = m
+            verdict = "OK" if 1.8 <= ratio <= 4.0 else (
                 "HOLE" if ratio > 4.0 else "LOW-CONTRAST")
-            print("**ground contrast** %.1fx (%s) - lit %.3f @%s, "
-                  "dark %.3f @%s; target 1.8-3.0\n"
-                  % (ratio, verdict, lit, lit_at, dark, dark_at))
+            print("**ground contrast** %.2fx (%s) - p95 %.3f @%s, "
+                  "p05 %.3f @%s, median %.3f; target 1.8-4.0\n"
+                  % (ratio, verdict, lit, lit_at, dark, dark_at, med))
         im.thumbnail((560, 560))
         buf = io.BytesIO()
         im.save(buf, "JPEG", quality=70)

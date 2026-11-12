@@ -369,6 +369,16 @@ func _run() -> void:
 		_finish(_fail)
 		return
 	img.save_png(out_dir.path_join("world.png"))
+
+	# What is actually under the camera's feet?
+	#
+	# The gameplay frame has a large, flat, untextured slab across the bottom
+	# third, and it reads as a bare apron rather than as meadow. Two very
+	# different causes look identical in a screenshot - the terrain shader
+	# printing flat there, or something else entirely (a decal, a plane, a
+	# mis-scaled chunk) covering it - and eyeballing it cost rounds on the
+	# grass/terrain mix-up already. So ask the physics space what is down there.
+	_probe_near_ground(world, cam)
 	var stats := _analyse(img)
 	var ground := _measure_ground_ratio(img)
 	if float(ground["ratio"]) > 0.0:
@@ -376,10 +386,10 @@ func _run() -> void:
 		if float(ground["ratio"]) >= 4.0:
 			note = " (shadowed ground is reading as a hole)"
 		_log("INFO" if note == "" else "WARN",
-			"ground contrast lit=%.3f@(%s) dark=%.3f@(%s) ratio=%.1fx%s" % [
+			"ground contrast p95=%.3f@(%s) p05=%.3f@(%s) median=%.3f ratio=%.2fx%s" % [
 				ground["lit"], ground["lit_at"],
 				ground["dark"], ground["dark_at"],
-				ground["ratio"], note])
+				ground["median"], ground["ratio"], note])
 	else:
 		_log("INFO", "ground contrast: not measurable in this frame")
 	_check_blob(img, "gameplay")
@@ -1022,60 +1032,64 @@ func _analyse(img: Image) -> Dictionary:
 ## still large and flat (the shadowed ground).
 ##
 ## A ratio near 1.8-3.0 reads as soft shadow. Above ~4.0 the ground is a hole.
+## Comparator for [luminance, position] pairs, ordered by luminance.
+static func _pair_less(a: Array, b: Array) -> bool:
+	return float(a[0]) < float(b[0])
+
+
 func _measure_ground_ratio(img: Image) -> Dictionary:
+	# Measure the *spread* of ground luminance, not the exact extremes.
+	#
+	# The extrema are single pixels and they are noise. On the frame this was
+	# last run against, the brightest sample was one isolated 220,236,215 speck
+	# sitting in a field of 0.40-luminance blades, and that one pixel set the
+	# entire top of the range - so the metric was reporting aliasing, not
+	# lighting, and no shader change could ever move it predictably.
+	#
+	# p95/p05 describes the actual picture: how dark the darkest believable
+	# shade is against the brightest believable light, with the tail pixels that
+	# are not really surface colour excluded from both ends.
 	var w := img.get_width()
 	var h := img.get_height()
 	var step := maxi(1, int(w / 220.0))
-	var lit := -1.0
-	var dark := 2.0
-	var lit_x := -1
-	var lit_y := -1
-	var dark_x := -1
-	var dark_y := -1
-	var count := 0
-	# Skip the HUD bands at the very top and bottom of the frame.
+	var vals: Array[float] = []
+	var pts: Array[Vector2i] = []
 	for y in range(int(h * 0.28), int(h * 0.82), step):
 		for x in range(0, w, step):
-			# Exclude the middle band, which is where the character stands. Her
-			# contact shadow is deliberately the darkest thing in the frame and
-			# including it measured my own blob shadow rather than the ground: the
-			# ratio jumped to 19x the moment I added it.
-			var in_character_band := x > int(w * 0.38) and x < int(w * 0.62)
-			if in_character_band:
+			# The character sits centre-frame; her costume is not ground.
+			if x > int(w * 0.38) and x < int(w * 0.62):
 				continue
 			var c := img.get_pixel(x, y)
 			# Green-dominant ground only; this ignores sky, HUD and the character.
 			if c.g <= c.r + 0.04 or c.g <= c.b + 0.04:
 				continue
-			var l := c.get_luminance()
-			if l > lit:
-				lit = l
-				lit_x = x
-				lit_y = y
-			if l < dark:
-				dark = l
-				dark_x = x
-				dark_y = y
-			count += 1
-	if count < 32 or dark <= 0.001 or lit <= 0.0:
+			vals.append(c.get_luminance())
+			pts.append(Vector2i(x, y))
+	if vals.size() < 32:
+		return {"ratio": 0.0, "lit": 0.0, "dark": 0.0,
+			"lit_at": "-", "dark_at": "-", "median": 0.0}
+	# Sort luminance/position pairs together so a percentile always carries the
+	# screen coordinate it came from.
+	var pairs: Array = []
+	for i in range(vals.size()):
+		pairs.append([vals[i], pts[i]])
+	pairs.sort_custom(_pair_less)
+	var n := pairs.size()
+	var lo := pairs[int(n * 0.05)]
+	var hi := pairs[mini(n - 1, int(n * 0.95))]
+	var dark: float = lo[0]
+	var lit: float = hi[0]
+	if dark <= 0.001 or lit <= 0.0:
 		return {"ratio": 0.0, "lit": lit, "dark": dark,
-			"lit_at": "-", "dark_at": "-"}
-	# Report WHERE the darkest and brightest samples were.
-	#
-	# Without this the ratio is uninterpretable, and it was misread once exactly
-	# that way: the darkest "ground" pixels turned out to be at y=226-351, up in
-	# the tree line, and belonged to grass blades rather than terrain. Chasing the
-	# terrain shader for several rounds changed the terrain fill and moved this
-	# number by nothing at all, because the terrain was never what was dark.
+			"lit_at": "-", "dark_at": "-", "median": 0.0}
 	return {
 		"ratio": lit / dark,
 		"lit": lit,
 		"dark": dark,
-		"lit_at": "%d,%d" % [lit_x, lit_y],
-		"dark_at": "%d,%d" % [dark_x, dark_y],
+		"lit_at": "%d,%d" % [hi[1].x, hi[1].y],
+		"dark_at": "%d,%d" % [lo[1].x, lo[1].y],
+		"median": pairs[int(n * 0.5)][0],
 	}
-
-
 
 func _finish(fails: int) -> void:
 	if fails == 0:
@@ -1103,3 +1117,38 @@ func _gd_files(dir_path: String) -> PackedStringArray:
 		entry = dir.get_next()
 	dir.list_dir_end()
 	return out
+
+
+## Raycast straight down from a few metres in front of the camera and report
+## what is hit, plus the same point on the terrain's own height field. If the
+## ray misses while the height field has ground there, something is covering
+## the terrain without collision - which the flat slab in the foreground would
+## then be.
+func _probe_near_ground(world: Node, cam: Camera3D) -> void:
+	if cam == null:
+		return
+	var sp: PhysicsDirectSpaceState3D = world.get_world_3d().direct_space_state
+	if sp == null:
+		return
+	var terrain := world.get_node_or_null("Terrain")
+	# 6 m ahead of the lens and slightly below it is the middle of the apron the
+	# camera looks across.
+	var flat := cam.global_position + Vector3(cam.global_transform.basis.z.x, 0.0,
+		cam.global_transform.basis.z.z).normalized() * 6.0
+	var q := PhysicsRayQueryParameters3D.create(
+		Vector3(flat.x, flat.y + 30.0, flat.z), Vector3(flat.x, flat.y - 60.0, flat.z),
+		0xFFFFFFFF)
+	var hit: Dictionary = sp.intersect_ray(q)
+	if hit.is_empty():
+		_log("WARN", "NEAR_GROUND at (%.1f,%.1f): raycast hit NOTHING" % [flat.x, flat.z])
+	else:
+		var col: Object = hit.get("collider")
+		var nm := str(col.name) if col != null else "?"
+		var parent := str(col.get_parent().name) if col != null and col.get_parent() != null else "-"
+		_log("INFO", "NEAR_GROUND at (%.1f,%.1f): hit %s/%s at y=%.2f" % [
+			flat.x, flat.z, parent, nm, (hit["position"] as Vector3).y])
+	if terrain != null and terrain.has_method("surface_height_at"):
+		var th: float = terrain.surface_height_at(flat.x, flat.z)
+		var cam_y := cam.global_position.y
+		_log("INFO", "NEAR_GROUND height field y=%.2f, camera y=%.2f, drop=%.2f m" % [
+			th, cam_y, cam_y - th])
