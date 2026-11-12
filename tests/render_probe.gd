@@ -994,34 +994,70 @@ func _nature_batches(world: Node) -> Array[GeometryInstance3D]:
 	return found
 
 
-## The foliage shader with its fragment body swapped, to find which line kills
-## the colour. "flat" writes constants and ignores every input; "vcol" writes the
-## baked vertex colour with no tint and no height term. Everything else - the
-## wind, the culling, the lighting model - is the shipped shader.
-func _nature_shader_variant(mode: String) -> Shader:
+## The foliage shader with one or two lines swapped, to find which one kills the
+## colour. Returns the shader and the number of lines it actually replaced: a
+## variant that changed nothing is not evidence.
+##
+##   flat   - constant albedo and emission, every input ignored
+##   vcol   - the baked vertex colour, no tint and no height term
+##   novary - the shipped body with `col` forced to grey (no varyings involved)
+##   raw    - unshaded, ALBEDO straight from COLOR
+##   abs    - unshaded, abs(COLOR), to catch negative vertex colours
+func _nature_shader_variant(mode: String) -> Array:
 	var src := FileAccess.get_file_as_string("res://shaders/vegetation/nature_foliage.gdshader")
 	if src.is_empty():
-		return null
-	var lines := src.split("\n")
+		return [null, 0]
+	var swaps := {}
+	var render_line := ""
+	match mode:
+		"flat":
+			swaps = {
+				"\tALBEDO = col": "\tALBEDO = vec3(0.2, 0.8, 0.3);",
+				"\tEMISSION = col": "\tEMISSION = vec3(0.2, 0.8, 0.3);",
+			}
+		"vcol":
+			swaps = {
+				"\tALBEDO = col": "\tALBEDO = COLOR.rgb;",
+				"\tEMISSION = col": "\tEMISSION = COLOR.rgb * 0.55 + vec3(0.112, 0.124, 0.100);",
+			}
+		"novary":
+			swaps = {"\tvec3 col = COLOR.rgb": "\tvec3 col = vec3(0.5, 0.5, 0.5);"}
+		"raw":
+			render_line = "render_mode cull_disabled, unshaded;"
+			swaps = {
+				"\tALBEDO = col": "\tALBEDO = COLOR.rgb;",
+				"\tEMISSION = col": "\tEMISSION = vec3(0.0);",
+			}
+		"abs":
+			render_line = "render_mode cull_disabled, unshaded;"
+			swaps = {
+				"\tALBEDO = col": "\tALBEDO = abs(COLOR.rgb) * 3.0;",
+				"\tEMISSION = col": "\tEMISSION = vec3(0.0);",
+			}
+		_:
+			return [null, 0]
 	var out := PackedStringArray()
-	for line in lines:
+	var replaced := 0
+	for line in src.split("\n"):
 		var text := str(line)
-		if text.begins_with("\tALBEDO = col"):
-			if mode == "flat":
-				out.append("\tALBEDO = vec3(0.2, 0.8, 0.3);")
-			else:
-				out.append("\tALBEDO = COLOR.rgb;")
+		if render_line != "" and text.begins_with("render_mode"):
+			out.append(render_line)
+			replaced += 1
 			continue
-		if text.begins_with("\tEMISSION = col"):
-			if mode == "flat":
-				out.append("\tEMISSION = vec3(0.2, 0.8, 0.3);")
-			else:
-				out.append("\tEMISSION = COLOR.rgb * 0.55 + vec3(0.112, 0.124, 0.100);")
-			continue
-		out.append(text)
+		var handled := false
+		for key in swaps:
+			if text.begins_with(str(key)):
+				out.append(str(swaps[key]))
+				replaced += 1
+				handled = true
+				break
+		if not handled:
+			out.append(text)
+	if replaced == 0:
+		return [null, 0]
 	var shader := Shader.new()
 	shader.code = "\n".join(out)
-	return shader
+	return [shader, replaced]
 
 
 ## Fraction of the frame that is very dark, as a percentage.
@@ -1117,9 +1153,11 @@ func _probe_black_shapes(world: Node) -> void:
 	# The magenta test says the shapes belong to a nature batch, so the shader is
 	# what turns them black. Bisect the fragment stage: same vertex work, two
 	# different fragment bodies.
-	for mode in ["flat", "vcol"]:
-		var variant := _nature_shader_variant(str(mode))
+	for mode in ["flat", "vcol", "novary", "raw", "abs"]:
+		var built := _nature_shader_variant(str(mode))
+		var variant := built[0] as Shader
 		if variant == null:
+			_log("WARN", "DARK variant %s could not be built" % mode)
 			continue
 		var variant_mat := ShaderMaterial.new()
 		variant_mat.shader = variant
@@ -1132,8 +1170,8 @@ func _probe_black_shapes(world: Node) -> void:
 		await get_tree().process_frame
 		await get_tree().process_frame
 		var vimg := get_viewport().get_texture().get_image()
-		_log("INFO", "DARK with nature shader=%s = %.2f%%" % [
-			mode, _dark_fraction(vimg) if vimg else -1.0])
+		_log("INFO", "DARK with nature shader=%s (%d swaps) = %.2f%%" % [
+			mode, int(built[1]), _dark_fraction(vimg) if vimg else -1.0])
 		for pair in swap:
 			var gi2 := pair[0] as GeometryInstance3D
 			if is_instance_valid(gi2):
