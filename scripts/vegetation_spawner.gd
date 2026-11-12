@@ -1,44 +1,49 @@
 extends Node3D
-## Genshin-ish vegetation scatter for mobile: stylized pine trees, round
-## wind-swept broadleaf trees, glowing flowers, rocks and a MultiMesh grass
-## carpet. All meshes are procedural and batched with MultiMesh where possible.
+## The valley's standing vegetation: trees, pines, dead trees, rocks, flowers,
+## fallen logs, stumps and pebbles.
+##
+## Every prop is a model from the Quaternius Ultimate Stylized Nature Pack
+## (see scripts/nature_pack.gd), instanced through a MultiMesh per variant and
+## split into spatial tiles so each batch can still be frustum-culled. Before
+## this, every prop was procedural geometry carrying painted pngs from
+## assets/environment/: a cylinder trunk with three sphere lobes and 26 leaf
+## cards for a broadleaf, four stacked cones and a ragged skirt for a pine, a
+## sphere for a rock. Those pngs are gone with the pipeline. The pack ships its
+## colour in named materials and no textures at all, so NaturePack bakes the
+## colours into vertex colours and every prop needs one material, one mesh and
+## one draw call per tile.
+##
+## What did not change is the placement: the height/slope/lake rejection, the
+## collision bodies under the trunks and the tiling below, because those are
+## what make a scatter look planted rather than sprinkled.
 
 @export var terrain_path: NodePath
 
-const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
-
-## The leaf sheet is a horizontal strip of five leaves: green, red, pink, brown,
-## yellow. Only the green one belongs on foliage, so every leaf-textured surface
-## is pinned to that fifth rather than sampling the whole strip - which is what
-## put red and orange flecks on the pine cones.
-## Leaf surfaces on SOLID geometry must not sample the leaf sprite sheet.
-##
-## leaf.png is an alpha-cutout atlas: 84% of each slice is transparent, with the
-## transparent pixels stored as rgb(0,1,0). Sampling it on an opaque cone gives
-## near-black, which is why the pines came out as black shapes however bright the
-## tint was - the tint was multiplying zero. (Same class of mistake as the rock
-## sprite sheet, and I made it twice.)
-##
-## r_tex_leaf.png is a seamless opaque foliage surface built from that sheet's own
-## green palette, for use on solids. The sheet itself is still used, correctly, on
-## the alpha-cut cards.
-const TEX_LEAF_SURFACE := "res://assets/environment/leaves/r_tex_leaf.png"
-const TEX_LEAF_SHEET := "res://assets/environment/leaves/leaf.png"
-const TEX_BARK := "res://assets/environment/trees/trunk.png"
-const TEX_BARK_STRIPPED := "res://assets/environment/trees/trunk_stripped.png"
-const TEX_WOOD := "res://assets/environment/wood/wood.png"
-const TEX_WOOD_STRIPED := "res://assets/environment/wood/wood_striped.png"
-## Tiling for the foliage surface: a canopy lobe is ~1.5 m, so 2 repeats reads as
-## leaf detail rather than as a smear.
-const LEAF_SURFACE_UV := Rect2(0.0, 0.0, 2.0, 2.0)
+const NaturePack := preload("res://scripts/nature_pack.gd")
 
 const TREE_COUNT := 170
 const PINE_COUNT := 130
+const DEAD_COUNT := 34
 const ROCK_COUNT := 100
 const FLOWER_COUNT := 300
 const LOG_COUNT := 46
+const STUMP_COUNT := 38
 const PEBBLE_COUNT := 900
 const SPREAD := 330.0
+
+## The four broadleaf species, one batch each. A MultiMesh draws one mesh, so
+## variety is a batch per model rather than a property of an instance.
+const BROADLEAF := ["tree_common_1", "tree_common_3", "tree_birch", "tree_willow"]
+const PINES := ["tree_pine_1", "tree_pine_3"]
+
+## Scale ranges. The pack authors every tree at 2.2-3.6 m; the valley's trees have
+## always been 5-11 m, and a forest of 3 m trees under a 1.8 m character reads as
+## a field of shrubs. 1.8-3.2 puts the broadleaves at 4.5-11 m and the pines at
+## 4.6-9.6 m, which is the range the hand-built trees occupied.
+const TREE_SCALE_MIN := 1.8
+const TREE_SCALE_MAX := 3.2
+const PINE_SCALE_MIN := 1.7
+const PINE_SCALE_MAX := 2.9
 
 ## Distance culling for the heavy scatter groups (see _process).
 var _scatter_roots: Array[Node3D] = []
@@ -79,12 +84,7 @@ func _ready() -> void:
 	if terrain == null or not terrain.has_method("get_height_at"):
 		push_warning("VegetationSpawner: terrain missing")
 		return
-	_spawn_round_trees(terrain)
-	_spawn_pines(terrain)
-	_spawn_rocks(terrain)
-	_spawn_flowers(terrain)
-	_spawn_fallen_logs(terrain)
-	_spawn_pebbles(terrain)
+	_spawn_all(terrain)
 	_built = true
 
 
@@ -102,48 +102,18 @@ func _rebuild() -> void:
 	var terrain := get_node_or_null(terrain_path)
 	if terrain == null or not terrain.has_method("get_height_at"):
 		return
+	_spawn_all(terrain)
+
+
+func _spawn_all(terrain: Node) -> void:
 	_spawn_round_trees(terrain)
 	_spawn_pines(terrain)
+	_spawn_dead_trees(terrain)
 	_spawn_rocks(terrain)
 	_spawn_flowers(terrain)
 	_spawn_fallen_logs(terrain)
+	_spawn_stumps(terrain)
 	_spawn_pebbles(terrain)
-
-
-func _toon(color: Color, rim: float = 0.3) -> ShaderMaterial:
-	var m := ShaderMaterial.new()
-	m.shader = load("res://shaders/character/anime_toon.gdshader")
-	m.set_shader_parameter("albedo_color", color)
-	m.set_shader_parameter("shadow_tint", Color(0.55, 0.62, 0.88))
-	m.set_shader_parameter("rim_color", Color(1.0, 0.95, 0.8))
-	m.set_shader_parameter("rim_strength", rim)
-	m.set_shader_parameter("diffuse_energy", 1.0)
-	return m
-
-
-## Toon material carrying a texture.
-##
-## The plain _toon() sets only albedo_color, so a merged tree was a flat vertex
-## colour whatever UVs it had. This variant multiplies the same toon ramp by a
-## painted texture, and tints it, which is how the bark and the leaf sheets get
-## onto the geometry.
-func _toon_tex(color: Color, tex_path: String, rim: float = 0.3,
-		uv_scale: Vector2 = Vector2.ONE) -> ShaderMaterial:
-	var m := _toon(color, rim)
-	var tex := _load_tex(tex_path)
-	if tex != null:
-		# The toon shader has no uv_scale uniform, so the scale is baked into the
-		# merged UVs by the caller instead. Only the sampler is set here.
-		m.set_shader_parameter("albedo_tex", tex)
-	return m
-
-
-func _load_tex(path: String) -> Texture2D:
-	if not ResourceLoader.exists(path):
-		push_warning("LastStar vegetation: missing texture " + path)
-		return null
-	var t := load(path)
-	return t as Texture2D if t is Texture2D else null
 
 
 func _pick(terrain: Node, rng: RandomNumberGenerator, min_h: float, max_h: float, max_slope: float, count: int, avoid_lake: bool = true) -> Array[Vector3]:
@@ -188,93 +158,6 @@ func _pick(terrain: Node, rng: RandomNumberGenerator, min_h: float, max_h: float
 ## are. Nothing is hidden, thinned or downgraded - the same 170 trees, in the
 ## same places, at the same size.
 
-## Append `src`'s triangles into `arrays`, transformed by `xform`.
-##
-## Surfaces are accumulated by hand rather than with SurfaceTool because this
-## also has to carry vertex normals through the transform; SurfaceTool would
-## flatten the trees' shading to whatever winding the tool happened to produce.
-func _append_arrays(arrays: Array, src: Array, xform: Transform3D, uv_range: Variant = null) -> void:
-	var verts: PackedVector3Array = src[Mesh.ARRAY_VERTEX]
-	var norms: PackedVector3Array = src[Mesh.ARRAY_NORMAL]
-	var idx: PackedInt32Array = src[Mesh.ARRAY_INDEX] if src[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
-	var base := (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
-	var normal_basis := xform.basis.inverse().transposed()
-	for v in verts:
-		arrays[Mesh.ARRAY_VERTEX].append(xform * v)
-	for n in norms:
-		arrays[Mesh.ARRAY_NORMAL].append((normal_basis * n).normalized())
-	# A normalised basis keeps the shape correct but can flip winding when the
-	# transform has a negative determinant, so the order is fixed up here.
-	# UVs. A source with none gets a planar projection so the bark grain still
-	# appears on it rather than collapsing to texel (0,0).
-	var uvs: PackedVector2Array = src[Mesh.ARRAY_TEX_UV] if src[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
-	if uvs.size() == verts.size():
-		var r: Rect2 = uv_range if uv_range is Rect2 else Rect2(Vector2.ZERO, Vector2.ONE)
-		for uv in uvs:
-			arrays[Mesh.ARRAY_TEX_UV].append(r.position + uv * r.size)
-	else:
-		for v in verts:
-			var wv := xform * v
-			arrays[Mesh.ARRAY_TEX_UV].append(Vector2(wv.x * 0.35, wv.y * 0.22))
-	var flip := xform.basis.determinant() < 0.0
-	if idx.is_empty():
-		# Non-indexed source: emit sequential indices.
-		for i in range(verts.size()):
-			arrays[Mesh.ARRAY_INDEX].append(base + i)
-	else:
-		for i in range(0, idx.size(), 3):
-			if flip:
-				arrays[Mesh.ARRAY_INDEX].append(base + idx[i])
-				arrays[Mesh.ARRAY_INDEX].append(base + idx[i + 2])
-				arrays[Mesh.ARRAY_INDEX].append(base + idx[i + 1])
-			else:
-				arrays[Mesh.ARRAY_INDEX].append(base + idx[i])
-				arrays[Mesh.ARRAY_INDEX].append(base + idx[i + 1])
-				arrays[Mesh.ARRAY_INDEX].append(base + idx[i + 2])
-
-
-func _new_arrays() -> Array:
-	var a := []
-	a.resize(Mesh.ARRAY_MAX)
-	a[Mesh.ARRAY_VERTEX] = PackedVector3Array()
-	a[Mesh.ARRAY_NORMAL] = PackedVector3Array()
-	# UVs were never carried through the merge, so no texture could ever survive
-	# it - trunk.png and leaf.png existed in assets/ and were loaded by nothing.
-	# Every tree in the valley was a flat vertex colour because of this one
-	# missing line, not because the textures were bad.
-	a[Mesh.ARRAY_TEX_UV] = PackedVector2Array()
-	a[Mesh.ARRAY_INDEX] = PackedInt32Array()
-	return a
-
-
-func _arrays_to_mesh(arrays: Array) -> ArrayMesh:
-	var mesh := ArrayMesh.new()
-	if (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
-		return mesh
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return mesh
-
-
-## Draw one MultiMesh for a whole population of props.
-##
-## `xforms` are already-posed instance transforms in world space. The material
-## is shared across every instance, which is what makes this one draw call.
-## Hand one population of instances to the renderer, split across spatial tiles.
-##
-## Why tiles, and why this is the single biggest frame-time win in the project:
-##
-## A MultiMeshInstance3D is ONE renderable object. Godot culls it by its AABB -
-## the union of every instance in the batch - and since the scatter covers the
-## whole 660 m valley, that AABB always intersects the frustum. The result is
-## that a single batch was submitted in full on every frame no matter which way
-## the camera faced: all 170 broadleaf trees and all 900 pebbles went to the
-## GPU, half of them behind the camera, and the vertex shader ran for every one
-## of those instances. The old note here ("Godot's own frustum cull already
-## discards the instances behind the camera") was simply untrue, and it is the
-## reason the world ran at a couple of frames a second on a phone.
-##
-## Splitting each batch into SCATTER_TILES x SCATTER_TILES spatial buckets gives
-## the renderer many small AABBs instead of one huge one, so the frustum test
 ## rejects the ones behind and beside the camera before any instance work
 ## happens. On a typical gameplay camera that is roughly a third of the
 ## instances surviving.
@@ -357,300 +240,98 @@ func _add_multimesh(node_name: String, mesh: Mesh, mat: Material,
 	return first
 
 
-## Build a merged mesh from a list of [mesh, local_transform] parts that all use
-## the same material.
-func _merge_parts(parts: Array) -> ArrayMesh:
-	var arrays := _new_arrays()
-	for part in parts:
-		var m: Mesh = part[0]
-		var xf: Transform3D = part[1]
-		if m == null or m.get_surface_count() == 0:
-			continue
-		# Optional fourth element: a Rect2 uv range. A source mesh with its own
-		# UVs (a CylinderMesh spans 0..1) samples the whole texture, which for the
-		# five-leaf strip means the red, pink and yellow leaves land on a pine
-		# cone. Pinning a part to one slice of the sheet is how a cone gets green.
-		var uv_range: Variant = part[3] if part.size() > 3 else null
-		var src := m.surface_get_arrays(0)
-		_append_arrays(arrays, src, xf, uv_range)
-	return _arrays_to_mesh(arrays)
-
-
-## A low-poly cylinder, built once and reused. Primitive meshes used to be
-## constructed inside the spawn loops, so a valley of 170 trees allocated 170
-## separate CylinderMesh resources that were never shared.
-func _make_cylinder(top_r: float, bot_r: float, height: float, sides: int) -> CylinderMesh:
-	var c := CylinderMesh.new()
-	c.top_radius = top_r
-	c.bottom_radius = bot_r
-	c.height = height
-	c.radial_segments = sides
-	c.rings = 1
-	return c
-
-
-func _make_sphere(radius: float, height_ratio: float, segments: int, rings: int) -> SphereMesh:
-	var s := SphereMesh.new()
-	s.radius = radius
-	s.height = radius * 2.0 * height_ratio
-	s.radial_segments = segments
-	s.rings = rings
-	return s
-
-
-## Cards hung around the rim of each cone layer, for pines.
+## Broadleaf trees, one batch per species.
 ##
-## Positioned to sit just under the widest part of each cone, angled downward and
-## outward - the silhouette of a real conifer is a ragged skirt, not a cone.
-func _pine_skirts() -> Array:
-	var parts: Array = []
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 4409
-	for layer in range(4):
-		var cone_r := 1.5 - layer * 0.28
-		var y := 2.2 + layer * 0.78
-		var ring := 7 + layer
-		for i in range(ring):
-			var ang := TAU * float(i) / float(ring) + rng.randf_range(-0.3, 0.3)
-			var r := cone_r * rng.randf_range(0.80, 1.06)
-			var pos := Vector3(cos(ang) * r, y - rng.randf_range(0.0, 0.22), sin(ang) * r)
-			var card := _make_card(rng.randf_range(0.40, 0.70))
-			# Facing outward and down.
-			var outward := Vector3(cos(ang), 0.0, sin(ang))
-			var n := (outward * 0.6 - Vector3.UP * 0.45).normalized()
-			var right := Vector3.UP.cross(n).normalized()
-			var b := Basis(right, n, right.cross(n).normalized())
-			b = b * Basis(Vector3.RIGHT, rng.randf_range(-0.5, 0.5))
-			parts.append([card, Transform3D(b, pos)])
-	return parts
-
-
-## A shell of leaf cards around an ellipsoid crown.
-##
-## Each card is a quad, placed on the crown surface and turned to face outward and
-## slightly upward - leaves grow toward the light, and cards aligned to the
-## normal alone read as spikes. The offsets are jittered so the crown has a ragged
-## edge rather than the clean rim of a sphere.
-func _leaf_shell(count: int, radius: float, height: float, centre_y: float) -> Array:
-	var parts: Array = []
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 8123
-	for i in range(count):
-		# Fibonacci sphere: even coverage with no clumping, unlike random angles.
-		var t := (float(i) + 0.5) / float(count)
-		var phi := acos(1.0 - 2.0 * t)
-		var theta := PI * (1.0 + sqrt(5.0)) * float(i)
-		var dir := Vector3(sin(phi) * cos(theta), cos(phi), sin(phi) * sin(theta))
-		# Flattened upward: the crown is taller than it is wide.
-		var pos := Vector3(dir.x * radius, dir.y * height * 0.55, dir.z * radius) \
-			+ Vector3(0.0, centre_y, 0.0)
-		# Skip the underside. Cards there are never seen, and they double the
-		# overdraw of the whole forest.
-		if pos.y < centre_y - height * 0.30:
-			continue
-		var card := _make_card(rng.randf_range(0.55, 0.95))
-		# Face outward, tilted up by a random amount so the shell is not a sphere.
-		var up := Vector3.UP
-		var outward := dir.normalized()
-		if absf(outward.dot(up)) > 0.98:
-			outward = Vector3.RIGHT
-		var right := up.cross(outward).normalized()
-		var fwd := right.cross(up).normalized()
-		# Bias the facing toward the sky and jitter the roll.
-		var n := (outward * 0.7 + Vector3.UP * rng.randf_range(0.25, 0.7)).normalized()
-		var b := Basis(right, n, right.cross(n).normalized())
-		b = Basis(Vector3.UP, rng.randf_range(-0.6, 0.6)) * b
-		b = b * Basis(Vector3.RIGHT, rng.randf_range(-0.4, 0.4))
-		parts.append([card, Transform3D(b, pos)])
-	return parts
-
-
-## One unit leaf card, centred on its origin, carrying a slice of the leaf sheet.
-##
-## The leaf texture is a horizontal strip of five different leaves. Each card
-## samples its own fifth, so a crown shows a mix of leaf shapes instead of 26
-## copies of the same one. That is the whole point of the strip, and a UV of 0..1
-## across it would have shown all five squashed onto every card.
-func _make_card(size: float, slice_index: int = 0) -> Mesh:
-	# Always the green slice.
-	#
-	# This used to be `randi() % 5`, which spread the card across all five leaves
-	# on the sheet - green, red, pink, brown, yellow. That is why the forest had
-	# orange and yellow flecks all over it: a leaf sheet is a palette for
-	# different plants, not a randomiser for one tree. Each crown was drawing
-	# five species at once.
-	#
-	# `slice_index` stays as a parameter because the sheet genuinely has five
-	# leaves and other foliage may want them; trees want the first.
-	var idx := clampi(slice_index, 0, 4)
-	var u0 := float(idx) / 5.0
-	var u1 := float(idx + 1) / 5.0
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var h := size
-	var w := size * 0.8
-	var quad := [
-		[Vector3(-w * 0.5, -h * 0.5, 0), Vector2(u0, 1)],
-		[Vector3(w * 0.5, -h * 0.5, 0), Vector2(u1, 1)],
-		[Vector3(w * 0.5, h * 0.5, 0), Vector2(u1, 0)],
-		[Vector3(-w * 0.5, h * 0.5, 0), Vector2(u0, 0)],
-	]
-	var order := [0, 1, 2, 0, 2, 3]
-	for o in order:
-		st.set_normal(Vector3(0, 0, 1))
-		st.set_uv(quad[o][1])
-		st.add_vertex(quad[o][0])
-	return st.commit()
-
-
+## Collision stays per tree: a StaticBody3D is a physics-space cost, not a draw
+## call, and carving the trunks out of the terrain's own collision would cost far
+## more to build and to query.
 func _spawn_round_trees(terrain: Node) -> void:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 771
-	var spots := _pick(terrain, rng, 3.0, 78.0, 0.85, _scaled(TREE_COUNT))
+	rng.seed = 1337
+	var spots := _pick(terrain, rng, 6.0, 120.0, 1.1, _scaled(TREE_COUNT))
 	if spots.is_empty():
 		return
-
-	# Three parts, three materials, three draw calls for the entire forest:
-	# trunks, and each of the two canopy tints.
-	var trunk_mesh := _merge_parts([
-		[_make_cylinder(0.16, 0.3, 3.2, 8), Transform3D(Basis(), Vector3(0, 1.6, 0))],
-	])
-	# Canopy: a core of three lobes, wrapped in leaf cards.
-	#
-	# It used to be three bare spheres. A sphere with a flat colour is the single
-	# most recognisable placeholder in a stylised game - it has no silhouette
-	# break, no leaf shapes, and no texture, so a forest of them reads as green
-	# balls on sticks. The lobes stay, because they give the crown its mass and
-	# its shadow; the cards provide the outline and the leaves.
-	var lobes := [
-		[_make_sphere(1.5, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 3.3, 0)), 0, LEAF_SURFACE_UV],
-		[_make_sphere(1.2, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 4.15, 0)), 0, LEAF_SURFACE_UV],
-		[_make_sphere(0.9, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 5.0, 0)), 0, LEAF_SURFACE_UV],
-	]
-	var canopy_a := _merge_parts(lobes)
-	# A slightly lighter tint gets its own batch rather than a per-tree material.
-	var canopy_b := canopy_a
-
-	# The leaf-card shell. Built once and instanced on every tree.
-	#
-	# Cards are placed on the surface of an ellipsoid and turned to face outward,
-	# which is what makes the crown read as a cluster of leaves from any angle
-	# instead of as a solid lump with a texture wrapped round it. 26 cards is
-	# enough to break the silhouette; more just costs overdraw at the distances
-	# these trees are seen.
-	var leaf_cards := _merge_parts(_leaf_shell(26, 1.55, 2.05, 3.95))
-
-	var trunk_xf: Array = []
-	var leaf_a_xf: Array = []
-	var leaf_b_xf: Array = []
-	var card_a_xf: Array = []
-	var card_b_xf: Array = []
-
+	var buckets := {}
+	for kind in BROADLEAF:
+		buckets[kind] = []
 	for i in range(spots.size()):
-		var s := rng.randf_range(0.8, 1.6)
-		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * s)
-		var xf := Transform3D(basis, spots[i])
-		trunk_xf.append(xf)
-		if i % 2 == 0:
-			leaf_a_xf.append(xf)
-			card_a_xf.append(xf)
-		else:
-			leaf_b_xf.append(xf)
-			card_b_xf.append(xf)
-
-		# Trunk collision so the player can't run through the big ones. These are
-		# still individual bodies - a StaticBody3D per tree is a physics-space
-		# cost, not a draw call, and carving the trunks out of the terrain's
-		# collision would cost far more to build and to query.
-		var body := StaticBody3D.new()
-		body.collision_layer = 1
-		body.collision_mask = 0
-		var col := CollisionShape3D.new()
-		var shape := CylinderShape3D.new()
-		shape.radius = 0.32 * s
-		shape.height = 3.2 * s
-		col.shape = shape
-		col.position.y = 1.6 * s
-		body.add_child(col)
-		body.position = spots[i]
-		body.name = "TreeBody_%d" % i
-		add_child(body)
-		_collision_bodies.append(body)
-
-	# Textures, finally. trunks sample the bark, canopies a leaf tile. Before
-	# this every one of these was a flat albedo_color and the two painted
-	# textures in assets/ were loaded by nothing at all.
-	_add_multimesh("BroadleafTrunks", trunk_mesh,
-		_toon_tex(Color(1.15, 1.05, 0.95), TEX_BARK, 0.28), trunk_xf)
-	_add_multimesh("BroadleafCanopyA", canopy_a,
-		_toon_tex(Color(1.05, 1.15, 0.98), TEX_LEAF_SURFACE, 0.55), leaf_a_xf)
-	_add_multimesh("BroadleafCanopyB", canopy_b,
-		_toon_tex(Color(1.15, 1.24, 1.06), TEX_LEAF_SURFACE, 0.55), leaf_b_xf)
-	# The card shell is alpha-cut, so it needs the foliage shader rather than the
-	# opaque toon one.
-	# Tint well above 1.0 so the cards, which are alpha-cut sprites over an already
-	# dark sun term, land as lit leaves rather than black cut-outs.
-	var card_mat := VegPresets.material_for("leaves", 0.30, Color(1.05, 1.30, 0.95))
-	card_mat.set_shader_parameter("albedo_texture", _load_tex(TEX_LEAF_SHEET))
-	_add_multimesh("BroadleafCardsA", leaf_cards, card_mat, card_a_xf, false)
-	_add_multimesh("BroadleafCardsB", leaf_cards, card_mat, card_b_xf, false)
+		var kind: String = BROADLEAF[i % BROADLEAF.size()]
+		var s := rng.randf_range(TREE_SCALE_MIN, TREE_SCALE_MAX)
+		# A little non-uniform scale and a random yaw, so 170 instances of four
+		# meshes do not read as 170 copies of four meshes.
+		var basis := Basis(Vector3.UP, rng.randf() * TAU)
+		basis = basis.scaled(Vector3(s, s * rng.randf_range(0.90, 1.14), s))
+		(buckets[kind] as Array).append(Transform3D(basis, spots[i]))
+		_add_trunk_body(spots[i], s, "TreeBody_%d" % i)
+	for kind in BROADLEAF:
+		var list: Array = buckets[kind]
+		if list.is_empty():
+			continue
+		_add_multimesh("Broadleaf_" + kind, NaturePack.mesh_of(kind),
+			NaturePack.material(kind), list)
 
 
+## Conifers. Two species, no collision: the original pines had none, and a pine's
+## trunk is thinner than the broadleaves' at the same height.
 func _spawn_pines(terrain: Node) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 515
 	var spots := _pick(terrain, rng, 6.0, 120.0, 1.1, _scaled(PINE_COUNT))
 	if spots.is_empty():
 		return
-
-	var trunk_mesh := _merge_parts([
-		[_make_cylinder(0.1, 0.24, 2.6, 7), Transform3D(Basis(), Vector3(0, 1.3, 0))],
-	])
-	# Four stacked cones, merged into one surface.
-	var cone_parts: Array = []
-	for layer in range(4):
-		cone_parts.append([
-			_make_cylinder(0.0, 1.5 - layer * 0.28, 1.5 - layer * 0.18, 8),
-			Transform3D(Basis(), Vector3(0, 2.2 + layer * 0.78, 0)),
-			0, LEAF_SURFACE_UV,
-		])
-	var cone_mesh := _merge_parts(cone_parts)
-
-	var trunk_xf: Array = []
-	var cone_a_xf: Array = []
-	var cone_b_xf: Array = []
+	var buckets := {}
+	for kind in PINES:
+		buckets[kind] = []
 	for i in range(spots.size()):
-		var s := rng.randf_range(0.9, 1.7)
-		var sy := s * rng.randf_range(1.0, 1.5)
-		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, sy, s))
-		var xf := Transform3D(basis, spots[i])
-		trunk_xf.append(xf)
-		if i % 2 == 0:
-			cone_a_xf.append(xf)
-		else:
-			cone_b_xf.append(xf)
+		var kind: String = PINES[i % PINES.size()]
+		var s := rng.randf_range(PINE_SCALE_MIN, PINE_SCALE_MAX)
+		var basis := Basis(Vector3.UP, rng.randf() * TAU)
+		basis = basis.scaled(Vector3(s, s * rng.randf_range(0.95, 1.20), s))
+		(buckets[kind] as Array).append(Transform3D(basis, spots[i]))
+	for kind in PINES:
+		var list: Array = buckets[kind]
+		if list.is_empty():
+			continue
+		_add_multimesh("Pines_" + kind, NaturePack.mesh_of(kind),
+			NaturePack.material(kind), list)
 
-	# Bark texture on the trunks, and a ragged skirt of cards around each cone
-	# layer. A pine of smooth cones is a Christmas-tree icon; the cards break the
-	# straight cone rim, which is the only thing that reads as needles at range.
-	var skirt := _merge_parts(_pine_skirts())
-	var skirt_a_xf: Array = []
-	var skirt_b_xf: Array = []
-	for i in range(cone_a_xf.size()):
-		skirt_a_xf.append(cone_a_xf[i])
-	for i in range(cone_b_xf.size()):
-		skirt_b_xf.append(cone_b_xf[i])
 
-	_add_multimesh("PineTrunks", trunk_mesh,
-		_toon_tex(Color(1.10, 1.00, 0.90), TEX_BARK_STRIPPED, 0.26), trunk_xf)
-	_add_multimesh("PineConesA", cone_mesh,
-		_toon_tex(Color(0.98, 1.12, 0.96), TEX_LEAF_SURFACE, 0.5), cone_a_xf)
-	_add_multimesh("PineConesB", cone_mesh,
-		_toon_tex(Color(1.08, 1.22, 1.04), TEX_LEAF_SURFACE, 0.5), cone_b_xf)
-	var needle_mat := VegPresets.material_for("border_grass", 0.18, Color(1.00, 1.24, 0.92))
-	needle_mat.set_shader_parameter("albedo_texture", _load_tex(TEX_LEAF_SHEET))
-	_add_multimesh("PineSkirtsA", skirt, needle_mat, skirt_a_xf, false)
-	_add_multimesh("PineSkirtsB", skirt, needle_mat, skirt_b_xf, false)
+## Bare storm-killed trees. The pack's dead tree has no foliage at all, which is
+## a silhouette nothing else in the valley provides.
+func _spawn_dead_trees(terrain: Node) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 8081
+	var spots := _pick(terrain, rng, 5.0, 105.0, 1.3, _scaled(DEAD_COUNT))
+	if spots.is_empty():
+		return
+	var xfs: Array = []
+	for i in range(spots.size()):
+		var s := rng.randf_range(1.5, 2.8)
+		var basis := Basis(Vector3.UP, rng.randf() * TAU)
+		basis = basis.scaled(Vector3(s, s * rng.randf_range(0.85, 1.1), s))
+		xfs.append(Transform3D(basis, spots[i]))
+		_add_trunk_body(spots[i], s, "DeadBody_%d" % i)
+	_add_multimesh("DeadTrees", NaturePack.mesh_of("tree_dead"),
+		NaturePack.material("tree_dead"), xfs)
+
+
+## A trunk collider sized from the tree's own scale, so a sapling is not a
+## 2 m-wide post.
+func _add_trunk_body(p: Vector3, s: float, body_name: String) -> void:
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var col := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = maxf(0.20 * s, 0.26)
+	shape.height = 2.2 * s
+	col.shape = shape
+	col.position.y = 1.1 * s
+	body.add_child(col)
+	body.position = p
+	body.name = body_name
+	add_child(body)
+	_collision_bodies.append(body)
 
 
 func _spawn_rocks(terrain: Node) -> void:
@@ -659,19 +340,24 @@ func _spawn_rocks(terrain: Node) -> void:
 	var spots := _pick(terrain, rng, 0.6, 140.0, 1.6, _scaled(ROCK_COUNT), false)
 	if spots.is_empty():
 		return
-	# One rock mesh, one material, one draw call for every boulder in the valley.
-	var rock_mesh := _merge_parts([
-		[_make_sphere(1.0, 1.3, 7, 4), Transform3D(Basis(), Vector3(0, 0.35, 0))],
-	])
-	var xfs: Array = []
+	var big: Array = []
+	var small: Array = []
 	for p in spots:
-		var r := rng.randf_range(0.5, 1.8)
+		var r := rng.randf_range(0.9, 2.4)
 		var basis := Basis(Vector3.UP, rng.randf() * TAU)
-		basis = basis.rotated(Vector3.RIGHT, rng.randf_range(-0.3, 0.3))
-		basis = basis.rotated(Vector3.FORWARD, rng.randf_range(-0.3, 0.3))
-		basis = basis.scaled(Vector3(r, r * rng.randf_range(0.6, 1.0), r))
-		xfs.append(Transform3D(basis, p))
-	_add_multimesh("Rocks", rock_mesh, _toon(Color(0.62, 0.62, 0.68), 0.35), xfs)
+		basis = basis.rotated(Vector3.RIGHT, rng.randf_range(-0.18, 0.18))
+		basis = basis.scaled(Vector3(r, r * rng.randf_range(0.7, 1.1), r * rng.randf_range(0.85, 1.2)))
+		# Sunk a little into the ground: a boulder resting exactly on the surface
+		# reads as a decal, and the pack models are authored to sit on their base.
+		var xf := Transform3D(basis, p + Vector3(0, -0.18 * r, 0))
+		if r > 1.6:
+			big.append(xf)
+		else:
+			small.append(xf)
+	_add_multimesh("Rocks", NaturePack.mesh_of("rock_4"),
+		NaturePack.material("rock_4"), big)
+	_add_multimesh("RocksSmall", NaturePack.mesh_of("rock_1"),
+		NaturePack.material("rock_1"), small)
 
 
 func _spawn_flowers(terrain: Node) -> void:
@@ -680,30 +366,13 @@ func _spawn_flowers(terrain: Node) -> void:
 	var spots := _pick(terrain, rng, 2.0, 60.0, 0.7, _scaled(FLOWER_COUNT))
 	if spots.is_empty():
 		return
-	# One mesh holding stem + bloom, batched per colour. Four draw calls total
-	# instead of 300 flowers x 2 meshes plus a fresh emissive StandardMaterial
-	# for every single bloom.
-	var flower_mesh := _merge_parts([
-		[_make_cylinder(0.015, 0.02, 0.3, 4), Transform3D(Basis(), Vector3(0, 0.15, 0))],
-		[_make_sphere(0.09, 0.12 / 0.18, 6, 3), Transform3D(Basis(), Vector3(0, 0.32, 0))],
-	])
-	var colors := [
-		Color(0.55, 0.85, 1.0),
-		Color(1.0, 0.78, 0.9),
-		Color(1.0, 0.95, 0.6),
-		Color(0.75, 0.6, 1.0),
-	]
-	var buckets: Array = []
-	for c in colors:
-		buckets.append([])
-	for i in range(spots.size()):
-		var s := rng.randf_range(0.8, 1.4)
-		var xf := Transform3D(
-			Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * s), spots[i])
-		buckets[i % colors.size()].append(xf)
-	for c in range(colors.size()):
-		_add_multimesh("Flowers_%d" % c, flower_mesh, _toon(colors[c], 0.5),
-			buckets[c], false)
+	var xfs: Array = []
+	for p in spots:
+		var s := rng.randf_range(0.9, 1.6)
+		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s))
+		xfs.append(Transform3D(basis, p))
+	_add_multimesh("Flowers", NaturePack.mesh_of("flowers"),
+		NaturePack.material("flowers"), xfs, false)
 
 
 func _spawn_fallen_logs(terrain: Node) -> void:
@@ -712,37 +381,33 @@ func _spawn_fallen_logs(terrain: Node) -> void:
 	var spots := _pick(terrain, rng, 3.0, 70.0, 0.9, _scaled(LOG_COUNT))
 	if spots.is_empty():
 		return
-	# Logs were 2-3 meshes each with a randomised length and radius, which meant
-	# a unique CylinderMesh per log. A unit cylinder scaled per instance gives
-	# the same variety for one draw call.
-	var log_mesh := _merge_parts([
-		[_make_cylinder(1.0, 1.0, 1.0, 8), Transform3D()],
-	])
+	# The pack's log already lies along its own Z axis, so a fall only needs a
+	# yaw and a slight tilt - no half-turn to stand it up.
 	var xfs: Array = []
-	var xfs_striped: Array = []
-	for i in range(spots.size()):
-		var p: Vector3 = spots[i]
-		var log_len := rng.randf_range(2.6, 6.5)
-		var log_r := rng.randf_range(0.18, 0.34)
-		var yaw := rng.randf() * TAU
-		var tilt := rng.randf_range(-0.12, 0.12)
-		var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, PI * 0.5 + tilt)
-		basis = basis.scaled(Vector3(log_r, log_len, log_r))
-		var xf := Transform3D(basis, p + Vector3(0, log_r * 0.85, 0))
-		# Two wood surfaces, split by a per-log coin flip. wood.png is smooth
-		# grain and wood_striped.png is a harder banded plank pattern - bark-on
-		# versus split wood - and having both stops every fallen log in the valley
-		# looking like the same object at different lengths. It also gives the
-		# striped sheet a purpose, which it did not have: it shipped in assets/
-		# referenced by nothing at all.
-		if i % 2 == 0:
-			xfs.append(xf)
-		else:
-			xfs_striped.append(xf)
-	_add_multimesh("FallenLogs", log_mesh,
-		_toon_tex(Color(1.15, 1.05, 0.92), TEX_WOOD, 0.18), xfs)
-	_add_multimesh("FallenLogsSplit", log_mesh,
-		_toon_tex(Color(1.10, 1.00, 0.88), TEX_WOOD_STRIPED, 0.18), xfs_striped)
+	for p in spots:
+		var s := rng.randf_range(0.9, 1.9)
+		var basis := Basis(Vector3.UP, rng.randf() * TAU)
+		basis = basis.rotated(Vector3.RIGHT, rng.randf_range(-0.10, 0.10))
+		basis = basis.rotated(Vector3.FORWARD, rng.randf_range(-0.10, 0.10))
+		basis = basis.scaled(Vector3(s, s * rng.randf_range(0.8, 1.1), s))
+		xfs.append(Transform3D(basis, p + Vector3(0, -0.04, 0)))
+	_add_multimesh("FallenLogs", NaturePack.mesh_of("log"),
+		NaturePack.material("log"), xfs)
+
+
+func _spawn_stumps(terrain: Node) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 661
+	var spots := _pick(terrain, rng, 3.0, 80.0, 0.9, _scaled(STUMP_COUNT))
+	if spots.is_empty():
+		return
+	var xfs: Array = []
+	for p in spots:
+		var s := rng.randf_range(1.0, 1.9)
+		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s))
+		xfs.append(Transform3D(basis, p))
+	_add_multimesh("Stumps", NaturePack.mesh_of("stump"),
+		NaturePack.material("stump"), xfs)
 
 
 func _spawn_pebbles(terrain: Node) -> void:
@@ -751,17 +416,14 @@ func _spawn_pebbles(terrain: Node) -> void:
 	var spots := _pick(terrain, rng, 1.2, 90.0, 1.0, _scaled(PEBBLE_COUNT))
 	if spots.is_empty():
 		return
-	var pebble_mesh := _merge_parts([
-		[_make_sphere(0.16, 0.22 / 0.32, 6, 3), Transform3D()],
-	])
 	var xfs: Array = []
 	for p in spots:
-		var s := rng.randf_range(0.5, 1.6)
-		var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(
-			Vector3(s, s * rng.randf_range(0.5, 0.9), s))
-		xfs.append(Transform3D(b, p + Vector3(0, 0.04 * s, 0)))
-	_add_multimesh("Pebbles", pebble_mesh,
-		_toon(Color(0.58, 0.57, 0.56), 0.25), xfs, false)
+		var s := rng.randf_range(0.14, 0.42)
+		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(
+			Vector3(s, s * rng.randf_range(0.55, 0.95), s))
+		xfs.append(Transform3D(basis, p + Vector3(0, -0.02, 0)))
+	_add_multimesh("Pebbles", NaturePack.mesh_of("rock_2"),
+		NaturePack.material("rock_2"), xfs, false)
 
 
 ## Draw-call and instance census, for the probe and the performance tuner.

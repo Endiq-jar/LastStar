@@ -260,71 +260,67 @@ func _ready() -> void:
 			if cav.size() < 150:
 				failures.append("composed boulder has only %d vertices" % cav.size())
 
-	# Trees. The spawner builds its own meshes through _merge_parts/_leaf_shell,
-	# which is a completely separate pipeline from vegetation_meshes.gd and was not
-	# covered by anything here. Its UV support was missing entirely for several
-	# rounds: trunk.png, leaf.png and wood.png sat in assets/ loaded by no code at
-	# all, and every tree drew as a flat vertex colour.
-	print("MESH_CHECK trees")
-	var Spawner = load("res://scripts/vegetation_spawner.gd")
-	if Spawner == null:
-		failures.append("could not load vegetation_spawner.gd")
+	# Nature pack. The valley's environment is these models now, and they are
+	# used in a way no other check can see: baked to a single surface with vertex
+	# colours, because the pack ships neither textures nor UVs and a MultiMesh
+	# draws one material for a whole batch. A model that bakes empty, or without
+	# colours, is an invisible prop - the world would still build its batches and
+	# every node would exist.
+	print("MESH_CHECK nature pack")
+	var NP = load("res://scripts/nature_pack.gd")
+	if NP == null:
+		failures.append("could not load nature_pack.gd")
 	else:
-		# Instantiated as a Node, not constructed bare: the script extends Node3D,
-		# and `Spawner.new()` on a Node script outside the tree is not reliable.
-		# Freed at the end so the test does not leave a stray node in the tree.
-		var sp: Node = Spawner.new()
-		add_child(sp)
-		# _leaf_shell is the card crown; it must produce real geometry with UVs, or
-		# the canopy is either empty or a single flat colour.
-		var shell: Array = sp.call("_leaf_shell", 26, 1.55, 2.05, 3.95)
-		if shell.is_empty():
-			failures.append("_leaf_shell produced no cards")
+		var kinds: Array = NP.kinds()
+		print("MESH_CHECK nature kinds=%d" % kinds.size())
+		if kinds.size() < 12:
+			failures.append("nature pack has only %d kinds" % kinds.size())
+		var total_tris := 0
+		for kind in kinds:
+			var m: ArrayMesh = NP.mesh_of(kind)
+			if m == null or m.get_surface_count() == 0:
+				failures.append("nature model '%s' baked no surface" % kind)
+				continue
+			# One surface is the requirement, not an accident: an instance draws
+			# every surface with the same material.
+			if m.get_surface_count() != 1:
+				failures.append("nature model '%s' baked %d surfaces" % [kind, m.get_surface_count()])
+			var arrays: Array = m.surface_get_arrays(0)
+			var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var cols: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+			var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+			if verts.is_empty() or idx.is_empty():
+				failures.append("nature model '%s' has no geometry" % kind)
+				continue
+			if cols.size() != verts.size():
+				failures.append("nature model '%s' lost its vertex colours (%d cols vs %d verts) - every surface would draw one flat colour or none at all" % [kind, cols.size(), verts.size()])
+			# The pack is authored in centimetres behind a 100x node scale. If that
+			# scale is dropped the model is a 3 cm prop, and nothing but a
+			# measurement would notice.
+			var h: float = NP.height_of(kind)
+			if h < 0.2 or h > 8.0:
+				failures.append("nature model '%s' is %.2f m tall - the 100x glTF node scale did not survive" % [kind, h])
+			total_tris += idx.size() / 3
+			print("MESH_CHECK nature %-14s verts=%5d tris=%5d height=%.2fm" % [kind, verts.size(), idx.size() / 3, h])
+		print("MESH_CHECK nature total tris=%d" % total_tris)
+		if total_tris < 4000:
+			failures.append("nature pack baked only %d triangles" % total_tris)
+		# The grass clump is the one derived asset, and the meadow's budget
+		# depends on it actually being smaller than the tuft it comes from.
+		var full: ArrayMesh = NP.mesh_of("grass")
+		var clump: ArrayMesh = NP.clump("grass", 36)
+		if clump == null or clump.get_surface_count() == 0:
+			failures.append("grass clump baked no surface")
 		else:
-			var merged: ArrayMesh = sp.call("_merge_parts", shell)
-			if merged == null or merged.get_surface_count() == 0:
-				failures.append("_leaf_shell cards did not merge into a mesh")
-			else:
-				var ta: Array = merged.surface_get_arrays(0)
-				var tv: PackedVector3Array = ta[Mesh.ARRAY_VERTEX]
-				var tu: PackedVector2Array = ta[Mesh.ARRAY_TEX_UV]
-				print("MESH_CHECK leaf_shell cards=%d verts=%d uvs=%d" % [shell.size(), tv.size(), tu.size()])
-				if tv.size() < shell.size() * 6:
-					failures.append("leaf shell has %d verts for %d cards" % [tv.size(), shell.size()])
-				# The whole bug: UVs dropped in the merge.
-				if tu.size() != tv.size():
-					failures.append("leaf shell lost its UVs in the merge (%d uvs vs %d verts) - the leaf texture cannot apply" % [tu.size(), tv.size()])
-				else:
-					# Every card must stay inside the GREEN slice of the sheet.
-					#
-					# The sheet is a palette of five leaves; sampling all of them
-					# is what put red and yellow flecks through the canopy. The
-					# assertion is therefore that no card reaches past the first
-					# fifth, not that they are spread across it - an earlier
-					# version of this check asserted the opposite and would have
-					# locked the bug in.
-					var worst := 0.0
-					for uv in tu:
-						worst = maxf(worst, uv.x)
-					print("MESH_CHECK leaf_shell u max=%.3f (green slice ends at 0.200)" % worst)
-					if worst > 0.205:
-						failures.append("leaf shell samples x=%.3f, outside the green slice - the crown will show red and yellow leaves" % worst)
-
-		# Pine skirts, same question.
-		var skirts: Array = sp.call("_pine_skirts")
-		if skirts.is_empty():
-			failures.append("_pine_skirts produced nothing")
-		else:
-			var sm2: ArrayMesh = sp.call("_merge_parts", skirts)
-			if sm2 == null or sm2.get_surface_count() == 0:
-				failures.append("pine skirts did not merge")
-			else:
-				var sa2: Array = sm2.surface_get_arrays(0)
-				var su: PackedVector2Array = sa2[Mesh.ARRAY_TEX_UV]
-				var sv: PackedVector3Array = sa2[Mesh.ARRAY_VERTEX]
-				print("MESH_CHECK pine_skirts cards=%d verts=%d uvs=%d" % [skirts.size(), sv.size(), su.size()])
-				if su.size() != sv.size():
-					failures.append("pine skirts lost their UVs in the merge")
+			var fa: Array = full.surface_get_arrays(0)
+			var ca: Array = clump.surface_get_arrays(0)
+			var ftris := (fa[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+			var ctris := (ca[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+			print("MESH_CHECK grass tuft tris=%d clump(36) tris=%d" % [ftris, ctris])
+			if ctris >= ftris:
+				failures.append("grass clump kept %d of %d triangles - the decimation did nothing" % [ctris, ftris])
+			if ctris < 24:
+				failures.append("grass clump has only %d triangles - too coarse to read as grass" % ctris)
 
 	# Surface textures must be opaque.
 	#
@@ -334,11 +330,11 @@ func _ready() -> void:
 	# tint was multiplying zero. A texture used as a material surface has to be a
 	# texture, not a sheet of cut-outs.
 	print("MESH_CHECK surface textures")
-	for path in ["res://assets/environment/leaves/r_tex_leaf.png",
-			"res://assets/environment/rocks/r_tex_rocks.png",
-			"res://textures/terrain/rock.png",
-			"res://assets/environment/trees/trunk.png",
-			"res://assets/environment/wood/wood.png"]:
+	# The environment's own pngs are gone with the texture pipeline; what is
+	# left is the terrain's painted ground.
+	for path in ["res://textures/terrain/rock.png",
+			"res://textures/terrain/meadow.png",
+			"res://textures/terrain/sand.png"]:
 		if not ResourceLoader.exists(path):
 			failures.append("missing surface texture %s" % path)
 			continue

@@ -104,6 +104,14 @@ The game is written so it **cannot** show a black screen with only the HUD:
   between two pillars is.
 * the world bootstrap contains **no coroutines and no GPU readbacks** — both
   could wedge the main loop on software/GL drivers.
+* **the environment is one CC0 art pack** — every tree, blade of grass, bush,
+  flower, rock, log and stump is a model from Quaternius' *Ultimate Stylized
+  Nature Pack* (`assets/nature/`, twenty-one `.glb` files), consumed by
+  `scripts/nature_pack.gd`, which bakes each model's material colours into
+  vertex colours so a whole species can be drawn as one MultiMesh with one
+  material. The painted pngs the vegetation used to sample are gone. The
+  meadow's tuft is the pack's grass decimated to its tallest 36 blades, because
+  a 100-blade tuft at meadow density is tens of millions of triangles.
 * **bone cloth** — the cloth the world is dressed in (ruin-gate banners, shelter
   drapes, the altar carpet, waypoint totems, and the player's cape hem and
   charms) is built from six CC0-1.0 Quaternius models in `assets/cloth/`,

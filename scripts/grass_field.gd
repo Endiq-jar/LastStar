@@ -10,8 +10,21 @@ extends Node3D
 ##   mid   (26 - 70 m)  half density, slightly taller so bare ground never shows
 ##   far   (70 - 130 m) sparse, cheap - reads as distant meadow texture
 ##
+## The tuft itself is geometry from the Quaternius nature pack (NaturePack.clump),
+## not a painted card: the field used to be a 0.7 m quad with a sprite cut out of
+## it, and the sprite is gone. One tuft is now ~1 m of real blades at 64
+## triangles, which is 16x the vertex cost of two crossed quads, so the instance
+## counts below came down by roughly the same factor to keep the meadow inside
+## the triangle budget the rest of the frame was measured against (1.2M in the
+## probe before this change). The clumps are wider than the cards they replace,
+## so the field covers the same ground with a third of the instances and reads
+## denser from eye level, because each tuft is a bundle of blades with real
+## thickness rather than a flat cut-out.
+##
 ## Chunks are recycled as the player walks, so walking 500 m never grows the
 ## instance count. Everything is one draw call per chunk.
+
+const NaturePack := preload("res://scripts/nature_pack.gd")
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
 ## Radius, in chunks. 5 * 26 = 130 m, which with the shader's dissolve put a
@@ -23,9 +36,9 @@ const VIEW_CHUNKS := 7
 ## blotches of green on bare ground rather than a carpet. Roughly doubled to close
 ## that up. The far tiers stay cheap because each tuft there covers more screen
 ## area.
-const BLADES_NEAR := 14000        ## instances in a chunk adjacent to the player
-const BLADES_MID := 5200
-const BLADES_FAR := 1500
+const BLADES_NEAR := 1800         ## instances in a chunk adjacent to the player
+const BLADES_MID := 640
+const BLADES_FAR := 190
 ## Hard cap on live chunks. Must be at least (2*VIEW_CHUNKS+1)^2 or the field
 ## silently stops growing: the cap was written for a radius of 5 and stayed at 81
 ## when the radius became 7, which needs 225. Without this the outer ring would
@@ -36,14 +49,10 @@ const MAX_CHUNKS := 225
 ## every shore; 0.9 keeps blades out of the water but lets the meadow reach it.
 const SEA_MARGIN := 0.9
 
-## Two crossed quads per tuft, so a tuft has volume from every angle.
-## Tuft footprint and height in metres. The height matters more than it looks:
-## the player is 1.8 m tall and the camera sits 4.2 m back at 2 m up, so a 0.78 m
-## blade with a 1.2 scale multiplier in the mid ring grew to roughly the
-## character's chest and hid her completely. Meadow grass in this style sits
-## around knee height.
-const BLADE_W := 0.62
-const BLADE_H := 0.56
+## Tuft height matters more than it looks: the player is 1.8 m tall and the
+## camera sits 4.2 m back at 2 m up, so a tuft that reaches the character's chest
+## hides her completely. The scale range in _build_chunk keeps the meadow around
+## knee height, and NaturePack.clump() supplies the blades themselves.
 
 signal chunk_built(count: int)
 
@@ -81,36 +90,27 @@ func setup(terrain: Node, player: Node3D) -> void:
 
 
 func _build_resources() -> void:
-	# One textured quad per tuft, standing UPRIGHT. The blade cluster lives in the
-	# texture's alpha channel, so a single plane draws a full tuft, and the shader
-	# uses cull_disabled so the plane is visible from both faces.
-	#
-	# QuadMesh defaults to FACE_Z (upright). This was set to FACE_Y, which lays
-	# the quad FLAT - so every tuft was a horizontal decal lying on the hillside
-	# and the grass rendered as elongated blotches smeared across the ground.
-	# That is the blotchy-patch artefact this file spent several revisions
-	# chasing: it was never density or colour. Each instance gets a random yaw
-	# (see _build_chunk), so the planes do not all face the same way.
-	var quad := QuadMesh.new()
-	# Roughly square in aspect: a tuft's silhouette is a fan of blades as tall as
-	# it is wide, and a wide short quad read as a leaf on the ground rather than as
-	# grass. (This was 3.4x the width for 1.15x the height, i.e. twice as wide as
-	# tall.)
-	quad.size = Vector2(BLADE_W * 1.15, BLADE_H * 1.30)
-	quad.orientation = PlaneMesh.FACE_Z
-	_blade_mesh = quad
+	# A real tuft of blades from the nature pack, decimated to its tallest 36
+	# blades. The pack's tuft is ~100 blades in 192 triangles; at full density
+	# this field would draw tens of millions of triangles for ground cover.
+	_blade_mesh = NaturePack.clump("grass", 36)
+	if _blade_mesh == null:
+		push_warning("LastStar: nature pack grass missing - the meadow will be empty")
+		return
 
 	_material = ShaderMaterial.new()
 	var shader := load("res://shaders/terrain/grass_sway.gdshader")
-	if shader != null:
-		_material.shader = shader
-		var tex := load("res://icons/grass/tuft.png")
-		if tex != null:
-			_material.set_shader_parameter("blade_tex", tex)
-		else:
-			push_warning("LastStar: grass tuft texture missing - blades will be solid")
-	else:
+	if shader == null:
 		push_warning("LastStar: grass shader missing - grass will look flat")
+		return
+	_material.shader = shader
+	# The tuft carries its colour in vertex colours (the pack ships no textures
+	# and no UVs), so the shader is told to use them instead of sampling a blade
+	# sprite. Everything else - the wind, the view cull, the sightline clearing,
+	# the distance fade - is unchanged, which is the point of keeping this shader
+	# rather than writing a second one.
+	_material.set_shader_parameter("use_vertex_color", 1.0)
+	_material.set_shader_parameter("model_height", maxf(NaturePack.height_of("grass"), 0.05))
 
 
 func _process(_delta: float) -> void:
@@ -315,15 +315,21 @@ func _build_chunk(key: Vector2i) -> void:
 		# are at the centre. This is what stops a tuft reading as a cylinder of
 		# identical quad cards.
 		var centre_bias := 1.0 - clampf(rad / maxf(tuft_radius, 0.001), 0.0, 1.0)
-		var s := rng.randf_range(0.70, 1.42) * height_scale * (0.82 + centre_bias * 0.38)
+		# A 1 m pack tuft against the 0.73 m card it replaced, so the scale range
+		# is a little tighter and sits lower: meadow grass in this style is knee
+		# height on a 1.8 m character.
+		var s := rng.randf_range(0.52, 0.92) * height_scale * (0.84 + centre_bias * 0.34)
 		var lean := (1.0 - centre_bias) * 0.22
 		var basis := Basis(Vector3.UP, ang + rng.randf_range(-0.5, 0.5))
 		basis = basis * Basis(Vector3(cos(ang), 0.0, sin(ang)), lean)
-		basis = basis.scaled(Vector3(s, s, s))
-		# The quad is centred on its origin, so it has to be lifted by half its
-		# height (times the instance scale) or the bottom half sinks into the
-		# ground and the tuft reads as half a blade.
-		made.append(Transform3D(basis, Vector3(x, h + BLADE_H * 1.30 * 0.5 * s - 0.06, z)))
+		# Wider than tall: the pack's tuft is 0.37 m across and 1 m high, and a
+		# meadow needs the footprint more than it needs the height.
+		basis = basis.scaled(Vector3(s * 1.45, s, s * 1.45))
+		# The tuft's origin is at its root, not its centre, so it goes straight on
+		# the ground. (The quad this replaced was centred and had to be lifted by
+		# half its height - getting that wrong buried the bottom half.) The 4 cm
+		# sink hides the seam where the lowest blades meet the terrain.
+		made.append(Transform3D(basis, Vector3(x, h - 0.04, z)))
 	if made.is_empty():
 		return
 	multimesh.instance_count = made.size()

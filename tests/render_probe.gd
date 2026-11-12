@@ -217,6 +217,9 @@ func _run() -> void:
 	# --- bone cloth --------------------------------------------------------
 	_check_bone_cloth(world)
 
+	# --- nature pack -------------------------------------------------------
+	_check_nature_pack(world)
+
 	# Compact one-liner so the grass totals survive the annotation cap: the API
 	# returns only the first ~24 annotations, and the detailed grass report runs
 	# later in the log than that.
@@ -952,6 +955,71 @@ func _check_bone_cloth(world: Node) -> void:
 		"BONE_CLOTH pieces=%d meshes=%d surfaces=%d (glTF imports alive)" % [pieces.size(), meshes, surfaces])
 	if world.has_method("bone_cloth_census"):
 		_log("INFO", "BONE_CLOTH census: %s" % str(world.call("bone_cloth_census")))
+
+
+## The environment, asserted as baked geometry.
+##
+## Every tree, bush, plant, rock, log, stump and blade of grass in the frame is
+## one of the nature pack's models, flattened by NaturePack into a single
+## vertex-coloured surface so a MultiMesh can draw a whole batch with one
+## material. Three things can go wrong silently: the models import empty (a node
+## exists, draws nothing), they import without their 100x node scale (a forest of
+## 3 cm trees), or the vertex colours are dropped in the bake (every prop one flat
+## colour). All three are countable, so they are counted.
+func _check_nature_pack(world: Node) -> void:
+	var NP = load("res://scripts/nature_pack.gd")
+	if NP == null:
+		_log("FAIL", "NATURE_PACK scripts/nature_pack.gd did not load")
+		return
+	var kinds: Array = NP.kinds()
+	var baked := 0
+	var tris := 0
+	var flat := 0
+	for kind in kinds:
+		var mesh: ArrayMesh = NP.mesh_of(kind)
+		if mesh == null or mesh.get_surface_count() == 0:
+			_log("FAIL", "NATURE_PACK model '%s' baked no surface" % kind)
+			continue
+		var arrays: Array = mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var cols: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		baked += 1
+		tris += idx.size() / 3
+		if cols.size() != verts.size():
+			flat += 1
+		var h: float = NP.height_of(kind)
+		if h < 0.2 or h > 8.0:
+			_log("FAIL", "NATURE_PACK '%s' is %.2f m tall - the 100x glTF node scale did not survive import" % [kind, h])
+	_log("INFO", "NATURE_PACK kinds=%d baked=%d triangles=%d" % [kinds.size(), baked, tris])
+	if baked < 12:
+		_log("FAIL", "NATURE_PACK only %d of %d models baked - the environment is not the pack" % [baked, kinds.size()])
+	if tris < 4000:
+		_log("FAIL", "NATURE_PACK baked only %d triangles - the models imported empty" % tris)
+	if flat > 0:
+		_log("FAIL", "NATURE_PACK %d model(s) lost their vertex colours - every prop of that kind would draw one flat colour" % flat)
+	# What the world actually built from them. A batch node with no instances is
+	# the difference between "the pack is vendored" and "the valley is the pack".
+	var veg := world.get_node_or_null("Vegetation") if world != null else null
+	var nature_nodes := 0
+	var nature_instances := 0
+	if veg != null:
+		for n in veg.find_children("*", "MultiMeshInstance3D", true, false):
+			var mmi := n as MultiMeshInstance3D
+			if mmi.multimesh == null or mmi.multimesh.mesh == null:
+				continue
+			if not (mmi.multimesh.mesh is ArrayMesh):
+				continue
+			# Nature meshes are the ones whose surface carries vertex colours.
+			var arrays := (mmi.multimesh.mesh as ArrayMesh).surface_get_arrays(0)
+			if arrays.size() > Mesh.ARRAY_COLOR and arrays[Mesh.ARRAY_COLOR] != null:
+				nature_nodes += 1
+				nature_instances += mmi.multimesh.instance_count
+	_log("INFO" if nature_nodes > 0 else "FAIL",
+		"NATURE_PACK scatter batches=%d instances=%d" % [nature_nodes, nature_instances])
+	if nature_instances < 200:
+		_log("FAIL", "NATURE_PACK only %d nature instances in the valley - the scatter did not spawn" % nature_instances)
+	_log("INFO", "NATURE_PACK census: %s" % str(NP.census()))
 
 
 func _report_palette(img: Image, label: String) -> void:

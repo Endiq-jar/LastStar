@@ -1034,8 +1034,8 @@ func perf_census() -> String:
 		if layer == null or not layer.has_method("census"):
 			continue
 		var c: Dictionary = layer.call("census")
-		out += "\nVEG_LAYERS %s kind=%s mesh=%s verts=%s chunks=%s instances=%s" % [
-			spec["name"], c.get("mesh_kind", "?"), c.get("mesh_class", "?"),
+		out += "\nVEG_LAYERS %s model=%s mesh=%s verts=%s chunks=%s instances=%s" % [
+			spec["name"], c.get("model_kind", "?"), c.get("mesh_class", "?"),
 			c.get("mesh_verts", 0), c.get("chunks", 0), c.get("instances", 0)]
 	return out
 
@@ -1158,10 +1158,6 @@ func _build_grass_field() -> void:
 	_build_environment_vegetation(t, player)
 
 
-## The five authored leaf silhouettes, one per leaf layer instance.
-const LEAF_VARIETIES := ["lance", "oval", "round", "needle", "lobed"]
-
-
 func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 	## The authored environment species: border grass, flowers, bushes, fallen
 	## leaves and pebbles, plus a second grass layer that shares one material.
@@ -1180,17 +1176,14 @@ func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 	wind.call("set_player", player)
 
 	for spec in VegPresets.species():
-		# The base grass carpet is already handled by GrassField, which is tuned
-		# to the player's position and streams differently. Skip the duplicate.
-		if spec["name"] == "grass":
+		# The meadow's carpet is GrassField's job, which streams and thins by
+		# distance; every species here is a discrete prop.
+		# One material per species, built from the species' model so the wind
+		# strength it asks for is the strength its shader uses.
+		var mat: ShaderMaterial = VegPresets.material_for(spec)
+		if mat == null:
+			push_warning("LastStar: no material for species %s" % spec["name"])
 			continue
-		var tex: Texture2D = VegPresets.texture(spec["tex"])
-		if tex == null:
-			push_warning("LastStar: missing vegetation texture %s" % spec["tex"])
-			continue
-		var mat: ShaderMaterial = VegPresets.material_for(
-			spec["name"], spec["wind"], spec["tint"])
-		mat.set_shader_parameter("albedo_texture", tex)
 		wind.call("register_material", mat)
 
 		var layer := Node3D.new()
@@ -1202,29 +1195,12 @@ func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 		# reads far worse than the detail simply thinning out. Grass holds its
 		# density to the streaming edge; small props taper.
 		layer.set("density", float(spec["density"]))
+		# The scale range, not a height: the pack authors each model at its own
+		# size and only a scale is honest about that. See vegetation_presets.gd.
 		layer.set("min_height", spec["hmin"])
 		layer.set("max_height", spec["hmax"])
 		layer.set("max_slope", spec["slope"])
-		layer.set("mesh_kind", spec["mesh"])
-		# Variant selection for the generated cluster meshes. `hash` is stable
-		# within a run but not across platforms, so it is only used to pick a
-		# variant, never for placement.
-		# Solid geometry needs three changes from a foliage card: no alpha cutout,
-		# no wind sway, and a tiled albedo. Set here rather than in the material
-		# cache because material_for() is shared per (species, wind, tint) and the
-		# rock texture is not interchangeable with a leaf sprite.
-		# Typed, not inferred. `spec` is an untyped Dictionary, so `spec["mesh"]`
-		# has no static type and `var solid := ... in [...]` fails Godot's analyser
-		# with "Cannot infer the type of solid variable" - at load time, which kills
-		# the whole world script. gdparse and undeclared.py both accept it.
-		var solid: bool = str(spec["mesh"]) in ["rock", "boulder", "trunk"]
-		if solid:
-			mat.set_shader_parameter("solid", 1.0)
-			mat.set_shader_parameter("uv_scale", Vector2(2.2, 2.2))
-			mat.set_shader_parameter("rim_strength", 0.18)
-		layer.set("mesh_variant", absi(hash(spec["name"])) % 8)
-		layer.set("seed_for_mesh", absi(hash(spec["name"])) % 97 + 1)
-		layer.set("leaf_variety", LEAF_VARIETIES[absi(hash(spec["name"])) % LEAF_VARIETIES.size()])
+		layer.set("model_kind", spec["model"])
 		# Per-species streaming radius. Small detail does not need to exist at
 		# 130 m; see the note on the species table.
 		layer.set("chunk_radius", int(spec["radius"]))

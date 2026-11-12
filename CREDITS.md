@@ -46,9 +46,16 @@ SOFTWARE.
 
 ## Third-party art assets
 
-The game is otherwise entirely procedural (terrain, vegetation, characters, VFX
-and UI are generated in code), with one intentional exception:
+The game is otherwise procedural (terrain, characters, VFX and UI are generated
+in code), with two intentional exceptions - both CC0, both from the same author:
 
+* **Nature models** — *Ultimate Stylized Nature Pack* by
+  **[Quaternius](https://quaternius.com)**, CC0-1.0 (public domain). Twenty-one
+  `.glb` files in `assets/nature/` are the valley's entire environment: seven
+  tree species, grass, bushes, plants, flowers, four rocks, a fallen log and a
+  stump. They replace the painted pngs that used to carry the vegetation.
+  Per-file source paths and sizes are in
+  [`assets/nature/README.md`](assets/nature/README.md).
 * **Bone cloth models** — *Modular Dungeons Pack*, *Modular Dungeon Pack* and
   *Ultimate House Interior Pack* by **[Quaternius](https://quaternius.com)**,
   CC0-1.0 (public domain). Six `.glb` files in `assets/cloth/` provide the cloth
