@@ -214,6 +214,9 @@ func _run() -> void:
 	# structural probe is the job that always runs.
 	await _check_entity_culling(world)
 
+	# --- bone cloth --------------------------------------------------------
+	_check_bone_cloth(world)
+
 	# Compact one-liner so the grass totals survive the annotation cap: the API
 	# returns only the first ~24 annotations, and the detailed grass report runs
 	# later in the log than that.
@@ -894,6 +897,61 @@ func _check_entity_culling(world: Node) -> void:
 		registered, visible, hidden, passes, int(stats.get("threads", 0)),
 		int(stats.get("grid", 0)), int(stats.get("occluders", 0)),
 		int(stats.get("render_skipped", 0)), int(stats.get("tick_reduced", 0))])
+
+
+## Bone cloth, asserted as geometry rather than as a filename.
+##
+## The cloth pieces are vendored CC0 glTF models, so "the file is in the repo" and
+## "the world is wearing it" are very different claims: an unimported model gives
+## an empty scene, and a re-materialled surface can end up with no material at
+## all. Count the pieces, their mesh instances and their surfaces - a banner is
+## four surfaces, so a scene that imported but lost its primitives is visible here
+## as a piece with zero meshes.
+func _check_bone_cloth(world: Node) -> void:
+	if world == null:
+		return
+	var pieces := get_tree().get_nodes_in_group("bone_cloth")
+	if pieces.is_empty():
+		_log("FAIL", "BONE_CLOTH no bone-cloth pieces in the world - the cloth assets are not being instanced")
+		return
+	var meshes := 0
+	var surfaces := 0
+	for n in pieces:
+		for child in n.find_children("*", "MeshInstance3D", true, false):
+			var mi := child as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			meshes += 1
+			surfaces += mi.mesh.get_surface_count()
+	# The glTF scenes are authored in centimetres behind a 100x node scale, so the
+	# one thing that can silently ruin every placement is that scale not surviving
+	# import: the cloth would import correctly, instance correctly, hold its
+	# surfaces - and be a 3 cm banner buried in the grass.
+	var widest := 0.0
+	for n in pieces:
+		var box := AABB()
+		var first := true
+		for child in n.find_children("*", "MeshInstance3D", true, false):
+			var mi := child as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			var b: AABB = mi.global_transform * mi.get_aabb()
+			box = b if first else box.merge(b)
+			first = false
+		if not first:
+			widest = maxf(widest, maxf(box.size.x, maxf(box.size.y, box.size.z)))
+	if widest < 0.2 or widest > 14.0:
+		_log("FAIL", "BONE_CLOTH largest piece spans %.2f m - the glTF node scale did not survive import" % widest)
+	else:
+		_log("INFO", "BONE_CLOTH largest piece spans %.2f m" % widest)
+	if pieces.size() < 10:
+		_log("FAIL", "BONE_CLOTH only %d piece(s) in the whole world - the dressing did not place" % pieces.size())
+	if meshes < 10 or surfaces < 20:
+		_log("FAIL", "BONE_CLOTH %d piece(s) produced only %d mesh(es)/%d surface(s)" % [pieces.size(), meshes, surfaces])
+	_log("INFO" if meshes >= 10 and surfaces >= 20 else "WARN",
+		"BONE_CLOTH pieces=%d meshes=%d surfaces=%d (glTF imports alive)" % [pieces.size(), meshes, surfaces])
+	if world.has_method("bone_cloth_census"):
+		_log("INFO", "BONE_CLOTH census: %s" % str(world.call("bone_cloth_census")))
 
 
 func _report_palette(img: Image, label: String) -> void:

@@ -15,6 +15,7 @@ const VegLayerScript := preload("res://scripts/performance/vegetation_layer.gd")
 const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
 const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
 const EntityCullerScript := preload("res://scripts/performance/entity_culler.gd")
+const BoneCloth := preload("res://scripts/bone_cloth.gd")
 
 const ENEMY_COUNT := 14
 
@@ -730,6 +731,21 @@ func _build_spawn_glade() -> void:
 	light.position = center + Vector3(0, 2.0, 0)
 	add_child(light)
 
+	# Bone cloth in the starting glade: a carpet up to the altar and a banner
+	# hung behind the monolith, so the first thing a player sees is dressed.
+	var carpet := BoneCloth.ground_cloth(Color(0.93, 0.90, 0.83), 0.55)
+	if carpet != null:
+		# In front of the altar on the side the player spawns, which is +Z: the
+		# spawn is at z = +6 and she faces -Z.
+		carpet.position = center + Vector3(0.0, 0.03, 3.6)
+		add_child(carpet)
+	var banner := BoneCloth.hanging(Color(0.88, 0.85, 0.78), 0.42)
+	if banner != null:
+		# Behind the altar, so it frames the view from the spawn instead of
+		# hanging between the camera and the thing the player is meant to see.
+		banner.position = center + Vector3(0.0, 3.3, -2.6)
+		add_child(banner)
+
 
 ## Weathered stone, textured and triplanar.
 ##
@@ -800,6 +816,15 @@ func _scatter_landmarks() -> void:
 		lintel.material_override = stone_mat
 		lintel.position.y = 8.4
 		gate.add_child(lintel)
+
+		# Bone cloth hung from the lintel: the gates are the one built structure a
+		# player walks under, and a banner between the pillars is what makes them
+		# read as a place rather than as two grey columns and a beam.
+		var banner := BoneCloth.hanging(Color(0.92, 0.88, 0.79), 0.85)
+		if banner != null:
+			# The lintel is 1.1 m deep and centred on 8.4, so its underside is here.
+			banner.position = Vector3(0.0, 7.85, 0.15)
+			gate.add_child(banner)
 
 	# Floating crystal formations.
 	var crystal_colors := [Color(0.55, 0.85, 1.0), Color(0.75, 0.6, 1.0), Color(1.0, 0.78, 0.55)]
@@ -915,6 +940,43 @@ func _scatter_landmarks() -> void:
 		roof.position.y = 2.7
 		camp.add_child(roof)
 
+		# Bone cloth in the shelter: a drape across the open side, a carpet on the
+		# floor and a heap of bones the fire was lit on.
+		var drape := BoneCloth.drape(Color(0.34, 0.40, 0.48), 0.42)
+		if drape != null:
+			drape.position = Vector3(0.0, 2.5, 1.95)
+			drape.rotation_degrees = Vector3(0, 180, 0)
+			camp.add_child(drape)
+		var carpet := BoneCloth.ground_cloth(Color(0.66, 0.30, 0.28), 0.30)
+		if carpet != null:
+			carpet.position = Vector3(0.0, 0.02, 0.0)
+			camp.add_child(carpet)
+		var pile := BoneCloth.bone_pile(0.30)
+		if pile != null:
+			pile.position = Vector3(1.35, 0.02, -1.05)
+			camp.add_child(pile)
+
+
+## Count the bone cloth the world actually dressed itself in.
+##
+## A piece that placed geometry is a different claim from a piece that placed
+## nothing, and only the counts separate them: the models are preloaded, so a
+## failed import is a parse error, but an imported file that instanced an empty
+## scene would otherwise be invisible in every screenshot.
+func bone_cloth_census() -> String:
+	var pieces := 0
+	var meshes := 0
+	var surfaces := 0
+	for n in get_tree().get_nodes_in_group("bone_cloth"):
+		pieces += 1
+		for child in n.find_children("*", "MeshInstance3D", true, false):
+			var mi := child as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			meshes += 1
+			surfaces += mi.mesh.get_surface_count()
+	return "BONE_CLOTH pieces=%d meshes=%d surfaces=%d" % [pieces, meshes, surfaces]
+
 
 ## Count what the world is actually asking the renderer to draw.
 ##
@@ -952,6 +1014,10 @@ func perf_census() -> String:
 	# cap in CI.
 	if _culler != null and is_instance_valid(_culler) and _culler.has_method("census"):
 		out += "\n" + str(_culler.call("census"))
+	# Bone cloth: how many pieces the world actually dressed, and how many of them
+	# resolved to real geometry after import. Zero here means the GLBs were not
+	# imported, which is exactly the failure a census should name.
+	out += "\n" + bone_cloth_census()
 	# One line per vegetation layer, naming the mesh it actually resolved.
 	#
 	# "flowers are in the scene" and "flowers are drawn as flowers" are different
@@ -984,6 +1050,11 @@ func _spawn_waypoints() -> void:
 		statue.statue_name = str(spot["name"])
 		statue.position = Vector3(p.x, _height(p.x, p.z) - 0.2, p.z)
 		add_child(statue)
+		# Every waypoint wears bone cloth on its spire, like a shrine banner.
+		var totem := BoneCloth.totem(Color(0.80, 0.86, 0.95), 0.34)
+		if totem != null:
+			totem.position = Vector3(0.0, 3.4, 0.62)
+			statue.add_child(totem)
 
 
 func _spawn_sigils() -> void:

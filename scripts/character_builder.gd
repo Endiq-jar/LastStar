@@ -7,6 +7,12 @@ extends RefCounted
 
 const TOON_SHADER := preload("res://shaders/character/anime_toon.gdshader")
 const OUTLINE_SHADER := preload("res://shaders/character/outline.gdshader")
+const BoneCloth := preload("res://scripts/bone_cloth.gd")
+
+## Sun-bleached linen. Every piece of cloth in the world is tinted towards this
+## colour, so the character's cape and hem read as cut from the same bolt as the
+## banners hanging in the ruins.
+const BONE_LINEN := Color(0.88, 0.85, 0.77)
 
 
 static func _toon(color: Color, rim: float = 0.35) -> ShaderMaterial:
@@ -118,7 +124,10 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	var accent_col: Color = data["outfit_accent"]
 	var accent := _toon(accent_col, 0.45)
 	var cape_col: Color = data["cape"]
-	var cape_mat := _toon(cape_col, 0.7)
+	# Bone cloth: the cape keeps each character's own hue, pulled towards the
+	# bone-linen the banners, drapes and carpets are cut from.
+	var cape_mat := _toon(cape_col.lerp(BONE_LINEN, 0.45), 0.55)
+	var bone_cloth_mat := _toon(BONE_LINEN, 0.4)
 	var eye_col: Color = data["eye"]
 	var eye := _glow(eye_col, 1.1)
 	var element_col: Color = data["color"]
@@ -168,7 +177,9 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	for side in [-1.0, 1.0]:
 		var panel := BoxMesh.new()
 		panel.size = Vector3(0.12, 0.34, 0.03)
-		var p := _no_shadow(_add(torso, panel, accent, Vector3(0.10 * side, 0.74, -0.26)))
+		# The hanging panels are cloth, so they are bone cloth rather than accent
+		# trim: the outfit's metal stays metal, its cloth is linen.
+		var p := _no_shadow(_add(torso, panel, bone_cloth_mat, Vector3(0.10 * side, 0.74, -0.26)))
 		p.rotation_degrees = Vector3(8.0, 0.0, 3.0 * side)
 
 	# --- head -------------------------------------------------------------
@@ -326,6 +337,19 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	# Yawing it by 180 turned its front away and left only the inverted-hull outline
 	# shell visible - a solid black rectangle hanging down her back.
 	cape_mi.rotation_degrees = Vector3(-6, 0, 0)
+
+	# Bone cloth on the character as well: a bone clasp at the shoulder and a
+	# skull charm at the hip, modelled by the same Quaternius bone pieces the
+	# banners are trimmed with. Small on purpose - they are jewellery, not armour.
+	var clasp := BoneCloth.make("bones", BoneCloth.BONE_TINT, 0.055)
+	if clasp != null:
+		clasp.position = Vector3(0.0, 1.36, 0.17)
+		torso.add_child(clasp)
+	var charm := BoneCloth.make("skull", BoneCloth.BONE_TINT, 0.09)
+	if charm != null:
+		charm.position = Vector3(0.13, 0.86, -0.21)
+		charm.rotation_degrees = Vector3(0, 28, 10)
+		torso.add_child(charm)
 
 	var wings := Node3D.new()
 	wings.name = "Wings"

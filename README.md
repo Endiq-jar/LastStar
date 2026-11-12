@@ -104,6 +104,11 @@ The game is written so it **cannot** show a black screen with only the HUD:
   between two pillars is.
 * the world bootstrap contains **no coroutines and no GPU readbacks** — both
   could wedge the main loop on software/GL drivers.
+* **bone cloth** — the cloth the world is dressed in (ruin-gate banners, shelter
+  drapes, the altar carpet, waypoint totems, and the player's cape hem and
+  charms) is built from six CC0-1.0 Quaternius models in `assets/cloth/`,
+  re-materialled to the toon ramp by `scripts/bone_cloth.gd`. Sources and licences
+  are listed in `assets/cloth/README.md`.
 
 CI enforces all of it: `tests/render_probe.tscn` actually renders the world under
 Xvfb, screenshots the framebuffer and measures mean luminance, non-black coverage

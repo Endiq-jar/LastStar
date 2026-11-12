@@ -226,6 +226,11 @@ func _refresh_boxes() -> void:
 		var mi := n as MeshInstance3D
 		if mi.mesh == null:
 			continue
+		# Cloth is not a wall. A hanging bone-cloth banner is a thin plane with
+		# gaps around it, and treating it as an occluder would let a waypoint's
+		# own banner hide the statue it is tied to.
+		if mi.is_in_group("cloth_soft"):
+			continue
 		var box: AABB = mi.global_transform * mi.get_aabb()
 		if box.size.x < MIN_BOX_EXTENT or box.size.y < MIN_BOX_EXTENT or box.size.z < MIN_BOX_EXTENT:
 			continue

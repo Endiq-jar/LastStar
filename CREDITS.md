@@ -44,6 +44,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Third-party art assets
+
+The game is otherwise entirely procedural (terrain, vegetation, characters, VFX
+and UI are generated in code), with one intentional exception:
+
+* **Bone cloth models** — *Modular Dungeons Pack*, *Modular Dungeon Pack* and
+  *Ultimate House Interior Pack* by **[Quaternius](https://quaternius.com)**,
+  CC0-1.0 (public domain). Six `.glb` files in `assets/cloth/` provide the cloth
+  banners, drape, carpet, bones and skull used to dress the ruin gates, camp
+  shelters, spawn altar, waypoints and the player's charms. Per-file source URLs
+  and the exact upstream paths are in [`assets/cloth/README.md`](assets/cloth/README.md).
+  CC0 requires no attribution; it is recorded here because a binary in the tree
+  should never have an unknown origin.
+
 ## Engine & tooling
 
 * **Godot Engine 4.3** — MIT License, © Godot Engine contributors.
