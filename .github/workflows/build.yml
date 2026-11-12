@@ -157,38 +157,6 @@ jobs:
           set -uo pipefail
           timeout -k 10 240 /opt/godot/godot --headless --path . \
             res://tests/compile_check.tscn > /tmp/compile.log 2>&1 || true
-          # Geometry gate. The brief asks for 20 flower silhouettes and 5 leaf
-          # varieties as meshes; a table of 20 names pointing at one petal would
-          # satisfy a human reading the source and fail a player looking at the
-          # meadow. This asserts on the vertices instead. Its own exit code is
-          # the verdict, so it is deliberately NOT `|| true` - a failure here
-          # must fail the job, unlike the compile log which is scraped.
-          timeout -k 10 240 /opt/godot/godot --headless --path . \
-            res://tests/mesh_check.tscn > /tmp/mesh.log 2>&1
-          MESH_RC=$?
-          grep -E "^MESH_CHECK" /tmp/mesh.log | tail -40 || true
-          if [ "$MESH_RC" -ne 0 ]; then
-            echo "::error title=mesh check::exited $MESH_RC - see MESH_CHECK lines above"
-            tail -30 /tmp/mesh.log | while IFS= read -r l; do echo "::error title=mesh::$l"; done || true
-            # This step runs under `set -uo pipefail` with no `-e`, so nothing
-            # above fails the job on its own. The exit has to be explicit, or
-            # the geometry gate reports a failure and the build goes green
-            # anyway - which is exactly how a broken check becomes worse than
-            # no check.
-            exit 1
-          fi
-          grep -E "^COMPILE_" /tmp/compile.log | tail -40 || true
-          # Surface the per-file verdict as annotations. Step logs live on blob
-          # storage and are not always fetchable, which left "it compiled" as an
-          # unverifiable claim - the shader count is the evidence.
-          #
-          # `|| true` on the pipelines below is load-bearing. GitHub runs `run:`
-          # blocks under `bash -e`, so a `grep` that legitimately finds nothing
-          # (0 shaders compiled, which is exactly what a broken import produces)
-          # returns 1 and kills the step instantly - before any of the failure
-          # reporting below it can run. That is how "0 shaders compiled" arrived
-          # as a bare exit code with no error annotation at all.
-          echo "::notice title=compile::$(grep -c '^COMPILE_SHADER:' /tmp/compile.log || true) shaders compiled, $(grep -c '^COMPILE_TRY:' /tmp/compile.log || true) files checked"
           grep -E "^COMPILE_SHADER:" /tmp/compile.log | head -12 \
             | while IFS= read -r line; do echo "::notice title=shader::$line"; done || true
           # Whatever happened, the tail of the log must reach the annotations -
@@ -373,6 +341,20 @@ jobs:
           echo "Render probe passed."
 
 
+      - name: Geometry gate (flowers and leaves are real meshes)
+        # Runs before the publish step so its log is committed to the
+        # `screenshots` branch even when it fails. A gate whose only output is a
+        # red check with unreadable logs is not a gate, it is a coin flip.
+        continue-on-error: true
+        id: meshes
+        run: |
+          set -uo pipefail
+          timeout -k 10 240 /opt/godot/godot --headless --path . \
+            res://tests/mesh_check.tscn > /tmp/mesh.log 2>&1 || true
+          grep -E "^MESH_CHECK" /tmp/mesh.log | head -40 || true
+          grep -E "^MESH_CHECK" /tmp/mesh.log | head -12 \
+            | while IFS= read -r line; do echo "::notice title=mesh::$line"; done || true
+
       - name: Report rendered frame
         if: always()
         # Runs regardless of how the probe step exited: an artifact on blob
@@ -417,6 +399,12 @@ jobs:
           cp /tmp/probe/player_flat.png /tmp/shots_out/player_flat.png 2>/dev/null || true
           # The full probe transcript, uncapped. Annotations drop most of it.
           cp /tmp/probe/probe.log.txt /tmp/shots_out/probe.log.txt 2>/dev/null || true
+          # The geometry gate's log rides along on the same commit. It ran
+          # earlier and may have failed the job, but this step is
+          # continue-on-error and `if: always()`, so the evidence still lands -
+          # without it a failed gate is an unreadable red X, since job logs come
+          # back as EOF and annotations cap at ten.
+          cp /tmp/mesh.log /tmp/shots_out/mesh.log.txt 2>/dev/null || true
           ls -la /tmp/shots_out || true
           cd /tmp/shots_out
           git init -q -b screenshots
@@ -438,6 +426,18 @@ jobs:
             /tmp/probe/*.png
             /tmp/probe.log
           if-no-files-found: ignore
+
+      - name: Fail if the geometry gate failed
+        # Deliberately last. The gate itself is continue-on-error so the publish
+        # step above still commits its log; this converts that into a job failure
+        # afterwards. Enforcing it inline meant the job died before anything was
+        # readable, and job logs on this repo come back as EOF - the first run of
+        # this gate failed and left no evidence at all.
+        if: steps.meshes.outcome == 'failure'
+        run: |
+          echo "::error title=mesh check::geometry assertions failed - see mesh.log.txt on the screenshots branch"
+          tail -25 /tmp/mesh.log || true
+          exit 1
 
   android:
     name: Android APK
