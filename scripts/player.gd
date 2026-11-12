@@ -716,6 +716,17 @@ func _update_animation(delta: float, speed: float, on_floor: bool, sprinting: bo
 	torso.position.y = lerpf(torso.position.y, absf(sin(_anim_phase)) * 0.03, 12.0 * delta)
 
 
+## Fire a one-shot from the Ambience audio node, if there is one.
+##
+## Every combat hit was silent. audio_director.gd has had play_hit() the whole
+## time - a noise burst that is exactly the right sound - and nothing ever called
+## it, so the most frequent event in the game made no noise at all.
+func _play_sfx(method: String) -> void:
+	var amb := get_parent().get_node_or_null("Ambience") if get_parent() != null else null
+	if amb != null and amb.has_method(method):
+		amb.call(method)
+
+
 func _do_attack() -> void:
 	if _attack_cd > 0.0 or Game.is_paused:
 		return
@@ -740,6 +751,8 @@ func _do_attack() -> void:
 			continue
 		var to_enemy: Vector3 = (enemy as Node3D).global_position - global_position
 		if to_enemy.length() < 2.6 and to_enemy.normalized().dot(forward) > 0.25:
+			# Only on a real hit, so the sound is information rather than noise.
+			_play_sfx("play_hit")
 			if enemy.has_method("take_hit"):
 				enemy.take_hit(power, element_id, forward)
 
@@ -893,6 +906,3 @@ func skill_ready_ratio() -> float:
 	var cd: float = float(Game.character()["skill_cd"])
 	return 1.0 - clampf(_skill_cd / maxf(cd, 0.01), 0.0, 1.0)
 
-
-func set_control_enabled(enabled: bool) -> void:
-	set_physics_process(enabled)

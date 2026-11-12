@@ -3,7 +3,6 @@ extends Node3D
 ## (wind-gliders' arches, crystal formations, ruins), spawns enemies, sigils
 ## and waypoint statues, runs the day/night cycle and weather.
 
-const FX := preload("res://scripts/fx.gd")
 const SlimeScript := preload("res://scripts/slime.gd")
 const SigilScript := preload("res://scripts/sigil.gd")
 const WaypointScript := preload("res://scripts/waypoint_statue.gd")
@@ -11,7 +10,6 @@ const WaterScript := preload("res://scripts/water_plane.gd")
 const PlayerScript := preload("res://scripts/player.gd")
 const AudioDirectorScript := preload("res://scripts/audio_director.gd")
 const GrassFieldScript := preload("res://scripts/grass_field.gd")
-const VegetationDemoScript := preload("res://scripts/performance/vegetation_demo.gd")
 const VegWindScript := preload("res://scripts/performance/vegetation_wind.gd")
 const VegLayerScript := preload("res://scripts/performance/vegetation_layer.gd")
 const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
@@ -580,6 +578,14 @@ func _build_lake() -> void:
 
 
 func _height(x: float, z: float) -> float:
+	# Routed through TerrainGenerator.ground_point() rather than get_height_at().
+	# The analytic field is smooth; the rendered mesh is not, and it sags up to a
+	# few decimetres below the analytic surface across each 3 m triangle. Every
+	# placement in this file - the player spawn, the glade, waypoints, sigils -
+	# was asked for the analytic height, so all of them floated. ground_point()
+	# exists for exactly this and had no caller.
+	if terrain and terrain.has_method("ground_point"):
+		return terrain.call("ground_point", x, z, 0.0).y
 	if terrain and terrain.has_method("get_height_at"):
 		return terrain.get_height_at(x, z)
 	return 0.0

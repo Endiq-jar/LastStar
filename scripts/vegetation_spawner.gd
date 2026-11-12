@@ -6,7 +6,6 @@ extends Node3D
 @export var terrain_path: NodePath
 
 const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
-const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
 
 ## The leaf sheet is a horizontal strip of five leaves: green, red, pink, brown,
 ## yellow. Only the green one belongs on foliage, so every leaf-textured surface
@@ -28,6 +27,7 @@ const TEX_LEAF_SHEET := "res://assets/environment/leaves/leaf.png"
 const TEX_BARK := "res://assets/environment/trees/trunk.png"
 const TEX_BARK_STRIPPED := "res://assets/environment/trees/trunk_stripped.png"
 const TEX_WOOD := "res://assets/environment/wood/wood.png"
+const TEX_WOOD_STRIPED := "res://assets/environment/wood/wood_striped.png"
 ## Tiling for the foliage surface: a canopy lobe is ~1.5 m, so 2 repeats reads as
 ## leaf detail rather than as a smear.
 const LEAF_SURFACE_UV := Rect2(0.0, 0.0, 2.0, 2.0)
@@ -656,16 +656,30 @@ func _spawn_fallen_logs(terrain: Node) -> void:
 		[_make_cylinder(1.0, 1.0, 1.0, 8), Transform3D()],
 	])
 	var xfs: Array = []
-	for p in spots:
+	var xfs_striped: Array = []
+	for i in range(spots.size()):
+		var p: Vector3 = spots[i]
 		var log_len := rng.randf_range(2.6, 6.5)
 		var log_r := rng.randf_range(0.18, 0.34)
 		var yaw := rng.randf() * TAU
 		var tilt := rng.randf_range(-0.12, 0.12)
 		var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, PI * 0.5 + tilt)
 		basis = basis.scaled(Vector3(log_r, log_len, log_r))
-		xfs.append(Transform3D(basis, p + Vector3(0, log_r * 0.85, 0)))
+		var xf := Transform3D(basis, p + Vector3(0, log_r * 0.85, 0))
+		# Two wood surfaces, split by a per-log coin flip. wood.png is smooth
+		# grain and wood_striped.png is a harder banded plank pattern - bark-on
+		# versus split wood - and having both stops every fallen log in the valley
+		# looking like the same object at different lengths. It also gives the
+		# striped sheet a purpose, which it did not have: it shipped in assets/
+		# referenced by nothing at all.
+		if i % 2 == 0:
+			xfs.append(xf)
+		else:
+			xfs_striped.append(xf)
 	_add_multimesh("FallenLogs", log_mesh,
 		_toon_tex(Color(1.15, 1.05, 0.92), TEX_WOOD, 0.18), xfs)
+	_add_multimesh("FallenLogsSplit", log_mesh,
+		_toon_tex(Color(1.10, 1.00, 0.88), TEX_WOOD_STRIPED, 0.18), xfs_striped)
 
 
 func _spawn_pebbles(terrain: Node) -> void:

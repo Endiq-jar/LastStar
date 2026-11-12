@@ -63,7 +63,6 @@ var _build_budget := 3             ## chunks built per frame, to avoid hitches
 ## Performance therefore grew the same meadow as a desktop, which is exactly
 ## backwards, and the quality menu's promise was never wired to anything.
 var _density := 1.0
-var _enabled := true
 ## Diagnostics: why blades were rejected, so a density regression is explainable
 ## instead of a mystery number.
 var _rej_water := 0
@@ -115,7 +114,7 @@ func _build_resources() -> void:
 
 
 func _process(_delta: float) -> void:
-	if not _enabled or _player == null or _terrain == null:
+	if _player == null or _terrain == null:
 		return
 	# Push the camera position for the near-blade cull. The shader cannot read a
 	# camera built-in in its vertex stage (those are fragment-only and using one
@@ -350,17 +349,33 @@ func chunk_count() -> int:
 
 
 func diagnostics() -> String:
-	return "tried=%d water=%d height=%d slope=%d tiers(near/mid/far)=%d/%d/%d" % [
-		_tried, _rej_water, _rej_height, _rej_slope,
-		int(_tier_counts.get(2600, 0)), int(_tier_counts.get(1300, 0)),
-		int(_tier_counts.get(520, 0))]
+	# The tier keys were hard-coded 2600/1300/520 - numbers from an older density
+	# curve that no longer exist. `_tier_counts` is keyed by the actual per-chunk
+	# instance count, so it reported 0/0/0 on a field of 276,811 blades. A
+	# diagnostic that always reads zero is worse than none: it looks like the
+	# blades are not being placed at all.
+	#
+	# Count live chunks by tier instead, derived from the same constants the
+	# builder uses, so this cannot drift again.
+	var near := 0
+	var mid := 0
+	var far := 0
+	for key in _chunks.keys():
+		var d := (key as Vector2i) - _last_center
+		var dist := Vector2(d).length()
+		if dist <= 1.5:
+			near += 1
+		elif dist <= 3.0:
+			mid += 1
+		else:
+			far += 1
+	var placed := 0
+	for v in _tier_counts.values():
+		placed += int(v)
+	return "tried=%d placed=%d chunks=%d water=%d height=%d slope=%d tiers(near/mid/far)=%d/%d/%d" % [
+		_tried, placed, _chunks.size(), _rej_water, _rej_height, _rej_slope,
+		near, mid, far]
 
-
-func set_enabled(on: bool) -> void:
-	_enabled = on
-	visible = on
-	if on and _player != null:
-		_refresh(true)
 
 
 func focus_at(point: Vector3) -> void:

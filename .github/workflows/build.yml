@@ -70,6 +70,16 @@ jobs:
         # rather than failing the build.
         run: python3 tools/shader_lint.py
 
+      - name: Dead wiring (unreferenced assets, dead preloads, orphan scenes)
+        # Three separate bugs lived in this tree for multiple rounds because
+        # nothing could see them: five environment textures that no script ever
+        # loaded (so trees rendered as flat vertex colour), a `const preload` of
+        # fx.gd that was never used, and a grass diagnostics function reporting
+        # 0/0/0 tiers because its tier keys were hardcoded to stale densities.
+        # All of it compiles and all of it "works". This gate is the one that
+        # looks at whether things are actually plugged in.
+        run: python3 tools/dead_wiring.py
+
       - name: No leftover merge-conflict markers
         # An unresolved conflict committed straight into the tree parses as a
         # "VCS conflict marker" error and costs a whole CI cycle to find.

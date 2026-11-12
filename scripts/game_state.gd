@@ -170,9 +170,6 @@ func character() -> Dictionary:
 	return PARTY[party_index]
 
 
-func character_at(i: int) -> Dictionary:
-	return PARTY[clampi(i, 0, PARTY.size() - 1)]
-
 
 func max_hp() -> float:
 	return float(character()["max_hp"])

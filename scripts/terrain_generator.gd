@@ -335,13 +335,11 @@ func _build_collision_shape() -> ConcavePolygonShape3D:
 ## (the body is not allowed to spawn intersecting), so callers add their own
 ## clearance on top of this.
 func ground_point(x: float, z: float, clearance: float = 1.5) -> Vector3:
-	return Vector3(x, get_height_at(x, z) + clearance, z)
+	# surface_height_at(), not get_height_at(): the analytic field is smooth and
+	# the rendered mesh is not, and the two differ by up to the sagitta of a 3 m
+	# triangle. Anything placed on get_height_at() hovers over the visible ground
+	# exactly as much as the mesh sags below the analytic surface - which is the
+	# bug the vegetation spawner already carries a note about. This helper is
+	# meant for placing things, so it uses the surface you can see.
+	return Vector3(x, surface_height_at(x, z) + clearance, z)
 
-
-## Cheap nearest-vertex lookup used by props/particles that must not spike the
-## CPU (get_height_at is analytic and therefore exact).
-func get_normal_approx(x: float, z: float) -> Vector3:
-	var h := get_height_at(x, z)
-	var hx := get_height_at(x + 1.0, z)
-	var hz := get_height_at(x, z + 1.0)
-	return Vector3(h - hx, 1.0, h - hz).normalized()
