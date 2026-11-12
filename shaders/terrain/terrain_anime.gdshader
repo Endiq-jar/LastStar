@@ -277,7 +277,14 @@ void fragment() {
 	// meadow out. `patch` still tilts the slope so large-scale colour survives
 	// in shade.
 	float fill_k = 0.42 - patch * 0.12;
-	EMISSION = col * fill_k + vec3(0.098, 0.104, 0.088);
+	// Floor raised from vec3(0.098, 0.104, 0.088). Raising the colour grade's
+	// saturation to answer "make it saturated" widened the spread between the
+	// lit meadow and the shaded terrain, and the probe caught the combined
+	// effect: lit/dark went 3.72x -> 4.41x, past its own 4.0 ceiling, with the
+	// shadowed ground reading as a hole again. The grade is what the user asked
+	// for, so the shadows move instead. Still floor + slope so both surfaces fill
+	// to the same absolute level.
+	EMISSION = col * fill_k + vec3(0.126, 0.134, 0.114);
 	ROUGHNESS = mix(0.92, 0.24, wet);
 	METALLIC = 0.0;
 	SPECULAR = mix(0.18, 0.55, wet);

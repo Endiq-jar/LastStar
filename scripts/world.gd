@@ -566,7 +566,7 @@ func _grade_env(env: Environment, warmth: float = 0.5) -> void:
 	# real texture instead of flat grey), so the grade only has to finish the job.
 	# Pushed further, the meadow clips to a single flat green and the rock does not
 	# move at all - the specific failure the previous comment was written about.
-	env.adjustment_saturation = lerpf(1.18, 1.27, warmth)
+	env.adjustment_saturation = lerpf(1.14, 1.22, warmth)
 	env.adjustment_contrast = lerpf(1.10, 1.15, warmth)
 	env.adjustment_brightness = lerpf(1.0, 1.02, warmth)
 

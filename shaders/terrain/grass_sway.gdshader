@@ -240,5 +240,8 @@ void fragment() {
 	//
 	// versus 0.02 and 0.98 before, which was both a black hole and a highlight
 	// clip in the same shader.
-	EMISSION = col * 0.55 + vec3(0.085, 0.095, 0.075);
+	// Floor raised alongside terrain_anime.gdshader for the same reason - see the
+	// note there. These two must move together or the meadow separates from the
+	// hillside it is standing on.
+	EMISSION = col * 0.55 + vec3(0.112, 0.124, 0.100);
 }
