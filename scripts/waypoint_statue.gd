@@ -26,7 +26,7 @@ func _ready() -> void:
 	add_child(shape)
 
 	var stone := ShaderMaterial.new()
-	stone.shader = load("res://shaders/anime_toon.gdshader")
+	stone.shader = load("res://shaders/character/anime_toon.gdshader")
 	# 0.86 read as a blank white cut-out standing in the meadow; stone in this
 	# world sits around 0.5 and gets its brightness from the sun.
 	stone.set_shader_parameter("albedo_color", Color(0.52, 0.55, 0.62))

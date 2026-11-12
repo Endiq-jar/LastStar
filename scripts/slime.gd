@@ -151,7 +151,7 @@ static func _shared_quad(key: String, size: Vector2) -> QuadMesh:
 static func _body_material(index: int) -> ShaderMaterial:
 	if not _body_mats.has(index):
 		var m := ShaderMaterial.new()
-		m.shader = load("res://shaders/anime_toon.gdshader")
+		m.shader = load("res://shaders/character/anime_toon.gdshader")
 		m.set_shader_parameter("shadow_tint", Color(0.5, 0.6, 0.9))
 		m.set_shader_parameter("rim_strength", 0.35)
 		# Bake the element colour in here so the material is a pure cache entry
@@ -180,7 +180,7 @@ static func _core_material(index: int) -> StandardMaterial3D:
 static func _outline_material() -> ShaderMaterial:
 	if _outline_mat == null:
 		_outline_mat = ShaderMaterial.new()
-		_outline_mat.shader = load("res://shaders/outline.gdshader")
+		_outline_mat.shader = load("res://shaders/character/outline.gdshader")
 		_outline_mat.set_shader_parameter("outline_width", 0.011)
 		_outline_mat.set_shader_parameter("outline_color", Color(0.12, 0.12, 0.22, 1.0))
 	return _outline_mat

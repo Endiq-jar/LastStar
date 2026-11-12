@@ -5,8 +5,8 @@ extends RefCounted
 ##
 ## Everything is generated in code: no external models, no licensed assets.
 
-const TOON_SHADER := preload("res://shaders/anime_toon.gdshader")
-const OUTLINE_SHADER := preload("res://shaders/outline.gdshader")
+const TOON_SHADER := preload("res://shaders/character/anime_toon.gdshader")
+const OUTLINE_SHADER := preload("res://shaders/character/outline.gdshader")
 
 
 static func _toon(color: Color, rim: float = 0.35) -> ShaderMaterial:

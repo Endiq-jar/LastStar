@@ -6,7 +6,7 @@ extends RefCounted
 ## placement rules. Keeping this in one place means the art direction is a
 ## single file to tune rather than a scatter of magic numbers in the world.
 
-const FoliageShader := preload("res://assets/shaders/vegetation/foliage_anime.gdshader")
+const FoliageShader := preload("res://shaders/vegetation/foliage_anime.gdshader")
 
 const TEX_GRASS := "res://assets/environment/grass/grass.png"
 const TEX_BORDER := "res://assets/environment/grass/border_grass.png"

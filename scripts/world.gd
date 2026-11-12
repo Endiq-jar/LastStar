@@ -71,7 +71,7 @@ func _ready() -> void:
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
 	_build_spawn_glade()
-	# Clouds are drawn by shaders/sky_anime.gdshader now, not spawned as 3D
+	# Clouds are drawn by shaders/sky/sky_anime.gdshader now, not spawned as 3D
 	# billboards - see the note there on why billboards could not be placed.
 	_scatter_landmarks()
 	_spawn_waypoints()
@@ -318,12 +318,12 @@ func _setup_environment() -> void:
 	# The stock ProceduralSkyMaterial only gives a two-colour gradient, and the
 	# published wide shot read exactly like one: 85% of the frame was a flat blue
 	# wash with no clouds, no haze band at the ridge and no sun anywhere in it.
-	# shaders/sky_anime.gdshader gives the stacked horizon haze and an analytic sun
+	# shaders/sky/sky_anime.gdshader gives the stacked horizon haze and an analytic sun
 	# disc that tracks the directional light, for a few smoothsteps per sky pixel.
 	# preload, not load, so the export dependency scanner is guaranteed to pick
 	# the shader up and ship it in the APK.
 	var sky_mat := ShaderMaterial.new()
-	sky_mat.shader = preload("res://shaders/sky_anime.gdshader")
+	sky_mat.shader = preload("res://shaders/sky/sky_anime.gdshader")
 	# Tuned here rather than left at the shader defaults so the values that shape
 	# the frame live next to the rest of the lighting rig.
 	sky_mat.set_shader_parameter("zenith_color", Color(0.10, 0.28, 0.68))

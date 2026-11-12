@@ -854,7 +854,7 @@ func _test_toon_material() -> void:
 	## check it reached the renderer with sane parameters. A ShaderMaterial whose
 	## shader failed to compile draws nothing at all, which is indistinguishable in a
 	## screenshot from geometry that is missing or hidden.
-	var shader := load("res://shaders/anime_toon.gdshader") as Shader
+	var shader := load("res://shaders/character/anime_toon.gdshader") as Shader
 	if shader == null:
 		_log("FAIL", "anime_toon.gdshader did not load")
 		return

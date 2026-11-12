@@ -92,7 +92,7 @@ func _build_resources() -> void:
 	_blade_mesh = quad
 
 	_material = ShaderMaterial.new()
-	var shader := load("res://shaders/grass_sway.gdshader")
+	var shader := load("res://shaders/terrain/grass_sway.gdshader")
 	if shader != null:
 		_material.shader = shader
 		var tex := load("res://icons/grass/tuft.png")

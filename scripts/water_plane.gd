@@ -16,7 +16,7 @@ func _ready() -> void:
 	mi.mesh = plane
 	mi.position = Vector3(center.x, level + 0.35, center.y)
 	var mat := ShaderMaterial.new()
-	mat.shader = load("res://shaders/water_anime.gdshader")
+	mat.shader = load("res://shaders/water/water_anime.gdshader")
 	mat.set_shader_parameter("shallow_color", Color(0.42, 0.88, 0.86))
 	mat.set_shader_parameter("deep_color", Color(0.05, 0.30, 0.55))
 	mat.set_shader_parameter("foam_color", Color(0.95, 0.99, 1.0))

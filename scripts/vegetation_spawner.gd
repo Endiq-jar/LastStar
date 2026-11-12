@@ -90,7 +90,7 @@ func _rebuild() -> void:
 
 func _toon(color: Color, rim: float = 0.3) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = load("res://shaders/anime_toon.gdshader")
+	m.shader = load("res://shaders/character/anime_toon.gdshader")
 	m.set_shader_parameter("albedo_color", color)
 	m.set_shader_parameter("shadow_tint", Color(0.55, 0.62, 0.88))
 	m.set_shader_parameter("rim_color", Color(1.0, 0.95, 0.8))

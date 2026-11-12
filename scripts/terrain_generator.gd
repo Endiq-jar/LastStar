@@ -227,7 +227,7 @@ func _make_noise_tex(seed_v: int, freq: float, size: int, as_normal: bool = fals
 
 func _terrain_material() -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = load("res://shaders/terrain_anime.gdshader")
+	m.shader = load("res://shaders/terrain/terrain_anime.gdshader")
 	# Painterly noise textures stand in for hand-painted layers. They are
 	# procedural so the project stays asset-light and fully MIT-safe.
 	# Hand-painted, seamlessly tiling textures (textures/terrain/*.png), sampled

@@ -19,7 +19,7 @@ shader_type spatial;
 //     back to default white.
 //   * wind_offset() is a vertex operation, so the runtime cost is zero.
 
-#include "res://assets/shaders/vegetation/foliage_wind.gdshaderinc"
+#include "res://shaders/vegetation/foliage_wind.gdshaderinc"
 
 render_mode cull_disabled, diffuse_lambert;
 

@@ -15,10 +15,14 @@ extends Node
 ##   godot --headless --path . res://tests/compile_check.tscn
 
 const DIRS := ["res://scripts", "res://tests"]
-# Both locations. `assets/shaders` holds the environment shader library and is
-# nested by category, which is why the walker below had to become recursive -
-# DirAccess.get_files() lists one directory only, so the entire library was
-# silently skipped and CI reported green without ever compiling it.
+# All shaders now live under res://shaders/<category>/, which is the layout the
+# brief asks for. The walker below is recursive because DirAccess.get_files()
+# lists a single directory: when the library was flat this did not matter, and as
+# soon as it was nested an un-recursive walk skipped almost all of it while CI
+# reported green.
+#
+# `res://assets/shaders` is kept in the list only so that a stale path left behind
+# by a future edit is walked and fails loudly, rather than being silently ignored.
 const SHADER_DIRS := ["res://shaders", "res://assets/shaders"]
 
 
