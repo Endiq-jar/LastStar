@@ -1003,7 +1003,64 @@ func _probe_black_shapes(world: Node) -> void:
 	var base_img := get_viewport().get_texture().get_image()
 	if base_img == null:
 		return
-	_log("INFO", "DARK frame dark=%.2f%% (nothing hidden)" % _dark_fraction(base_img))
+	var base_frac := _dark_fraction(base_img)
+	_log("INFO", "DARK frame dark=%.2f%% (nothing hidden)" % base_frac)
+
+	# Is it a shadow? One line, one unambiguous answer: a shadow cannot exist
+	# once the sun stops casting, and geometry does not care.
+	var sun_node: DirectionalLight3D = null
+	for found in world.find_children("*", "DirectionalLight3D", true, false):
+		sun_node = found as DirectionalLight3D
+		if sun_node != null:
+			break
+	if sun_node != null:
+		var shadows_were := sun_node.shadow_enabled
+		sun_node.shadow_enabled = false
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var noshadow := get_viewport().get_texture().get_image()
+		_log("INFO", "DARK with shadows off = %.2f%%" % (_dark_fraction(noshadow) if noshadow else -1.0))
+		sun_node.shadow_enabled = shadows_were
+		await get_tree().process_frame
+
+	# And is it drawn by a nature batch? Paint every foliage batch a flat
+	# unshaded magenta - if the shapes were these meshes, they turn magenta.
+	var paint := Shader.new()
+	paint.code = "shader_type spatial;\nrender_mode unshaded;\nvoid fragment() { ALBEDO = vec3(1.0, 0.05, 0.9); }"
+	var paint_mat := ShaderMaterial.new()
+	paint_mat.shader = paint
+	var painted: Array[GeometryInstance3D] = []
+	var restore: Array = []
+	for top in ["Vegetation", "GrassField"]:
+		var root := world.get_node_or_null(top)
+		if root == null:
+			continue
+		for child in root.find_children("*", "GeometryInstance3D", true, false):
+			var gi := child as GeometryInstance3D
+			if gi != null and gi.material_override != null:
+				restore.append([gi, gi.material_override])
+				gi.material_override = paint_mat
+				painted.append(gi)
+	for spec_name in ["border_grass", "flowers", "bush", "plants", "ferns", "pebbles", "rocks"]:
+		var layer := world.get_node_or_null("Veg_%s" % spec_name)
+		if layer == null:
+			continue
+		for child in layer.find_children("*", "GeometryInstance3D", true, false):
+			var gi := child as GeometryInstance3D
+			if gi != null and gi.material_override != null:
+				restore.append([gi, gi.material_override])
+				gi.material_override = paint_mat
+				painted.append(gi)
+	if not painted.is_empty():
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var painted_img := get_viewport().get_texture().get_image()
+		_log("INFO", "DARK with %d nature batches painted magenta = %.2f%%" % [
+			painted.size(), _dark_fraction(painted_img) if painted_img else -1.0])
+		for pair in restore:
+			var gi := pair[0] as GeometryInstance3D
+			if is_instance_valid(gi):
+				gi.material_override = pair[1] as Material
 	var groups: Array = [
 		["Terrain"],
 		["Vegetation"],
