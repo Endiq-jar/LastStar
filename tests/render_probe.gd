@@ -1116,6 +1116,8 @@ func _nature_shader_variant(mode: String) -> Array:
 				"\tALBEDO = col": "\tALBEDO = COLOR.rgb;",
 				"\tEMISSION = col": "\tEMISSION = vec3(0.0);",
 			}
+		"noinverse":
+			swaps = {"\tVERTEX = (inverse(MODEL_MATRIX)": "\t// VERTEX left in model space"}
 		"novertex":
 			swaps = {
 				"void vertex() {": "void vertex() { return;",
@@ -1247,7 +1249,7 @@ func _probe_black_shapes(world: Node) -> void:
 	# The magenta test says the shapes belong to a nature batch, so the shader is
 	# what turns them black. Bisect the fragment stage: same vertex work, two
 	# different fragment bodies.
-	for mode in ["flat", "vcol", "novary", "novertex"]:
+	for mode in ["flat", "vcol", "novary", "novertex", "noinverse"]:
 		var built := _nature_shader_variant(str(mode))
 		var variant := built[0] as Shader
 		if variant == null:
@@ -1266,6 +1268,8 @@ func _probe_black_shapes(world: Node) -> void:
 		var vimg := get_viewport().get_texture().get_image()
 		_log("INFO", "DARK with nature shader=%s (%d swaps) = %.2f%%" % [
 			mode, int(built[1]), _dark_fraction(vimg) if vimg else -1.0])
+		if vimg != null:
+			vimg.save_png(out_dir.path_join("variant_%s.png" % mode))
 		for pair in swap:
 			var gi2 := pair[0] as GeometryInstance3D
 			if is_instance_valid(gi2):
