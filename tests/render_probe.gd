@@ -1271,6 +1271,38 @@ func _probe_black_shapes(world: Node) -> void:
 			if is_instance_valid(gi2):
 				gi2.material_override = pair[1] as Material
 
+	# Does the black go with the material? Every layer's override is replaced by
+	# a freshly built one - same shader, same tint, no wind - and the frame is
+	# measured again. A frame that goes bright names the material; a frame that
+	# stays black names the instance data.
+	var NP2 = load("res://scripts/nature_pack.gd")
+	var swap2: Array = []
+	for spec_name in ["border_grass", "flowers", "bush", "plants", "ferns", "pebbles", "rocks"]:
+		var layer2 := world.get_node_or_null("Veg_%s" % spec_name)
+		if layer2 == null or NP2 == null:
+			continue
+		var kind2 := str(layer2.get("model_kind"))
+		if kind2 == "":
+			continue
+		var fresh_mat = NP2.material(kind2, 0.0)
+		if fresh_mat == null:
+			continue
+		for child in layer2.find_children("*", "MultiMeshInstance3D", true, false):
+			var batch2 := child as MultiMeshInstance3D
+			if batch2 != null and batch2.material_override != null:
+				swap2.append([batch2, batch2.material_override])
+				batch2.material_override = fresh_mat
+	if not swap2.is_empty():
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var fresh_img := get_viewport().get_texture().get_image()
+		_log("INFO", "DARK with %d layer batches on a fresh no-wind material = %.2f%%" % [
+			swap2.size(), _dark_fraction(fresh_img) if fresh_img else -1.0])
+		for pair in swap2:
+			var gi3 := pair[0] as GeometryInstance3D
+			if is_instance_valid(gi3):
+				gi3.material_override = pair[1] as Material
+
 	await _probe_colour_path(world)
 	var groups: Array = [
 		["Terrain"],
@@ -1411,6 +1443,14 @@ func _check_nature_pack(world: Node) -> void:
 				str(shader_mat.get_shader_parameter("wind_strength")),
 				float(shader_mat.get_shader_parameter("sway_height")),
 				str(vcol), str(batch.cast_shadow)])
+			_log("INFO", "NATURE_PARAM %s darken=%s rim=%s back=%s rough=%s var=%s fill=%s" % [
+				spec["name"],
+				str(shader_mat.get_shader_parameter("base_darken")),
+				str(shader_mat.get_shader_parameter("rim_strength")),
+				str(shader_mat.get_shader_parameter("backlight_scale")),
+				str(shader_mat.get_shader_parameter("roughness_value")),
+				str(shader_mat.get_shader_parameter("tint_variation")),
+				str(shader_mat.get_shader_parameter("shadow_fill"))])
 
 
 func _report_palette(img: Image, label: String) -> void:
