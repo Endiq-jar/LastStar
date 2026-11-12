@@ -158,9 +158,18 @@ func _run() -> void:
 	# The terrain winding used to be inverted, which is invisible to every other
 	# check here: the mesh still has vertices, the collision shape still has
 	# faces, and the framebuffer is simply full of sky. Sample the actual normals.
-	var tmesh := world.get_node_or_null("Terrain/TerrainMesh") as MeshInstance3D
+	# The terrain is a grid of tiles now, not one mesh. Ask for the first one -
+	# the winding is a property of how the grid is emitted, so every tile shares
+	# it - but do not name the tile, because the count is a tuning parameter.
+	var tmesh: MeshInstance3D = null
+	var terrain_node := world.get_node_or_null("Terrain")
+	if terrain_node != null:
+		for c in terrain_node.get_children():
+			if c is MeshInstance3D and (c as MeshInstance3D).mesh != null:
+				tmesh = c as MeshInstance3D
+				break
 	if tmesh == null or tmesh.mesh == null:
-		_log("FAIL", "Terrain/TerrainMesh missing - nothing to look at")
+		_log("FAIL", "Terrain has no mesh tile - nothing to look at")
 	else:
 		var arr := tmesh.mesh.surface_get_arrays(0)
 		var normals: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
@@ -212,19 +221,27 @@ func _run() -> void:
 	# Logs and pebbles are what stop the grass reading as a flat painted
 	# texture. Assert they actually spawned rather than silently picking zero
 	# valid spots.
-	for needed in ["Vegetation/FallenLogs", "Vegetation/Pebbles"]:
-		var node := world.get_node_or_null(needed)
-		_log("INFO" if node != null else "FAIL",
-			"%s = %s" % [needed, "present" if node != null else "MISSING"])
+	#
+	# Matched by PREFIX, not by exact name. Each population is split across
+	# spatial tiles so the frustum test can reject some of it, which means the
+	# nodes are named `Pebbles_3_5`, `FallenLogs_0_2`, and so on. The tiled names
+	# exist because a single batch spanning the valley can never be culled; a
+	# gate that insists on one node per population is a gate that forbids the
+	# fix for the slowest thing in the frame.
 	var veg := world.get_node_or_null("Vegetation")
+	var log_nodes := _children_named(veg, "FallenLogs")
+	var pebble_nodes := _children_named(veg, "Pebbles")
+	_log("INFO" if log_nodes.size() > 0 else "FAIL",
+		"FallenLogs = %d batch(es)" % log_nodes.size())
+	_log("INFO" if pebble_nodes.size() > 0 else "FAIL",
+		"Pebbles = %d batch(es)" % pebble_nodes.size())
 	if veg != null:
-		var logs := veg.get_node_or_null("FallenLogs")
-		var pebbles := veg.get_node_or_null("Pebbles")
-		var log_n := logs.get_child_count() if logs != null else 0
 		var peb_n := 0
-		if pebbles is MultiMeshInstance3D and (pebbles as MultiMeshInstance3D).multimesh != null:
-			peb_n = (pebbles as MultiMeshInstance3D).multimesh.instance_count
-		_log("INFO", "scatter: %d log meshes, %d pebbles" % [log_n, peb_n])
+		for n in pebble_nodes:
+			var mm := (n as MultiMeshInstance3D).multimesh
+			if mm != null:
+				peb_n += mm.instance_count
+		_log("INFO", "scatter: %d log batch(es), %d pebbles" % [log_nodes.size(), peb_n])
 
 	# --- terrain textures ---------------------------------------------------
 	for tex_name in ["meadow", "rock", "sand", "macro"]:
@@ -746,6 +763,17 @@ func _report_frame_cost(world: Node) -> void:
 ## What is asserted is not a frame time - that is llvmpipe here and meaningless -
 ## but the structural precondition: enough drawables, and each one bounded to a
 ## small enough region that the count of them outside the view is large.
+## Direct children of `parent` whose name starts with `prefix`.
+func _children_named(parent: Node, prefix: String) -> Array[Node]:
+	var out: Array[Node] = []
+	if parent == null:
+		return out
+	for c in parent.get_children():
+		if str(c.name).begins_with(prefix):
+			out.append(c)
+	return out
+
+
 func _check_cull_actually_culls(world: Node) -> void:
 	if world == null:
 		return
