@@ -391,7 +391,18 @@ jobs:
             >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish screenshots to the repo
-        if: always()
+        # Only from the push run.
+        #
+        # Every commit to this branch fires twice - once for `push`, once for
+        # `pull_request` - and both runs end with a `git push -f` to the
+        # `screenshots` branch. They race, and the loser's evidence is discarded
+        # by the winner. That is why the mesh log I read after a failing run
+        # described code from two commits earlier: a slower run from an older SHA
+        # had pushed last.
+        #
+        # Choosing one publisher removes the race. The push run is the right one,
+        # because it exists for every commit whether or not a PR is open.
+        if: always() && github.event_name != 'pull_request'
         # Artifacts live on blob storage that some environments cannot reach and
         # annotations are capped, so the only channel that reliably carries the
         # rendered frame out of a runner is a committed file. Kept small and on
@@ -413,6 +424,15 @@ jobs:
           # without it a failed gate is an unreadable red X, since job logs come
           # back as EOF and annotations cap at ten.
           cp /tmp/mesh.log /tmp/shots_out/mesh.log.txt 2>/dev/null || true
+          # Stamp every published file with the SHA that produced it. Two racing
+          # runs once left a log from an older commit sitting next to frames from
+          # a newer one, and I read the stale one as the current result - the
+          # failure it described had already been fixed. A log that cannot be
+          # dated is worse than no log.
+          echo "MESH_LOG sha=${GITHUB_SHA} run=${GITHUB_RUN_ID} at=$(date -u +%FT%TZ)" \
+            >> /tmp/shots_out/mesh.log.txt 2>/dev/null || true
+          echo "PROBE_LOG sha=${GITHUB_SHA} run=${GITHUB_RUN_ID} at=$(date -u +%FT%TZ)" \
+            >> /tmp/shots_out/probe.log.txt 2>/dev/null || true
           ls -la /tmp/shots_out || true
           cd /tmp/shots_out
           git init -q -b screenshots
