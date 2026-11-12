@@ -634,9 +634,9 @@ func _run() -> void:
 	# every beauty frame so far showed a smooth green slope with no grass on it,
 	# while the gameplay frame was full of it.
 	var eye := Vector3(-34.0, 0.0, -30.0)
-	var terrain_node := world.get_node_or_null("Terrain")
-	if terrain_node != null and terrain_node.has_method("get_height_at"):
-		eye.y = terrain_node.get_height_at(eye.x, eye.z) + 11.0
+	var terrain_node_2 := world.get_node_or_null("Terrain")
+	if terrain_node_2 != null and terrain_node_2.has_method("get_height_at"):
+		eye.y = terrain_node_2.get_height_at(eye.x, eye.z) + 11.0
 	else:
 		eye.y = 30.0
 	beauty.global_position = eye
