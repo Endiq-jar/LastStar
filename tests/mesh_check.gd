@@ -132,6 +132,55 @@ func _ready() -> void:
 			failures.append("trunk is not tapered: top r=%.3f bottom r=%.3f" % [top_max, bottom_max])
 		print("MESH_CHECK trunk verts=%d r_top=%.3f r_bottom=%.3f" % [tv.size(), top_max, bottom_max])
 
+	# The cluster builders are what the vegetation layers actually instance, and
+	# they were the part that crashed: a bush composed from SphereMesh lobes hit
+	# "Trying to assign value of type 'SphereMesh' to a variable of type
+	# 'ArrayMesh'" at load time, and this check still said OK because it only
+	# ever exercised flower() and leaf(). Test the thing that ships.
+	print("MESH_CHECK clusters")
+	for v in range(8):
+		var m: Mesh = V.flower_cluster(v, 5, 0.42)
+		if m == null or m.get_surface_count() == 0:
+			failures.append("flower_cluster(%d) produced no surface" % v)
+			continue
+		var cv: PackedVector3Array = (m as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		if cv.size() < 60:
+			failures.append("flower_cluster(%d) has only %d vertices - are the heads attached?" % [v, cv.size()])
+		for x in cv:
+			if not (is_finite(x.x) and is_finite(x.y) and is_finite(x.z)):
+				failures.append("flower_cluster(%d) contains a non-finite vertex" % v)
+				break
+	# Every cluster must be built from a different mix, or the eight variants that
+	# exist to vary the meadow are the same meadow eight times.
+	var csigs: Dictionary = {}
+	for v in range(8):
+		var m: Mesh = V.flower_cluster(v, 5, 0.42)
+		if m == null or m.get_surface_count() == 0:
+			continue
+		var cv: PackedVector3Array = (m as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		csigs[_shape_signature(cv)] = v
+	if csigs.size() < 8:
+		failures.append("only %d of 8 flower clusters are distinct" % csigs.size())
+
+	for sv in [1, 2, 3]:
+		var bm: Mesh = V.bush_cluster(sv, 7)
+		if bm == null or bm.get_surface_count() == 0:
+			failures.append("bush_cluster(%d) produced no surface" % sv)
+			continue
+		var bv: PackedVector3Array = (bm as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		if bv.size() < 100:
+			failures.append("bush_cluster(%d) has only %d vertices" % [sv, bv.size()])
+
+	for k in leaf_kinds:
+		var lm2: Mesh = V.leaf_cluster(k, 5)
+		if lm2 == null or lm2.get_surface_count() == 0:
+			failures.append("leaf_cluster('%s') produced no surface" % k)
+			continue
+		var lv2: PackedVector3Array = (lm2 as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		if lv2.size() < 45:
+			failures.append("leaf_cluster('%s') has only %d vertices" % [k, lv2.size()])
+	print("MESH_CHECK clusters distinct=%d/8" % csigs.size())
+
 	if failures.is_empty():
 		print("MESH_CHECK OK")
 		get_tree().quit(0)

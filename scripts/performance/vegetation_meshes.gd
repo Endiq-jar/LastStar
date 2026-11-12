@@ -463,9 +463,25 @@ static func leaf_cluster(variety: String, count: int = 5) -> Mesh:
 static func _append_mesh(st: SurfaceTool, src: Mesh, xform: Transform3D) -> void:
 	if src == null:
 		return
-	var arr: ArrayMesh = src
-	for si in range(arr.get_surface_count()):
-		var a: Array = arr.surface_get_arrays(si)
+	# `src` is a Mesh, not an ArrayMesh. Assuming ArrayMesh and writing
+	# `var arr: ArrayMesh = src` compiled fine and failed at runtime the moment a
+	# bush was built from SphereMesh lobes:
+	#   SCRIPT ERROR: Trying to assign value of type 'SphereMesh' to a variable of
+	#   type 'ArrayMesh'
+	# PrimitiveMesh subclasses (SphereMesh, CylinderMesh...) cannot be read with
+	# surface_get_arrays at all - they expose get_mesh_arrays() instead, which is
+	# the flattened form. So branch on the concrete type.
+	var arrays_list: Array = []
+	if src is ArrayMesh:
+		var am := src as ArrayMesh
+		for si in range(am.get_surface_count()):
+			arrays_list.append(am.surface_get_arrays(si))
+	elif src is PrimitiveMesh:
+		arrays_list.append((src as PrimitiveMesh).get_mesh_arrays())
+	else:
+		push_warning("vegetation_meshes: cannot read mesh type %s" % src.get_class())
+		return
+	for a in arrays_list:
 		var verts: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
 		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
 		if idx.is_empty():
