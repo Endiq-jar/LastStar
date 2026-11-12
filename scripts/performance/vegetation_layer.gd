@@ -154,7 +154,6 @@ func _build_chunk(key: Vector2i) -> void:
 	var area := chunk_size * chunk_size
 	var wanted := int(area * density)
 	var transforms: Array[Transform3D] = []
-	var customs: Array[Color] = []
 
 	for i in range(wanted):
 		var x := origin_x + _rng.randf() * chunk_size
@@ -191,22 +190,21 @@ func _build_chunk(key: Vector2i) -> void:
 		# (A centred quad would need +s*0.5 here; getting this wrong puts every
 		# tuft half a metre underground.)
 		transforms.append(Transform3D(basis, Vector3(x, h, z)))
-		# INSTANCE_CUSTOM.r is read by the shader as a per-instance tint.
-		customs.append(Color(_rng.randf(), 0.0, 0.0, 0.0))
 
 	if transforms.is_empty():
 		return
 
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	# Custom data is what lets the shader vary each instance without a second
-	# draw call or a per-instance material.
-	mm.use_custom_data = true
+	# No custom data on purpose. The per-instance tint used to live here, and on
+	# the Compatibility renderer a MultiMesh with custom data enabled loses the
+	# mesh's vertex colours - the whole batch draws as a black silhouette. The
+	# shader now derives its tint from world position instead; see the note in
+	# shaders/vegetation/nature_foliage.gdshader.
 	mm.mesh = _mesh
 	mm.instance_count = transforms.size()
 	for i in range(transforms.size()):
 		mm.set_instance_transform(i, transforms[i])
-		mm.set_instance_custom_data(i, customs[i])
 
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "Chunk_%d_%d" % [key.x, key.y]

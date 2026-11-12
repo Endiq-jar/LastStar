@@ -56,9 +56,26 @@ void vertex() {
 	world_pos += wind_offset(world_pos, h_norm, h_norm, TIME);
 	VERTEX = (inverse(MODEL_MATRIX) * vec4(world_pos, 1.0)).xyz;
 
-	// Stable per-instance brightness from INSTANCE_CUSTOM.r, so a whole batch of
-	// one mesh is not one flat colour.
-	v_tint = 1.0 + (INSTANCE_CUSTOM.r - 0.5) * 2.0 * tint_variation;
+	// Stable per-instance brightness, so a whole batch of one mesh is not one
+	// flat colour.
+	//
+	// This used to read INSTANCE_CUSTOM.r, which the vegetation layer packed with
+	// a random value per instance. On the Compatibility renderer that costs the
+	// mesh's vertex colours: every batch with custom data on drew as a near-black
+	// silhouette of itself, and every batch without it drew correctly - the
+	// meadow's trees were green while the ferns, bushes, plants and rocks under
+	// them were black, which is why it read as "some props are unlit" rather than
+	// "one attribute is gone". Measured by swapping only the shader: the shipped
+	// body 22.9% of the frame under a dark threshold, the same body with the
+	// INSTANCE_CUSTOM read removed 0.1%.
+	//
+	// The variation is now a function of world position, which costs two sines
+	// and no per-instance buffer. It also suits the art better: neighbouring
+	// plants share a tint, so the meadow varies in patches instead of per-plant
+	// confetti.
+	float patch = sin(dot(world_pos.xz, vec2(1.7, 2.3)))
+		+ sin(dot(world_pos.xz, vec2(0.61, -0.43)) + 1.3) * 0.7;
+	v_tint = 1.0 + clamp(patch * 0.55, -1.0, 1.0) * tint_variation;
 	v_height = h_norm;
 }
 

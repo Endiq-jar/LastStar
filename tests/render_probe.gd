@@ -1004,7 +1004,10 @@ func _probe_colour_path(world: Node) -> void:
 	plain.global_position = ahead
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_log("INFO", "COLOUR plain mesh = %s" % _centre_colour())
+	var plain_colour := _centre_colour()
+	_log("INFO", "COLOUR plain mesh = %s" % _colour_text(plain_colour))
+	if plain_colour.y < 55.0:
+		_log("FAIL", "COLOUR the pack's green baked into a mesh renders as %s - the vertex colour attribute is dead" % _colour_text(plain_colour))
 	plain.visible = false
 
 	var inst := MultiMeshInstance3D.new()
@@ -1020,7 +1023,10 @@ func _probe_colour_path(world: Node) -> void:
 	inst.global_position = ahead
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_log("INFO", "COLOUR multimesh = %s" % _centre_colour())
+	var inst_colour := _centre_colour()
+	_log("INFO", "COLOUR multimesh = %s" % _colour_text(inst_colour))
+	if inst_colour.y < 55.0:
+		_log("FAIL", "COLOUR a MultiMesh instance of the same mesh renders as %s" % _colour_text(inst_colour))
 	inst.visible = false
 
 	# And the same MultiMesh with instance colours on and set to white: if that
@@ -1031,7 +1037,7 @@ func _probe_colour_path(world: Node) -> void:
 	inst.visible = true
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_log("INFO", "COLOUR multimesh use_colors = %s" % _centre_colour())
+	_log("INFO", "COLOUR multimesh use_colors = %s" % _colour_text(_centre_colour()))
 	inst.visible = false
 	plain.visible = false
 	await get_tree().process_frame
@@ -1039,11 +1045,11 @@ func _probe_colour_path(world: Node) -> void:
 	inst.queue_free()
 
 
-## Mean colour of a patch at the centre of the frame, as 0-255 ints.
-func _centre_colour() -> String:
+## Mean colour of a patch at the centre of the frame, as 0-255 per channel.
+func _centre_colour() -> Vector3:
 	var img := get_viewport().get_texture().get_image()
 	if img == null:
-		return "no frame"
+		return Vector3.ZERO
 	var cx := img.get_width() / 2
 	var cy := img.get_height() / 2
 	var sum := Vector3.ZERO
@@ -1053,8 +1059,12 @@ func _centre_colour() -> String:
 			var c := img.get_pixel(x, y)
 			sum += Vector3(c.r, c.g, c.b)
 			n += 1
-	var mean := sum / maxf(1.0, float(n))
-	return "(%d, %d, %d)" % [int(mean.x * 255.0), int(mean.y * 255.0), int(mean.z * 255.0)]
+	return (sum / maxf(1.0, float(n))) * 255.0
+
+
+## A Vector3 of 0-255 channels, for the log.
+func _colour_text(c: Vector3) -> String:
+	return "(%d, %d, %d)" % [int(c.x), int(c.y), int(c.z)]
 
 
 ## Every GeometryInstance3D in the world that draws pack foliage.
@@ -1189,6 +1199,12 @@ func _probe_black_shapes(world: Node) -> void:
 		return
 	var base_frac := _dark_fraction(base_img)
 	_log("INFO", "DARK frame dark=%.2f%% (nothing hidden)" % base_frac)
+	# Gate. Foliage is drawn with an emissive fill, so a batch of it cannot be
+	# near-black unless something upstream ate its vertex colours. The frame that
+	# shipped with the first nature build sat at 22% and looked like "some props
+	# are in shadow"; this number would have said exactly what it was.
+	if base_frac > 6.0:
+		_log("FAIL", "BLACK_PROPS %.1f%% of the frame is near-black inside the nature batches - the vertex colours are not reaching the shader" % base_frac)
 
 	# Is it a shadow? One line, one unambiguous answer: a shadow cannot exist
 	# once the sun stops casting, and geometry does not care.
