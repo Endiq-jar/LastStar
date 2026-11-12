@@ -38,13 +38,16 @@ const MODELS := {
 ## only distinguishing information is the name, so the palette maps by name and
 ## keeps the wooden pole wooden, the iron rings iron and the cloth cloth.
 const PALETTE := {
-	"Main": Color(0.86, 0.82, 0.73),       # the banner itself
+	# Sun-bleached linen, but not white: at 0.86 albedo under this world's sun the
+	# toon ramp clips the banner to a flat white slab with no shading on it. This
+	# is the same trap the stone monolith was rewritten for.
+	"Main": Color(0.74, 0.70, 0.62),       # the banner itself
 	"Wood": Color(0.33, 0.24, 0.18),
 	"Metal": Color(0.24, 0.24, 0.28),
 	"DarkMetal": Color(0.16, 0.16, 0.19),
 	"LightMetal": Color(0.46, 0.46, 0.49),
-	"Bones": Color(0.88, 0.84, 0.72),
-	"Bone": Color(0.91, 0.87, 0.75),
+	"Bones": Color(0.83, 0.79, 0.67),
+	"Bone": Color(0.85, 0.81, 0.69),
 	"Red": Color(0.58, 0.20, 0.18),
 	"Gold": Color(0.74, 0.57, 0.26),
 	"Couch_Blue": Color(0.30, 0.36, 0.44),
@@ -56,7 +59,7 @@ const PALETTE := {
 const CLOTH_KEYS := ["Main", "Red", "Couch_Blue", "Fabric", "Cloth"]
 
 ## Bone is bone whatever the cloth is tinted, so ornaments ignore the tint.
-const BONE_TINT := Color(0.90, 0.86, 0.74)
+const BONE_TINT := Color(0.84, 0.80, 0.68)
 
 ## Shared per-colour materials. Every placement reuses these, so the whole
 ## valley's bone cloth costs a handful of material objects instead of one per

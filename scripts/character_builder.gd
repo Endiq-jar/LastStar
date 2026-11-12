@@ -12,7 +12,7 @@ const BoneCloth := preload("res://scripts/bone_cloth.gd")
 ## Sun-bleached linen. Every piece of cloth in the world is tinted towards this
 ## colour, so the character's cape and hem read as cut from the same bolt as the
 ## banners hanging in the ruins.
-const BONE_LINEN := Color(0.88, 0.85, 0.77)
+const BONE_LINEN := Color(0.78, 0.75, 0.66)
 
 
 static func _toon(color: Color, rim: float = 0.35) -> ShaderMaterial:
