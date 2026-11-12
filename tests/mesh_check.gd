@@ -42,20 +42,24 @@ func _ready() -> void:
 			failures.append("flower '%s' index count %d is not a triangle list" % [n, idx.size()])
 		total_tris += idx.size() / 3
 		var bb := _bounds(verts)
-		# Round to a centimetre: two silhouettes that agree to 1 cm at these
-		# sizes are the same silhouette, whatever the table calls them.
+		# The signature is a hash of the actual vertex cloud, not the bounding
+		# box.
 		#
-		# The triangle count is part of the signature, not decoration. Extent
-		# alone called an 18-petal flat umbel identical to a 5-petal star because
-		# both reach the same radius - which is exactly the "twenty names, one
-		# shape" failure this check exists to catch, only with the numbers
-		# matching by coincidence. Structure is what distinguishes them.
-		var sig := "%.2f_%.2f_%.2f_%d" % [bb.size.x, bb.size.y, bb.size.z, idx.size() / 3]
+		# Two attempts at this were wrong in the same direction. A bounding box
+		# cannot see the difference between a 5-petal star and an 18-floret umbel
+		# unless they happen to differ in size, so it reported them identical at
+		# 0.13_0.26_0.13 while they had 174 and 870 vertices respectively. Adding
+		# the triangle count did not help either: SurfaceTool produced 80
+		# triangles for all twenty, so the extra field was a constant and the
+		# collision survived. Both versions measured a property of the mesh's
+		# envelope and called it the shape.
+		var sig := _shape_signature(verts)
 		# Printed for every flower, not just on failure. The check reported a
 		# duplicate on code that should not produce one, and the message named the
 		# two flowers without saying what was equal - so the next run could not
 		# distinguish a bad table from a bad signature from a stale script.
-		print("MESH_CHECK sig %-10s %s verts=%d" % [n, sig, verts.size()])
+		print("MESH_CHECK sig %-10s %s verts=%d tris=%d" % [
+			n, sig, verts.size(), idx.size() / 3])
 		if seen.has(sig):
 			failures.append("flower '%s' is geometrically identical to '%s'" % [n, seen[sig]])
 		seen[sig] = n
@@ -142,3 +146,24 @@ func _bounds(verts: PackedVector3Array) -> AABB:
 	for v in verts:
 		bb = bb.expand(v)
 	return bb
+
+
+## A stable hash of a vertex cloud, quantised to a millimetre.
+##
+## Two flowers are "the same flower" if their vertices land in the same places -
+## that is what a player sees, and it is what the twenty-silhouettes requirement
+## actually asks for. A bounding box or a triangle count cannot answer that.
+func _shape_signature(verts: PackedVector3Array) -> String:
+	var acc := 2166136261
+	for v in verts:
+		# Quantise before hashing. Exact float equality is meaningless here -
+		# two petals built from slightly different parameters are visually
+		# identical at 1 mm, and flagging them would be noise.
+		var a := int(round(v.x * 1000.0))
+		var b := int(round(v.y * 1000.0))
+		var c := int(round(v.z * 1000.0))
+		acc = (acc ^ a) * 16777619
+		acc = (acc ^ b) * 16777619
+		acc = (acc ^ c) * 16777619
+		acc = acc & 0x7fffffff
+	return "%04x_%08x" % [verts.size(), acc]
