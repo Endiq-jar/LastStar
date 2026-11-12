@@ -8,6 +8,13 @@ extends Node3D
 const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
 const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
 
+## The leaf sheet is a horizontal strip of five leaves: green, red, pink, brown,
+## yellow. Only the green one belongs on foliage, so every leaf-textured surface
+## is pinned to that fifth rather than sampling the whole strip - which is what
+## put red and orange flecks on the pine cones.
+const LEAF_GREEN := Rect2(0.0, 0.0, 0.2, 1.0)
+const LEAF_GREEN_B := Rect2(0.02, 0.0, 0.16, 1.0)
+
 const TREE_COUNT := 170
 const PINE_COUNT := 130
 const ROCK_COUNT := 100
@@ -174,7 +181,7 @@ func _pick(terrain: Node, rng: RandomNumberGenerator, min_h: float, max_h: float
 ## Surfaces are accumulated by hand rather than with SurfaceTool because this
 ## also has to carry vertex normals through the transform; SurfaceTool would
 ## flatten the trees' shading to whatever winding the tool happened to produce.
-func _append_arrays(arrays: Array, src: Array, xform: Transform3D) -> void:
+func _append_arrays(arrays: Array, src: Array, xform: Transform3D, uv_range: Variant = null) -> void:
 	var verts: PackedVector3Array = src[Mesh.ARRAY_VERTEX]
 	var norms: PackedVector3Array = src[Mesh.ARRAY_NORMAL]
 	var idx: PackedInt32Array = src[Mesh.ARRAY_INDEX] if src[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
@@ -190,8 +197,9 @@ func _append_arrays(arrays: Array, src: Array, xform: Transform3D) -> void:
 	# appears on it rather than collapsing to texel (0,0).
 	var uvs: PackedVector2Array = src[Mesh.ARRAY_TEX_UV] if src[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
 	if uvs.size() == verts.size():
+		var r: Rect2 = uv_range if uv_range is Rect2 else Rect2(Vector2.ZERO, Vector2.ONE)
 		for uv in uvs:
-			arrays[Mesh.ARRAY_TEX_UV].append(uv)
+			arrays[Mesh.ARRAY_TEX_UV].append(r.position + uv * r.size)
 	else:
 		for v in verts:
 			var wv := xform * v
@@ -278,8 +286,13 @@ func _merge_parts(parts: Array) -> ArrayMesh:
 		var xf: Transform3D = part[1]
 		if m == null or m.get_surface_count() == 0:
 			continue
+		# Optional fourth element: a Rect2 uv range. A source mesh with its own
+		# UVs (a CylinderMesh spans 0..1) samples the whole texture, which for the
+		# five-leaf strip means the red, pink and yellow leaves land on a pine
+		# cone. Pinning a part to one slice of the sheet is how a cone gets green.
+		var uv_range: Variant = part[3] if part.size() > 3 else null
 		var src := m.surface_get_arrays(0)
-		_append_arrays(arrays, src, xf)
+		_append_arrays(arrays, src, xf, uv_range)
 	return _arrays_to_mesh(arrays)
 
 
@@ -422,9 +435,9 @@ func _spawn_round_trees(terrain: Node) -> void:
 	# balls on sticks. The lobes stay, because they give the crown its mass and
 	# its shadow; the cards provide the outline and the leaves.
 	var lobes := [
-		[_make_sphere(1.5, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 3.3, 0))],
-		[_make_sphere(1.2, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 4.15, 0))],
-		[_make_sphere(0.9, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 5.0, 0))],
+		[_make_sphere(1.5, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 3.3, 0)), 0, LEAF_GREEN],
+		[_make_sphere(1.2, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 4.15, 0)), 0, LEAF_GREEN_B],
+		[_make_sphere(0.9, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 5.0, 0)), 0, LEAF_GREEN],
 	]
 	var canopy_a := _merge_parts(lobes)
 	# A slightly lighter tint gets its own batch rather than a per-tree material.
@@ -480,14 +493,16 @@ func _spawn_round_trees(terrain: Node) -> void:
 	# this every one of these was a flat albedo_color and the two painted
 	# textures in assets/ were loaded by nothing at all.
 	_add_multimesh("BroadleafTrunks", trunk_mesh,
-		_toon_tex(Color(0.72, 0.62, 0.55), "res://assets/environment/trees/trunk.png", 0.28), trunk_xf)
+		_toon_tex(Color(1.15, 1.05, 0.95), "res://assets/environment/trees/trunk.png", 0.28), trunk_xf)
 	_add_multimesh("BroadleafCanopyA", canopy_a,
-		_toon_tex(Color(0.40, 0.72, 0.34), "res://assets/environment/leaves/leaf.png", 0.45), leaf_a_xf)
+		_toon_tex(Color(0.86, 1.18, 0.78), "res://assets/environment/leaves/leaf.png", 0.55), leaf_a_xf)
 	_add_multimesh("BroadleafCanopyB", canopy_b,
-		_toon_tex(Color(0.50, 0.82, 0.38), "res://assets/environment/leaves/leaf.png", 0.45), leaf_b_xf)
+		_toon_tex(Color(0.96, 1.26, 0.84), "res://assets/environment/leaves/leaf.png", 0.55), leaf_b_xf)
 	# The card shell is alpha-cut, so it needs the foliage shader rather than the
 	# opaque toon one.
-	var card_mat := VegPresets.material_for("leaves", 0.30, Color(0.84, 1.0, 0.80))
+	# Tint well above 1.0 so the cards, which are alpha-cut sprites over an already
+	# dark sun term, land as lit leaves rather than black cut-outs.
+	var card_mat := VegPresets.material_for("leaves", 0.30, Color(1.05, 1.30, 0.95))
 	card_mat.set_shader_parameter("albedo_texture", _load_tex("res://assets/environment/leaves/leaf.png"))
 	_add_multimesh("BroadleafCardsA", leaf_cards, card_mat, card_a_xf, false)
 	_add_multimesh("BroadleafCardsB", leaf_cards, card_mat, card_b_xf, false)
@@ -509,6 +524,7 @@ func _spawn_pines(terrain: Node) -> void:
 		cone_parts.append([
 			_make_cylinder(0.0, 1.5 - layer * 0.28, 1.5 - layer * 0.18, 8),
 			Transform3D(Basis(), Vector3(0, 2.2 + layer * 0.78, 0)),
+			0, LEAF_GREEN if layer % 2 == 0 else LEAF_GREEN_B,
 		])
 	var cone_mesh := _merge_parts(cone_parts)
 
@@ -538,12 +554,12 @@ func _spawn_pines(terrain: Node) -> void:
 		skirt_b_xf.append(cone_b_xf[i])
 
 	_add_multimesh("PineTrunks", trunk_mesh,
-		_toon_tex(Color(0.78, 0.66, 0.56), "res://assets/environment/trees/trunk_stripped.png", 0.26), trunk_xf)
+		_toon_tex(Color(1.10, 1.00, 0.90), "res://assets/environment/trees/trunk_stripped.png", 0.26), trunk_xf)
 	_add_multimesh("PineConesA", cone_mesh,
-		_toon_tex(Color(0.52, 0.86, 0.58), "res://assets/environment/leaves/leaf.png", 0.4), cone_a_xf)
+		_toon_tex(Color(0.92, 1.30, 0.94), "res://assets/environment/leaves/leaf.png", 0.5), cone_a_xf)
 	_add_multimesh("PineConesB", cone_mesh,
-		_toon_tex(Color(0.60, 0.94, 0.62), "res://assets/environment/leaves/leaf.png", 0.4), cone_b_xf)
-	var needle_mat := VegPresets.material_for("border_grass", 0.18, Color(0.78, 1.0, 0.76))
+		_toon_tex(Color(1.02, 1.40, 1.00), "res://assets/environment/leaves/leaf.png", 0.5), cone_b_xf)
+	var needle_mat := VegPresets.material_for("border_grass", 0.18, Color(1.00, 1.24, 0.92))
 	needle_mat.set_shader_parameter("albedo_texture", _load_tex("res://assets/environment/leaves/leaf.png"))
 	_add_multimesh("PineSkirtsA", skirt, needle_mat, skirt_a_xf, false)
 	_add_multimesh("PineSkirtsB", skirt, needle_mat, skirt_b_xf, false)
@@ -624,7 +640,7 @@ func _spawn_fallen_logs(terrain: Node) -> void:
 		basis = basis.scaled(Vector3(log_r, log_len, log_r))
 		xfs.append(Transform3D(basis, p + Vector3(0, log_r * 0.85, 0)))
 	_add_multimesh("FallenLogs", log_mesh,
-		_toon_tex(Color(0.86, 0.74, 0.62), "res://assets/environment/wood/wood.png", 0.18), xfs)
+		_toon_tex(Color(1.15, 1.05, 0.92), "res://assets/environment/wood/wood.png", 0.18), xfs)
 
 
 func _spawn_pebbles(terrain: Node) -> void:

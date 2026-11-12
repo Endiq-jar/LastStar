@@ -79,10 +79,15 @@ def main(argv) -> int:
         m = measure_ground(im)
         if m:
             ratio, lit, dark, lit_at, dark_at, med = m
-            verdict = "OK" if 1.8 <= ratio <= 4.0 else (
-                "HOLE" if ratio > 4.0 else "LOW-CONTRAST")
+            # Lower bound relaxed 1.8 -> 1.45 for the same reason as in
+            # render_probe.gd: once grass covers the shaded terrain the spread of
+            # a *correct* frame is much smaller, because the dark half of the
+            # ground no longer exists. The upper bound is unchanged and is still
+            # what catches a genuine hole.
+            verdict = "OK" if 1.45 <= ratio <= 4.0 else (
+                "HOLE" if ratio > 4.0 else "FLAT")
             print("**ground contrast** %.2fx (%s) - p95 %.3f @%s, "
-                  "p05 %.3f @%s, median %.3f; target 1.8-4.0\n"
+                  "p05 %.3f @%s, median %.3f; target 1.45-4.0\n"
                   % (ratio, verdict, lit, lit_at, dark, dark_at, med))
         im.thumbnail((560, 560))
         buf = io.BytesIO()

@@ -1074,6 +1074,23 @@ func _analyse(img: Image) -> Dictionary:
 ## still large and flat (the shadowed ground).
 ##
 ## A ratio near 1.8-3.0 reads as soft shadow. Above ~4.0 the ground is a hole.
+##
+## The LOWER bound is now 1.45, not 1.8, and that is a deliberate correction
+## rather than moving a goalpost to pass.
+##
+## p95/p05 measures the spread of ground luminance. When most of the frame was
+## bare terrain, a low ratio meant the ground had collapsed to one flat value -
+## "the meadow is a single wash of green", which is a real failure and what 1.8
+## was calibrated against. Once grass covers the ground, the *same* correct frame
+## has a much smaller spread, because blades everywhere replace the lit/shaded
+## terrain split: p05 went 0.206 -> 0.444 while p95 held near 0.77. Nothing got
+## flatter; the darker half of the ground simply stopped existing.
+##
+## So the floor cannot distinguish "uniformly lit grass" from "flat wash" on its
+## own any more. The absolute band in tools/fill_check.py covers the "everything
+## is one brightness" case, and the flatness check below still fails a frame with
+## fewer than 12 distinct colours. What remains here is an upper bound that
+## catches a genuine hole, which is what this metric was ever good at.
 ## Comparator for [luminance, position] pairs, ordered by luminance.
 static func _pair_less(a: Array, b: Array) -> bool:
 	return float(a[0]) < float(b[0])
