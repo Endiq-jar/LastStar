@@ -27,6 +27,19 @@ uniform sampler2D albedo_texture : source_color, filter_linear_mipmap, repeat_di
 uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
 
 uniform vec3 base_tint : source_color = vec3(1.0);
+// 1.0 = solid geometry (rocks, trunks), 0.0 = foliage cards.
+//
+// The shared foliage shader assumes every surface is an alpha-tested card driven
+// by a wind field and lit with fake subsurface scatter. None of that is true of
+// a boulder: it has real thickness, it does not sway, and its texture is opaque.
+// Rather than maintain a second near-identical shader, the three card-specific
+// behaviours are switched off by this uniform. Default 0.0 keeps every existing
+// foliage material behaving exactly as before.
+uniform float solid : hint_range(0.0, 1.0) = 0.0;
+// Tiles the albedo. A card draws one sprite across its quad and wants UV 0..1; a
+// boulder needs the rock texture repeated several times across its faces or it
+// smears one stretched image over the whole rock.
+uniform vec2 uv_scale = vec2(1.0, 1.0);
 // Per-instance brightness variation, driven from INSTANCE_CUSTOM.
 uniform float tint_variation : hint_range(0.0, 0.4) = 0.12;
 uniform vec3 shadow_fill : source_color = vec3(0.22, 0.30, 0.22);
@@ -45,7 +58,7 @@ void vertex() {
 	float h_norm = clamp(VERTEX.y + 0.5, 0.0, 1.0);
 	float local_h = max(VERTEX.y + 0.5, 0.0);
 
-	world_pos.xyz += wind_offset(world_pos, local_h, h_norm, TIME);
+	world_pos.xyz += wind_offset(world_pos, local_h, h_norm, TIME) * (1.0 - solid);
 
 	// Back to local space for the built-in pipeline.
 	VERTEX = (inverse(MODEL_MATRIX) * vec4(world_pos, 1.0)).xyz;
@@ -55,10 +68,14 @@ void vertex() {
 }
 
 void fragment() {
-	vec4 tex = texture(albedo_texture, UV);
+	vec4 tex = texture(albedo_texture, UV * uv_scale);
 	// Scissor. On tile-based mobile GPUs the fragment is killed before any
 	// shading work, which is why this is far cheaper than blending.
-	if (tex.a < alpha_cut) {
+	//
+	// Skipped for solid geometry: the rock texture is opaque, and running a
+	// cutout test against it would punch holes wherever the texture happened to
+	// be dark, because a greyscale rock has no meaningful alpha semantics.
+	if (solid < 0.5 && tex.a < alpha_cut) {
 		discard;
 	}
 
@@ -67,17 +84,23 @@ void fragment() {
 
 	// Two-sided: a card facing away gets a flat fill rather than going black.
 	// FRONT_FACING is a fragment built-in in Godot 4.
+	//
+	// Solid geometry is one-sided and closed. Adding a backface fill to a rock
+	// would light its interior, and a translucent rock reads as jade.
 	if (!FRONT_FACING) {
-		EMISSION = ALBEDO * shadow_fill * backface_lift;
+		EMISSION = ALBEDO * shadow_fill * backface_lift * (1.0 - solid);
 	}
 
 	// Fake translucency: light bleeding through a thin blade. BACKLIGHT is
-	// inout vec3 and is applied by the built-in lighting model.
-	BACKLIGHT = vec3(0.42, 0.55, 0.30);
+	// inout vec3 and is applied by the built-in lighting model. A boulder does
+	// not transmit light, and the green backlight turned the grey rock into
+	// green-lit stone the first time it was left on.
+	BACKLIGHT = mix(vec3(0.42, 0.55, 0.30), vec3(0.10, 0.10, 0.10), solid);
 
-	ROUGHNESS = 0.88;
-	SPECULAR = 0.08;
+	// Rock is rougher than a leaf and its faces catch a harder highlight.
+	ROUGHNESS = mix(0.88, 0.96, solid);
+	SPECULAR = mix(0.08, 0.04, solid);
 	// Rim is cheap view-dependent edge light. RIM_TINT must be a float.
-	RIM = rim_strength;
+	RIM = rim_strength * (1.0 - solid * 0.7);
 	RIM_TINT = 0.35;
 }

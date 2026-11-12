@@ -82,15 +82,105 @@ static func crossed() -> Mesh:
 
 ## A low-poly faceted sphere, for rocks and pebbles.
 static func rock(segments: int = 8, rings: int = 5) -> Mesh:
-	var key := "rock_%d_%d" % [segments, rings]
-	if not _cache.has(key):
-		var sphere := SphereMesh.new()
-		sphere.radius = 0.5
-		sphere.height = 1.0
-		sphere.radial_segments = segments
-		sphere.rings = rings
-		_cache[key] = sphere
-	return _cache[key]
+	var key := "rockv2_%d_%d" % [segments, rings]
+	if _cache.has(key):
+		return _cache[key]
+	# A faceted, irregular boulder rather than a sphere.
+	#
+	# The previous rock was a SphereMesh, and at a distance a sphere is a round
+	# green-grey blob that reads as a bush. Real rocks are the one thing in a
+	# meadow with flat faces and hard edges, and that is most of how the eye
+	# recognises them - so the mesh is built from a low-frequency noise-displaced
+	# icosphere-style shell and then left FLAT-SHADED on purpose. Smooth normals
+	# over the displaced vertices would round it straight back into a pebble.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = segments * 31 + rings
+	var verts: Array[Vector3] = []
+	# Rings of a hemisphere-ish ellipsoid, squashed vertically so it sits in the
+	# ground like a boulder rather than floating like a ball.
+	var lat_steps := maxi(3, rings)
+	var lon_steps := maxi(4, segments)
+	for i in range(lat_steps + 1):
+		var v := float(i) / float(lat_steps)
+		var phi := v * PI * 0.5
+		var ring: Array[Vector3] = []
+		var radius := cos(phi)
+		var y := sin(phi) * 0.62
+		for j in range(lon_steps):
+			var u := float(j) / float(lon_steps)
+			var theta := u * TAU
+			# Displace each vertex outward by a hash of its own index. Deterministic
+			# per mesh, so a layer's rocks look the same every run.
+			var jitter := 0.82 + rng.randf() * 0.36
+			var p := Vector3(cos(theta) * radius * jitter, y * (0.9 + rng.randf() * 0.2), sin(theta) * radius * jitter)
+			ring.append(p)
+		verts.append_array(ring)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Flat normal for every triangle: accumulate, emit, then assign one normal per
+	# face by writing the tri and setting the normal with set_normal before each
+	# vertex.
+	for i in range(lat_steps):
+		var row_a := i * lon_steps
+		var row_b := (i + 1) * lon_steps
+		for j in range(lon_steps):
+			var j2 := (j + 1) % lon_steps
+			var a := verts[row_a + j]
+			var b := verts[row_a + j2]
+			var c := verts[row_b + j]
+			var d := verts[row_b + j2]
+			_flat_tri(st, a, b, c)
+			if i < lat_steps - 1:
+				_flat_tri(st, b, d, c)
+	var mesh := st.commit()
+	_cache[key] = mesh
+	return mesh
+
+
+## Emits one triangle with a single face normal, giving hard faceted shading.
+static func _flat_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
+	var n := (b - a).cross(c - a)
+	if n.length_squared() < 1e-12:
+		return
+	n = n.normalized()
+	# UVs from the horizontal plane: this is what lets a rock sample the painted
+	# rock atlas. Without them the surface samples texel (0,0) and the boulder is
+	# one flat colour, which is the bug that made the flowers colourless.
+	var ua := Vector2(a.x, a.z) * 1.6 + Vector2(0.5, 0.5)
+	var ub := Vector2(b.x, b.z) * 1.6 + Vector2(0.5, 0.5)
+	var uc := Vector2(c.x, c.z) * 1.6 + Vector2(0.5, 0.5)
+	st.set_normal(n); st.set_uv(ua); st.add_vertex(a)
+	st.set_normal(n); st.set_uv(ub); st.add_vertex(b)
+	st.set_normal(n); st.set_uv(uc); st.add_vertex(c)
+
+
+## A boulder large enough to be a landmark rather than ground clutter.
+static func boulder() -> Mesh:
+	if _cache.has("boulder"):
+		return _cache["boulder"]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Three overlapping faceted rocks of different sizes, so the silhouette is
+	# broken rather than one clean lump.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var pieces := [
+		[Vector3.ZERO, Vector3(1.0, 0.72, 0.92), 0.0],
+		[Vector3(0.62, -0.12, 0.35), Vector3(0.62, 0.46, 0.58), 1.4],
+		[Vector3(-0.48, -0.10, -0.30), Vector3(0.52, 0.40, 0.50), 2.9],
+	]
+	for piece in pieces:
+		var base := rock(9, 4)
+		var offset: Vector3 = piece[0]
+		var scale_v: Vector3 = piece[1]
+		var spin: float = piece[2]
+		var b := Basis(Vector3.UP, spin) * Basis(Vector3.RIGHT, rng.randf_range(-0.15, 0.15))
+		b = b.scaled(scale_v)
+		_append_mesh(st, base, Transform3D(b, offset))
+	st.generate_normals()
+	var mesh := st.commit()
+	_cache["boulder"] = mesh
+	return mesh
 
 
 ## A rounded foliage lobe, used to assemble bushes from a handful of blobs.
@@ -506,7 +596,20 @@ static func _append_mesh(st: SurfaceTool, src: Mesh, xform: Transform3D,
 				u0 = uv_patch.position + uvs[i0] * uv_patch.size
 				u1 = uv_patch.position + uvs[i1] * uv_patch.size
 				u2 = uv_patch.position + uvs[i2] * uv_patch.size
+			else:
+				# Source has no UVs of its own (the faceted rock does not - its
+				# normals are per-face and it is textured by a planar projection).
+				# Project from the horizontal plane instead of leaving every vertex
+				# at (0,0), which would sample one texel and draw a flat grey lump.
+				u0 = _planar_uv(verts[i0], uv_patch)
+				u1 = _planar_uv(verts[i1], uv_patch)
+				u2 = _planar_uv(verts[i2], uv_patch)
 			_tri(st, xform, verts[i0], verts[i1], verts[i2], u0, u1, u2)
+
+
+## Horizontal planar UV for meshes that carry none of their own.
+static func _planar_uv(v: Vector3, patch: Rect2) -> Vector2:
+	return patch.position + Vector2(v.x, v.z) * patch.size
 
 
 static func _tri(st: SurfaceTool, xf: Transform3D, a: Vector3, b: Vector3, c: Vector3,

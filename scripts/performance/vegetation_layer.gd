@@ -106,6 +106,8 @@ func _resolve_mesh() -> Mesh:
 			return VegMeshes.lobe()
 		"rock":
 			return VegMeshes.rock()
+		"boulder":
+			return VegMeshes.boulder()
 		"bush":
 			return VegMeshes.bush_cluster(seed_for_mesh)
 		"leaf":

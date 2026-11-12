@@ -15,6 +15,7 @@ const VegetationDemoScript := preload("res://scripts/performance/vegetation_demo
 const VegWindScript := preload("res://scripts/performance/vegetation_wind.gd")
 const VegLayerScript := preload("res://scripts/performance/vegetation_layer.gd")
 const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
+const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
 
 const ENEMY_COUNT := 14
 
@@ -556,8 +557,17 @@ func _grade_env(env: Environment, warmth: float = 0.5) -> void:
 	if env == null:
 		return
 	env.adjustment_enabled = true
-	env.adjustment_saturation = lerpf(1.04, 1.12, warmth)
-	env.adjustment_contrast = lerpf(1.08, 1.13, warmth)
+	# Raised to give the "more saturated" look, but the ceiling is deliberate.
+	#
+	# The old warning - that global saturation clips the most saturated surface in
+	# the frame while leaving everything else alone - is still true and is why this
+	# is 1.24 and not 1.45. The excess saturation the user is asking for comes from
+	# the albedo (the greens were moved to a true green hue, and the rock now has
+	# real texture instead of flat grey), so the grade only has to finish the job.
+	# Pushed further, the meadow clips to a single flat green and the rock does not
+	# move at all - the specific failure the previous comment was written about.
+	env.adjustment_saturation = lerpf(1.18, 1.27, warmth)
+	env.adjustment_contrast = lerpf(1.10, 1.15, warmth)
 	env.adjustment_brightness = lerpf(1.0, 1.02, warmth)
 
 
@@ -605,9 +615,8 @@ func _build_spawn_glade() -> void:
 	altar.add_child(disc)
 
 	var stone := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(1.0, 2.2, 0.6)
-	stone.mesh = box
+	# A monolith with a taper, not a 1x2.2x0.6 box.
+	stone.mesh = VegMeshes.trunk(2.2, 0.55, 0.30, 0.10, 5)
 	var sm := StandardMaterial3D.new()
 	# 0.82 albedo under a 1.3-energy sun clipped to white; these read as blank
 	# white slabs. A weathered grey stone matches the rock band on the terrain.
@@ -622,11 +631,15 @@ func _build_spawn_glade() -> void:
 	for i in range(6):
 		var a := TAU * float(i) / 6.0
 		var pillar := MeshInstance3D.new()
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.9, _rng.randf_range(3.4, 5.2), 0.9)
+		# A tapered, slightly leaning stone column instead of a box. Still
+		# rectangular in plan - these are built ruins, not boulders - but with a
+		# taper, a lean and a real rock texture, which is the difference between
+		# "standing stone" and "grey rectangle".
+		var ph := _rng.randf_range(3.4, 5.2)
+		var mesh := VegMeshes.trunk(ph, 0.46, 0.18, _rng.randf_range(-0.06, 0.06), 6)
 		pillar.mesh = mesh
 		pillar.material_override = sm
-		pillar.position = center + Vector3(cos(a) * 9.0, mesh.size.y * 0.5 - 0.4, sin(a) * 9.0)
+		pillar.position = center + Vector3(cos(a) * 9.0, -0.4, sin(a) * 9.0)
 		pillar.rotation_degrees = Vector3(0, rad_to_deg(a) + 8.0, _rng.randf_range(-5.0, 5.0))
 		_props.add_child(pillar)
 
@@ -634,8 +647,12 @@ func _build_spawn_glade() -> void:
 		body.collision_layer = 1
 		body.collision_mask = 0
 		var col := CollisionShape3D.new()
+		# BoxShape sized from the column's own height and radius. The old code read
+		# `mesh.size`, which only exists on BoxMesh - a generated ArrayMesh has no
+		# such property, so this had to be rewritten with the pillar rather than
+		# left to fail at runtime.
 		var shape := BoxShape3D.new()
-		shape.size = mesh.size
+		shape.size = Vector3(0.92, ph, 0.92)
 		col.shape = shape
 		body.add_child(col)
 		pillar.add_child(body)
@@ -648,10 +665,44 @@ func _build_spawn_glade() -> void:
 	add_child(light)
 
 
+## Weathered stone, textured and triplanar.
+##
+## Every stone structure in the world used a bare StandardMaterial3D with a flat
+## albedo, on BoxMesh primitives - which is why the altar ring and the ruin gates
+## read as grey cardboard rectangles standing in the grass. A box with no texture
+## at all is the single most obvious "placeholder" shape there is.
+##
+## The texture is the same painted rock the terrain uses, sampled triplanar so the
+## boxes get rock detail on all six faces without any per-face UV work, and
+## dark_notch vertex-colouring is off because these meshes have no vertex colours.
+func _stone_material() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.60, 0.62, 0.66)
+	m.roughness = 0.92
+	m.metallic = 0.0
+	var tex := _load_stone_tex("res://textures/terrain/rock.png")
+	if tex != null:
+		m.albedo_texture = tex
+		m.uv1_triplanar = true
+		# 0.35 tiles the 512px rock roughly every 3 m, which reads as boulder-scale
+		# texture on a 1 m pillar rather than as fine noise.
+		m.uv1_scale = Vector3(0.35, 0.35, 0.35)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return m
+
+
+func _load_stone_tex(path: String) -> Texture2D:
+	if not ResourceLoader.exists(path):
+		push_warning("LastStar: missing stone texture " + path)
+		return null
+	var t := load(path)
+	if t is Texture2D:
+		return t as Texture2D
+	return null
+
+
 func _scatter_landmarks() -> void:
-	var stone_mat := StandardMaterial3D.new()
-	stone_mat.albedo_color = Color(0.56, 0.58, 0.63)
-	stone_mat.roughness = 0.85
+	var stone_mat := _stone_material()
 
 	# Wind arches: tall broken gates that read like Genshin's ruins.
 	for i in range(7):
@@ -670,13 +721,13 @@ func _scatter_landmarks() -> void:
 		_props.add_child(gate)
 		for side in [-1.0, 1.0]:
 			var pillar := MeshInstance3D.new()
-			var box := BoxMesh.new()
-			box.size = Vector3(1.4, 8.5, 1.4)
-			pillar.mesh = box
+			pillar.mesh = VegMeshes.trunk(8.5, 0.72, 0.22, 0.05 * side, 7)
 			pillar.material_override = stone_mat
-			pillar.position = Vector3(2.6 * side, 4.25, 0)
+			pillar.position = Vector3(2.6 * side, 0.0, 0)
 			gate.add_child(pillar)
 		var lintel := MeshInstance3D.new()
+		# The lintel stays a box - a fallen gate's crossbeam was a cut block - but
+		# it now carries the rock texture like the pillars it sits on.
 		var box2 := BoxMesh.new()
 		box2.size = Vector3(7.0, 1.1, 1.6)
 		lintel.mesh = box2
@@ -972,6 +1023,15 @@ func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 		# Variant selection for the generated cluster meshes. `hash` is stable
 		# within a run but not across platforms, so it is only used to pick a
 		# variant, never for placement.
+		# Solid geometry needs three changes from a foliage card: no alpha cutout,
+		# no wind sway, and a tiled albedo. Set here rather than in the material
+		# cache because material_for() is shared per (species, wind, tint) and the
+		# rock texture is not interchangeable with a leaf sprite.
+		var solid := spec["mesh"] in ["rock", "boulder", "trunk"]
+		if solid:
+			mat.set_shader_parameter("solid", 1.0)
+			mat.set_shader_parameter("uv_scale", Vector2(2.2, 2.2))
+			mat.set_shader_parameter("rim_strength", 0.18)
 		layer.set("mesh_variant", absi(hash(spec["name"])) % 8)
 		layer.set("seed_for_mesh", absi(hash(spec["name"])) % 97 + 1)
 		layer.set("leaf_variety", LEAF_VARIETIES[absi(hash(spec["name"])) % LEAF_VARIETIES.size()])

@@ -181,6 +181,64 @@ func _ready() -> void:
 			failures.append("leaf_cluster('%s') has only %d vertices" % [k, lv2.size()])
 	print("MESH_CHECK clusters distinct=%d/8" % csigs.size())
 
+	# Rocks. The previous rock was a SphereMesh, which is the one shape a boulder
+	# must not be - and it passed every check here because nothing tested it.
+	print("MESH_CHECK rocks")
+	var rock_mesh: Mesh = V.rock(9, 4)
+	if rock_mesh == null or rock_mesh.get_surface_count() == 0:
+		failures.append("rock produced no surface")
+	else:
+		var rv: PackedVector3Array = (rock_mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var rn: PackedVector3Array = (rock_mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_NORMAL]
+		var rb := _bounds(rv)
+		print("MESH_CHECK rock verts=%d extent=(%.2f,%.2f,%.2f)" % [rv.size(), rb.size.x, rb.size.y, rb.size.z])
+		if rv.size() < 60:
+			failures.append("rock has only %d vertices - not faceted" % rv.size())
+		# Squashed, not spherical: boulders sit in the ground.
+		if rb.size.y > rb.size.x * 0.95:
+			failures.append("rock is as tall as it is wide (%.2f vs %.2f) - looks like a sphere" % [rb.size.y, rb.size.x])
+		# Faceted shading: a rock built with flat normals has one normal per face,
+		# so adjacent vertices share a normal rather than averaging. Count distinct
+		# normals - a smooth sphere has far fewer than a hard-edged one.
+		var distinct := {}
+		for i in range(0, rn.size(), 3):
+			distinct["%.2f_%.2f_%.2f" % [rn[i].x, rn[i].y, rn[i].z]] = true
+		print("MESH_CHECK rock faces=%d distinct_normals=%d" % [rv.size() / 3, distinct.size()])
+		if distinct.size() < 20:
+			failures.append("rock has only %d distinct normals - it is smooth-shaded, not faceted" % distinct.size())
+		# Every triangle must have a real area, or the rock has invisible holes.
+		for i in range(0, rv.size() - 2, 3):
+			if (rv[i + 1] - rv[i]).cross(rv[i + 2] - rv[i]).length_squared() < 1e-10:
+				failures.append("rock contains a degenerate triangle at %d" % i)
+				break
+
+	var boulder_mesh: Mesh = V.boulder()
+	if boulder_mesh == null or boulder_mesh.get_surface_count() == 0:
+		failures.append("boulder produced no surface")
+	else:
+		var bv2: PackedVector3Array = (boulder_mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		print("MESH_CHECK boulder verts=%d" % bv2.size())
+		if bv2.size() < 150:
+			failures.append("boulder has only %d vertices - the pieces did not compose" % bv2.size())
+		for x in bv2:
+			if not (is_finite(x.x) and is_finite(x.y) and is_finite(x.z)):
+				failures.append("boulder contains a non-finite vertex")
+				break
+		# Must carry UVs, or it samples one texel of the rock texture and is a flat
+		# grey shape - the exact bug the flowers had.
+		var bu: PackedVector2Array = (boulder_mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+		if bu.size() != bv2.size():
+			failures.append("boulder has no UVs (%d uvs vs %d verts) - it cannot be textured" % [bu.size(), bv2.size()])
+		else:
+			var uvmin := bu[0]
+			var uvmax := bu[0]
+			for u in bu:
+				uvmin = Vector2(minf(uvmin.x, u.x), minf(uvmin.y, u.y))
+				uvmax = Vector2(maxf(uvmax.x, u.x), maxf(uvmax.y, u.y))
+			print("MESH_CHECK boulder uv_span=(%.2f,%.2f)" % [(uvmax - uvmin).x, (uvmax - uvmin).y])
+			if (uvmax - uvmin).length() < 0.1:
+				failures.append("boulder UVs are collapsed - the texture would be one flat colour")
+
 	if failures.is_empty():
 		print("MESH_CHECK OK")
 		get_tree().quit(0)

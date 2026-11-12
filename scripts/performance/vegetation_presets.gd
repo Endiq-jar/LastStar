@@ -13,7 +13,14 @@ const TEX_BORDER := "res://assets/environment/grass/border_grass.png"
 const TEX_FLOWERS := "res://assets/environment/flowers/flowers.png"
 const TEX_LEAF := "res://assets/environment/leaves/leaf.png"
 const TEX_BUSH := "res://assets/environment/bushes/bush.png"
-const TEX_ROCKS := "res://assets/environment/rocks/rocks.png"
+# The rocks.png and pebbels.png atlases are alpha-cutout sprite sheets: chunks of
+# transparent black between the painted stones. Sampling one on solid geometry
+# smears dark gaps across the surface and a cutout test would punch holes in the
+# rock wherever the sheet is transparent. This is a separate seamless albedo built
+# from the terrain's own rock paint, for use as a surface texture rather than as a
+# billboard sheet.
+const TEX_ROCK_SURFACE := "res://assets/environment/rocks/r_tex_rocks.png"
+const TEX_ROCKS := TEX_ROCK_SURFACE
 const TEX_PEBBLES := "res://assets/environment/pebbles/pebbels.png"
 
 ## One shared material per species. Materials are shared deliberately: a
@@ -73,14 +80,22 @@ static func species() -> Array:
 			# 0.42 m cluster made flowers under 2 cm tall - they rendered as the
 			# pale specks visible in the meadow and nothing else. Near 1.0 the
 			# authored height survives.
-			"hmin": 0.85, "hmax": 1.25, "radius": 3},
+			"hmin": 1.15, "hmax": 1.70, "radius": 3},
 		{"name": "bush", "tex": TEX_BUSH, "density": 0.035,
 			"wind": 0.08, "tint": Color(1.0, 1.0, 1.0), "slope": 0.45, "mesh": "bush",
-			"hmin": 1.35, "hmax": 2.30, "radius": 4},
+			"hmin": 1.60, "hmax": 2.70, "radius": 4},
 		{"name": "leaves", "tex": TEX_LEAF, "density": 0.12,
 			"wind": 0.34, "tint": Color(1.0, 1.0, 1.0), "slope": 0.40, "mesh": "leaf",
-			"hmin": 0.70, "hmax": 1.20, "radius": 2},
-		{"name": "pebbles", "tex": TEX_PEBBLES, "density": 0.22, "hmin": 0.12, "hmax": 0.26,
+			"hmin": 1.10, "hmax": 1.80, "radius": 2},
+		{"name": "pebbles", "tex": TEX_ROCK_SURFACE, "density": 0.26, "hmin": 0.30, "hmax": 0.62,
 			"wind": 0.0, "tint": Color(1.0, 1.0, 1.0), "slope": 0.70, "mesh": "rock",
 			"radius": 2},
+		# Boulders. Absent entirely before this: the only stones in the world were
+		# 12-26 cm pebbles and the ruin architecture, so the meadow had no mid-scale
+		# rock at all and read as a bare carpet. 1.6-3.1 m puts them at roughly the
+		# player's height to twice it, which is the size that actually shapes a
+		# hillside's silhouette.
+		{"name": "rocks", "tex": TEX_ROCKS, "density": 0.010, "hmin": 1.6, "hmax": 3.1,
+			"wind": 0.0, "tint": Color(1.0, 1.0, 1.0), "slope": 0.85, "mesh": "boulder",
+			"radius": 3},
 	]

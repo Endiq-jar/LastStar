@@ -199,10 +199,41 @@ func _build_chunk(key: Vector2i) -> void:
 	var height_scale := 1.0 + clampf(float(dist) * 0.045, 0.0, 0.22)
 	count = maxi(1, int(round(float(count) * _density)))
 	_tier_counts[count] = int(_tier_counts.get(count, 0)) + 1
+	# Placement runs in tufts, not independent blades.
+	#
+	# Every blade was an independent uniform random point, which is the definition
+	# of a statistically flat carpet: no clumping, no gaps, no scale between a
+	# single blade and the whole chunk. Real grass grows in tufts, and at the
+	# distances this field is seen the tuft is the unit the eye reads - a blade is
+	# sub-pixel past about 15 m.
+	#
+	# So each iteration drops a tuft centre on the noise field and then places a
+	# small cluster of blades around it. The total blade count is unchanged, so
+	# this costs nothing; what changes is that density now varies at 1 m scale as
+	# well as at the 40 m scale of the existing _noise patches.
+	var tuft_size := 3 + int(rng.randf() * 5.0)
+	var tuft_radius := 0.16 + rng.randf() * 0.30
+	var cx := origin_x + rng.randf() * CHUNK_SIZE
+	var cz := origin_z + rng.randf() * CHUNK_SIZE
+	var in_tuft := 0
 	for i in range(count):
 		_tried += 1
-		var x := origin_x + rng.randf() * CHUNK_SIZE
-		var z := origin_z + rng.randf() * CHUNK_SIZE
+		# Start a new tuft once this one is full, or immediately on the first blade.
+		# A tuft whose centre lands on rejected ground simply places nothing, which
+		# is correct - a tuft on a cliff is not grass.
+		if in_tuft >= tuft_size:
+			in_tuft = 0
+			tuft_size = 3 + int(rng.randf() * 5.0)
+			tuft_radius = 0.16 + rng.randf() * 0.30
+			cx = origin_x + rng.randf() * CHUNK_SIZE
+			cz = origin_z + rng.randf() * CHUNK_SIZE
+		in_tuft += 1
+		# Offset within the tuft, denser toward the centre: a tuft is a bundle
+		# rising from one root, not a disc of grass cut with a cookie cutter.
+		var ang := rng.randf() * TAU
+		var rad := tuft_radius * pow(rng.randf(), 0.65)
+		var x := cx + cos(ang) * rad
+		var z := cz + sin(ang) * rad
 		# surface_height_at(), not get_height_at(): the grass has to sit on the
 		# bumpy mesh the camera actually sees, not on the smooth analytic field
 		# the collision uses. Those differ by up to the sagitta of a 3 m triangle,
@@ -230,8 +261,15 @@ func _build_chunk(key: Vector2i) -> void:
 		if h < SEA_MARGIN:
 			_rej_water += 1
 			continue
-		var s := rng.randf_range(0.75, 1.45) * height_scale
-		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s))
+		# Outer blades of a tuft are shorter and lean outward; the tallest blades
+		# are at the centre. This is what stops a tuft reading as a cylinder of
+		# identical quad cards.
+		var centre_bias := 1.0 - clampf(rad / maxf(tuft_radius, 0.001), 0.0, 1.0)
+		var s := rng.randf_range(0.70, 1.42) * height_scale * (0.82 + centre_bias * 0.38)
+		var lean := (1.0 - centre_bias) * 0.22
+		var basis := Basis(Vector3.UP, ang + rng.randf_range(-0.5, 0.5))
+		basis = basis * Basis(Vector3(cos(ang), 0.0, sin(ang)), lean)
+		basis = basis.scaled(Vector3(s, s, s))
 		# The quad is centred on its origin, so it has to be lifted by half its
 		# height (times the instance scale) or the bottom half sinks into the
 		# ground and the tuft reads as half a blade.

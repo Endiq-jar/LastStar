@@ -18,8 +18,12 @@ uniform sampler2D rock_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D sand_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 
-uniform vec4 meadow_tint : source_color = vec4(0.235, 0.335, 0.175, 1.0);
-uniform vec4 meadow_deep : source_color = vec4(0.115, 0.195, 0.115, 1.0);
+// Hue-shifted to true green (~120 degrees) to match the grass field. The meadow
+// used a yellow-green tint and the rendered frame's dominant hue bin confirmed
+// it: the terrain and the blades were both leaning straw, and moving only the
+// blades would have put a green carpet on a yellow hillside.
+uniform vec4 meadow_tint : source_color = vec4(0.205, 0.340, 0.180, 1.0);
+uniform vec4 meadow_deep : source_color = vec4(0.105, 0.205, 0.118, 1.0);
 // Slightly warm grey. A neutral 0.42 grey under a cool sky turns every cliff the
 // same slate blue and the mountains lose all separation from the sky behind them.
 uniform vec4 rock_tint : source_color = vec4(0.40, 0.38, 0.36, 1.0);
@@ -121,7 +125,7 @@ void fragment() {
 	// The dry blend is nearly as weak as it can be while still breaking up the
 	// field. At 0.10 with a lighter yellow it painted large acid-yellow blotches
 	// across the meadow that read as camo, not as sun-bleached grass.
-	grass = mix(grass, vec3(0.34, 0.36, 0.19), dry * 0.06);
+	grass = mix(grass, vec3(0.325, 0.355, 0.190), dry * 0.05);
 	// Hue and value variety, which is what separates a painted valley from a
 	// single flat wash of green. Genshin's fields run from a warm yellow-green on
 	// the sunlit crowns to a cool blue-green in the hollows, and the transition

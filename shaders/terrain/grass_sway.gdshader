@@ -25,9 +25,22 @@ render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 // blue was already the weakest channel - so the lit result landed at rgb(82,163,9),
 // a pure hue-92 lime with no blue left in it at all. Keeping blue at roughly half
 // of green survives the warm light and reads as the soft green of lit grass.
-uniform vec4 grass_color : source_color = vec4(0.115, 0.185, 0.102, 1.0);
-uniform vec4 grass_tip : source_color = vec4(0.30, 0.40, 0.205, 1.0);
-uniform vec4 dry_color : source_color = vec4(0.33, 0.32, 0.185, 1.0);
+//
+// Hue is the thing being fixed, not just brightness. Measured off the rendered
+// frame, the meadow's dominant 30-degree hue bin was bin 3 - yellow-green - with
+// more than four times the pixels of any true green bin. The field was reading as
+// straw, not as meadow, and no amount of saturation or luminance would have
+// changed which colour it was.
+//
+// Green sits near 120 degrees. Grass albedo of (0.13, 0.26, 0.13) has hue ~120
+// with blue held equal to red, which keeps the warm sun from dragging the lit
+// result toward orange - the earlier lesson that a blue-poor green lands on a
+// pure lime still applies, so blue is not reduced here.
+uniform vec4 grass_color : source_color = vec4(0.125, 0.255, 0.125, 1.0);
+uniform vec4 grass_tip : source_color = vec4(0.285, 0.430, 0.215, 1.0);
+// The dry variant is what mixed the yellow in. Kept, because a meadow that is one
+// flat green looks synthetic, but halved in weight further down.
+uniform vec4 dry_color : source_color = vec4(0.335, 0.345, 0.180, 1.0);
 uniform float wind_strength : hint_range(0.0, 1.0) = 0.22;
 uniform float wind_speed : hint_range(0.0, 4.0) = 1.4;
 uniform vec2 wind_dir = vec2(0.85, 0.35);
@@ -135,8 +148,10 @@ void fragment() {
 	float t = clamp(UV.y, 0.0, 1.0);
 	vec3 base = grass_color.rgb;
 	// Some tufts lean dry/yellow, the way a real meadow is not one flat green.
-	base = mix(base, dry_color.rgb, v_tint * color_variance * 0.22);
-	vec3 col = mix(base, grass_tip.rgb, pow(t, 1.35) * 0.72);
+	// 0.22 -> 0.12. The dry mix is the direct source of the yellow cast, and at
+	// 0.22 blended with the tint noise a fifth of every tuft leaned straw.
+	base = mix(base, dry_color.rgb, v_tint * color_variance * 0.12);
+	vec3 col = mix(base, grass_tip.rgb, pow(t, 1.35) * 0.66);
 
 	// Break up the flat fill with a cheap per-tuft value variation. Without
 	// this every tuft has identical colour and the field reads as one surface.
@@ -152,7 +167,7 @@ void fragment() {
 	// Fade to the meadow's own mid tone, not to a dark forest green - the field
 	// has to sit in the hillside, and the hillside is not dark.
 	float far_t = smoothstep(60.0, 140.0, dist);
-	col = mix(col, vec3(0.205, 0.275, 0.165), far_t * 0.45);
+	col = mix(col, vec3(0.180, 0.290, 0.175), far_t * 0.45);
 
 	// Dissolve before the streaming edge. Grass only exists in a 130 m radius
 	// around the player, and the shader was drawing right up to that boundary -
@@ -166,7 +181,10 @@ void fragment() {
 	// Same hue discipline as the terrain: the field has to sit in the hillside, and
 	// the hillside is no longer a saturated hue. A little luminance mixed back in
 	// keeps the meadow from reading as a separate, greener surface.
-	col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), 0.14);
+	// Was 0.14. Pulling a quarter of the way to grey is a large part of why the
+	// field read as dusty rather than green; 0.08 still settles the field into the
+	// hillside without washing the hue out.
+	col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), 0.08);
 
 	ALBEDO = col;
 	ROUGHNESS = 0.94;
