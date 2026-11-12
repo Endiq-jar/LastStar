@@ -448,6 +448,14 @@ func _run() -> void:
 	else:
 		_log("INFO", "ground contrast: not measurable in this frame")
 	_check_blob(img, "gameplay")
+	# --- what is black in the meadow? ---------------------------------------
+	#
+	# The first frames of the nature pack had large black shapes scattered
+	# through the grass that no material dump could explain: the vertex colours,
+	# the shader and the tint were all correct on every species. Rather than
+	# guess, hide one population at a time and measure how much of the frame
+	# goes black - a shape that disappears with a population belongs to it.
+	await _probe_black_shapes(world)
 	_log("INFO", "size=%dx%d mean_luma=%.3f nonblack=%.1f%% distinct_colours=%d sky_blue=%.1f%%" % [
 		img.get_width(), img.get_height(), stats["luma"],
 		stats["nonblack"] * 100.0, stats["colours"], stats["sky"] * 100.0])
@@ -509,15 +517,6 @@ func _run() -> void:
 		if img3:
 			img3.save_png(out_dir.path_join("world_side.png"))
 			_log("INFO", "side view differs=%.1f%% from main" % (_image_difference(img, img3) * 100.0))
-
-	# --- what is black in the meadow? ---------------------------------------
-	#
-	# The first frames of the nature pack had large black shapes scattered
-	# through the grass that no material dump could explain: the vertex colours,
-	# the shader and the tint were all correct on every species. Rather than
-	# guess, hide one population at a time and measure how much of the frame
-	# goes black - a shape that disappears with a population belongs to it.
-	await _probe_black_shapes(world)
 
 	# --- character close-up -------------------------------------------------
 	# A frame of the character from the front at conversational distance. The
@@ -974,22 +973,29 @@ func _check_bone_cloth(world: Node) -> void:
 
 ## First MultiMeshInstance3D under a node, for the material dump.
 ## Fraction of the frame that is very dark, as a percentage.
+##
+## Ambient in this valley is bright enough (energy 1.35) that a surface with any
+## albedo at all cannot land here - only geometry with no light response and no
+## emission can. So the threshold can be generous without catching shadows.
 func _dark_fraction(img: Image) -> float:
 	var w := img.get_width()
 	var h := img.get_height()
-	var step := maxi(1, h / 180)
+	var step := maxi(1, h / 200)
 	var dark := 0
 	var total := 0
-	for y in range(int(h * 0.25), h, step):
+	for y in range(int(h * 0.18), h, step):
 		for x in range(0, w, step):
 			var c := img.get_pixel(x, y)
-			if maxf(c.r, maxf(c.g, c.b)) < 0.055:
+			if maxf(c.r, maxf(c.g, c.b)) < 0.10:
 				dark += 1
 			total += 1
 	return 100.0 * float(dark) / maxf(1.0, float(total))
 
 
 ## Hides one population at a time and reports the frame's dark fraction.
+##
+## A shape that disappears with a population belongs to it; a shape that stays
+## is something the world does not know it is drawing.
 func _probe_black_shapes(world: Node) -> void:
 	if world == null:
 		return
@@ -997,14 +1003,20 @@ func _probe_black_shapes(world: Node) -> void:
 	var base_img := get_viewport().get_texture().get_image()
 	if base_img == null:
 		return
-	var base := _dark_fraction(base_img)
-	_log("INFO", "DARK frame dark=%.2f%% (nothing hidden)" % base)
-	var groups := [
-		["Veg_border_grass"],
-		["Veg_plants", "Veg_ferns"],
-		["Veg_bush", "Veg_flowers"],
-		["GrassField"],
+	_log("INFO", "DARK frame dark=%.2f%% (nothing hidden)" % _dark_fraction(base_img))
+	var groups: Array = [
+		["Terrain"],
 		["Vegetation"],
+		["GrassField"],
+		["Props"],
+		["Veg_border_grass"],
+		["Veg_flowers"],
+		["Veg_bush"],
+		["Veg_plants"],
+		["Veg_ferns"],
+		["Veg_pebbles"],
+		["Veg_rocks"],
+		["Player"],
 	]
 	for group in groups:
 		var hidden: Array[Node] = []
@@ -1014,6 +1026,7 @@ func _probe_black_shapes(world: Node) -> void:
 				(node as Node3D).visible = false
 				hidden.append(node)
 		if hidden.is_empty():
+			_log("INFO", "DARK %s: not in the tree" % str(group))
 			continue
 		await get_tree().process_frame
 		await get_tree().process_frame
