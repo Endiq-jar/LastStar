@@ -284,6 +284,22 @@ func _arrays_to_mesh(arrays: Array) -> ArrayMesh:
 ## are cheap, heavily instanced draws on a renderer that is vertex-bound, not
 ## draw-call-bound, and the tiles that are culled cost nothing at all.
 const SCATTER_TILES := 8
+## Target instances per tile, and the floor on the split.
+##
+## The grid size is chosen per population from its own size rather than fixed,
+## because a fixed grid is wrong in both directions:
+##
+##   8x8 for every population measured 1145 draw calls, which is a worse frame
+##   than the one that could not cull anything;
+##   1x1 for a population of 85 trees buys no culling, because a batch that big
+##   is exactly the thing that gets submitted no matter where the camera looks.
+##
+## ~120 instances per batch keeps each AABB small enough to be rejected, and the
+## 2x2 floor guarantees that every population, however small, is at least
+## quartered - a quarter of the trees is worth rejecting. Worst case this is 61
+## batches in the whole valley, against 18 before and 1145 at 8x8.
+const SCATTER_TILE_TARGET := 120
+const SCATTER_TILE_MIN_DIV := 2
 ## Instances closer than this to a tile edge are duplicated into the adjacent
 ## tile. A prop is one draw call once, but its geometry can extend past the
 ## instance origin, and a tile whose AABB is exactly its instance origins will
@@ -297,15 +313,17 @@ func _add_multimesh(node_name: String, mesh: Mesh, mat: Material,
 	if xforms.is_empty() or mesh.get_surface_count() == 0:
 		return null
 
-	# Bucket the instances by tile. A Transform3D's origin is its position;
-	# bucket by that so no instance is ever left unsubmitted.
-	var span := SPREAD * 2.0 / float(SCATTER_TILES)
+	# How finely to split THIS population. A population small enough to be
+	# culled whole stays in one batch.
+	var div := clampi(int(ceil(sqrt(float(xforms.size()) / float(SCATTER_TILE_TARGET)))),
+		SCATTER_TILE_MIN_DIV, SCATTER_TILES)
+	var span := SPREAD * 2.0 / float(div)
 	var buckets: Dictionary = {}
 	for xf in xforms:
 		var pos: Vector3 = (xf as Transform3D).origin
 		var t := Vector2i(
-			clampi(int(floor((pos.x + SPREAD) / span)), 0, SCATTER_TILES - 1),
-			clampi(int(floor((pos.z + SPREAD) / span)), 0, SCATTER_TILES - 1))
+			clampi(int(floor((pos.x + SPREAD) / span)), 0, div - 1),
+			clampi(int(floor((pos.z + SPREAD) / span)), 0, div - 1))
 		if not buckets.has(t):
 			buckets[t] = []
 		buckets[t].append(xf)

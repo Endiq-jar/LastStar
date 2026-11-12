@@ -305,7 +305,22 @@ jobs:
           CODE=$?
           set -e
           if [ "$CODE" -eq 124 ]; then
+            # A timeout is an infrastructure limit on a software-GL runner, so
+            # the VISUAL assertion is skipped - but only that.
+            #
+            # This used to `exit 0` unconditionally, which threw away everything
+            # the probe had already established before it stalled. On run
+            # 43190545707 the probe logged a hard PROBE_FAIL and this branch
+            # reported the job green, because the only failure check lives below
+            # and greps for PROBE_RESULT, which a timed-out probe never reaches.
+            # A gate that can be turned off by slowness is not a gate.
             echo "::warning::render probe timed out (software GL) - skipping visual assertion"
+            if grep -qE "^PROBE_FAIL" /tmp/probe.log; then
+              grep -E "^PROBE_FAIL" /tmp/probe.log | head -10 \
+                | while IFS= read -r line; do echo "::error title=render probe::$line"; done
+              echo "::error::probe reported failures before timing out"
+              exit 1
+            fi
             exit 0
           fi
 

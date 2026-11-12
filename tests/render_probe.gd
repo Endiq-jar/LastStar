@@ -809,10 +809,20 @@ func _check_cull_actually_culls(world: Node) -> void:
 				largest = maxi(largest, mm.instance_count)
 		for c in n.get_children():
 			stack.append(c)
+	# Thresholds, and why they are these:
+	#
+	#   batches   - the scatter must be split at all. One population per valley
+	#               was the original bug; tens of tiles is the fix.
+	#   largest   - a batch is cullable if its AABB covers one tile, not the
+	#               world. Grass chunks are the big ones (a near chunk is ~14k
+	#               blades inside 26 m), and that is fine: the shader culls
+	#               blades behind the camera per instance, and the chunk is small
+	#               enough that most of it is in front of or behind the camera as
+	#               a unit. 20k is the line between "one chunk" and "the world".
 	if batches < 8:
 		_fail += 1
 		_log("FAIL", "CULL only %d MultiMesh batch(es); the scatter is not split into cullable tiles" % batches)
-	elif largest > 4000:
+	elif largest > 20000:
 		_fail += 1
 		_log("FAIL", "CULL one batch holds %d instances; its AABB cannot be culled" % largest)
 	else:
