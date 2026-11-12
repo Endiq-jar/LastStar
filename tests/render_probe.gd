@@ -289,8 +289,14 @@ func _run() -> void:
 		_log("INFO", "grass diagnostics: %s" % str(grass.call("diagnostics")))
 		# Density gate: the meadow must actually be a meadow. A slope/height
 		# bug once cut this to 5% of intent and nothing noticed.
-		if blades < 30000:
-			_log("FAIL", "grass is far too sparse (%d blades, expected >30000)" % blades)
+		#
+		# The unit changed when the meadow stopped being painted cards. An
+		# instance is now a 36-blade clump of the nature pack's grass instead of
+		# a two-quad sprite, so the same meadow is ~8x fewer instances and each
+		# instance is ~16x the geometry: 18,000 tufts is roughly 650,000 blades of
+		# real geometry, where the 30,000 this used to demand was 30,000 sprites.
+		if blades < 18000:
+			_log("FAIL", "grass is far too sparse (%d tufts, expected >18000 at 36 blades each)" % blades)
 
 	# --- spellbook / spell wheel -------------------------------------------
 	var w: Wander = Game.wander

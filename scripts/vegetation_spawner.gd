@@ -193,6 +193,12 @@ const SCATTER_TILE_PAD := 2.5
 
 func _add_multimesh(node_name: String, mesh: Mesh, mat: Material,
 		xforms: Array, cast_shadow: bool = true) -> MultiMeshInstance3D:
+	# A model that failed to bake is a species with no geometry at all. Skipping
+	# it names the batch instead of letting the MultiMesh try to measure a null
+	# mesh, which is an engine error with no context in it.
+	if mesh == null:
+		push_warning("VegetationSpawner: '%s' has no mesh - batch skipped" % node_name)
+		return null
 	if xforms.is_empty() or mesh.get_surface_count() == 0:
 		return null
 
