@@ -427,33 +427,54 @@ func _run() -> void:
 		# but let the luminance/coverage checks decide pass or fail.
 		_log("WARN", "image is flat - only %d distinct colours" % stats["colours"])
 
-	# Orbit the camera a quarter turn and capture again: catches a camera that
-	# exists but is stuck inside geometry or pointed at the void.
-	if cam:
-		# Orbit the *pivot*, not the camera.
-		#
-		# This used to write cam.global_position, but the camera is a child of a
-		# SpringArm3D whose transform player.gd rewrites every frame from the
-		# player's yaw and pitch. The offset was overwritten before the next draw,
-		# so world_alt.png was a byte-for-byte duplicate of world.png and this
-		# check could never detect a camera stuck in geometry - which is precisely
-		# what it exists to detect. Turning the pivot is the only lever the probe
-		# actually owns.
-		var pivot := cam.get_parent()
-		while pivot != null and not (pivot is Node3D and pivot.name == "CameraPivot"):
-			pivot = pivot.get_parent()
-		if pivot is Node3D:
-			(pivot as Node3D).rotation.y += PI * 0.5
-		else:
-			_log("WARN", "no CameraPivot found - world_alt will repeat the main frame")
-		await get_tree().create_timer(0.45).timeout
+	# Orbit the camera and capture again, to catch a camera that exists but is
+	# stuck in geometry or pointed at the void.
+	#
+	# Two previous versions of this were no-ops, and both failed silently:
+	#
+	#   1. writing cam.global_position - the camera is a child of a SpringArm3D
+	#      whose transform is rebuilt every frame, so the write was discarded
+	#      before the next draw;
+	#   2. turning the CameraPivot node - but the pivot is a child of the Player,
+	#      and player.gd's _physics_process does
+	#          _pivot.rotation = Vector3(_pitch, _yaw, 0.0)
+	#      every single tick from _yaw/_target_yaw. The rotation was gone before
+	#      the frame that followed. world_alt.png came out 23% different from
+	#      world.png and I read that as "the orbit works"; the 23% was the sun
+	#      and the wind animation moving, not a quarter turn.
+	#
+	# The probe therefore has to ask the player for a new look angle, not poke
+	# its children. This is also the honest way round: it exercises the same
+	# path a player's mouse drag does.
+	var orbit_ok := _orbit_player(world, 0.5 * PI, -0.42)
+	if orbit_ok:
+		await get_tree().create_timer(0.5).timeout
 		await get_tree().process_frame
 		var img2 := get_viewport().get_texture().get_image()
 		if img2:
 			img2.save_png(out_dir.path_join("world_alt.png"))
 			var s2 := _analyse(img2)
-			_log("INFO", "alt view mean_luma=%.3f nonblack=%.1f%% colours=%d" % [
-				s2["luma"], s2["nonblack"] * 100.0, s2["colours"]])
+			# Assert the orbit actually happened. A view that is 97% similar to
+			# the first is not a second view, and a check that cannot tell the
+			# difference is decoration.
+			var diff := _image_difference(img, img2)
+			var verdict := "OK"
+			if diff < 0.12:
+				verdict = "IDENTICAL"
+			_log("WARN" if diff < 0.12 else "INFO",
+				"alt view mean_luma=%.3f nonblack=%.1f%% colours=%d differs=%.1f%% (%s)" % [
+					s2["luma"], s2["nonblack"] * 100.0, s2["colours"], diff * 100.0, verdict])
+	else:
+		_log("WARN", "could not orbit the camera - world_alt will repeat the main frame")
+
+	# A second orbit, higher and to the other side, for a third distinct angle.
+	if _orbit_player(world, -0.85 * PI, -0.62):
+		await get_tree().create_timer(0.5).timeout
+		await get_tree().process_frame
+		var img3 := get_viewport().get_texture().get_image()
+		if img3:
+			img3.save_png(out_dir.path_join("world_side.png"))
+			_log("INFO", "side view differs=%.1f%% from main" % (_image_difference(img, img3) * 100.0))
 
 	# --- character close-up -------------------------------------------------
 	# A frame of the character from the front at conversational distance. The
@@ -1201,3 +1222,58 @@ func _probe_near_ground(world: Node, cam: Camera3D) -> void:
 			if terrain.has_method("surface_height_at") else th
 		_log("INFO", "NEAR_GROUND rise_ahead=%.2f m, buried=%.2f m (negative = clear)" % [
 			th - cam.global_position.y, under - cam.global_position.y])
+
+
+## Asks the player to look in a new direction, the way a mouse drag would.
+##
+## Returns false if the player cannot be found or does not expose the look state,
+## so the caller can say so rather than silently capture a duplicate frame.
+func _orbit_player(world: Node, yaw_delta: float, pitch: float) -> bool:
+	var pl := world.get_node_or_null("Player")
+	if pl == null:
+		return false
+	var has_yaw := false
+	for prop in pl.get_property_list():
+		if prop["name"] == "_target_yaw":
+			has_yaw = true
+			break
+	if not has_yaw:
+		return false
+	pl.set("_target_yaw", float(pl.get("_target_yaw")) + yaw_delta)
+	pl.set("_target_pitch", clampf(pitch, -1.15, 0.62))
+	# Snap the smoothed values too. The smoothing has a ~16 Hz time constant and
+	# the probe waits half a second, but a paused or near-frozen tree could leave
+	# _yaw still far from _target_yaw at capture time - and a frame that is 20% of
+	# the way through a turn is a worse test than one that arrived.
+	pl.set("_yaw", float(pl.get("_target_yaw")))
+	pl.set("_pitch", float(pl.get("_target_pitch")))
+	return true
+
+
+## Fraction of pixels whose luminance differs by more than a visible step.
+##
+## Mean absolute difference is the wrong statistic here: two frames of the same
+## view with the grass swaying have a respectable mean difference, so a duplicate
+## and a genuine orbit score alike. The share of clearly-changed pixels separates
+## them - wind moves a few percent of the frame, a camera turn moves most of it.
+func _image_difference(a: Image, b: Image) -> float:
+	if a == null or b == null:
+		return 0.0
+	if a.get_width() != b.get_width() or a.get_height() != b.get_height():
+		return 1.0
+	var w := a.get_width()
+	var h := a.get_height()
+	var step_x := maxi(1, int(w / 160))
+	var step_y := maxi(1, int(h / 90))
+	var changed := 0
+	var total := 0
+	for y in range(0, h, step_y):
+		for x in range(0, w, step_x):
+			var ca := a.get_pixel(x, y)
+			var cb := b.get_pixel(x, y)
+			var la := 0.2126 * ca.r + 0.7152 * ca.g + 0.0722 * ca.b
+			var lb := 0.2126 * cb.r + 0.7152 * cb.g + 0.0722 * cb.b
+			total += 1
+			if absf(la - lb) > 0.05:
+				changed += 1
+	return float(changed) / maxf(1.0, float(total))
