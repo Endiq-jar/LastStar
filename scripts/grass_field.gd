@@ -14,7 +14,10 @@ extends Node3D
 ## instance count. Everything is one draw call per chunk.
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
-const VIEW_CHUNKS := 5            ## radius, in chunks (5 * 26 = 130 m)
+## Radius, in chunks. 5 * 26 = 130 m, which with the shader's dissolve put a
+## visible arc of bare terrain at the edge of the meadow. Raised to 7 (182 m) so
+## the field runs past the point where blades stop being resolvable.
+const VIEW_CHUNKS := 7
 ## Instances per 26 m chunk. Near chunks were 3400 - about five tufts per square
 ## metre - drawn as 2.1 m quads, which left visible gaps between them and read as
 ## blotches of green on bare ground rather than a carpet. Roughly doubled to close
@@ -23,8 +26,15 @@ const VIEW_CHUNKS := 5            ## radius, in chunks (5 * 26 = 130 m)
 const BLADES_NEAR := 14000        ## instances in a chunk adjacent to the player
 const BLADES_MID := 5200
 const BLADES_FAR := 1500
-const MAX_CHUNKS := 81            ## (2*5+1)^2, hard cap on live chunks
-const SEA_MARGIN := 2.4           ## metres above water level where grass starts
+## Hard cap on live chunks. Must be at least (2*VIEW_CHUNKS+1)^2 or the field
+## silently stops growing: the cap was written for a radius of 5 and stayed at 81
+## when the radius became 7, which needs 225. Without this the outer ring would
+## simply never be built and the "grass everywhere" change would do nothing past
+## 130 m while looking correct in the code.
+const MAX_CHUNKS := 225
+## Metres above water level where grass starts. 2.4 left a bare sand ring round
+## every shore; 0.9 keeps blades out of the water but lets the meadow reach it.
+const SEA_MARGIN := 0.9
 
 ## Two crossed quads per tuft, so a tuft has volume from every angle.
 ## Tuft footprint and height in metres. The height matters more than it looks:
@@ -242,10 +252,19 @@ func _build_chunk(key: Vector2i) -> void:
 			else _terrain.get_height_at(x, z)
 		# Grass grows on gentle ground above the shoreline, not on cliffs,
 		# not underwater and not on the high rock/snow bands.
-		if h > 58.0:
+		# 58 -> 92 m. The old ceiling stopped grass well below the rock and snow
+		# bands, so every hill above the valley floor was bare terrain - the
+		# single largest reason the world read as "a meadow patch surrounded by
+		# empty mountains". 92 m is where the terrain shader's own rock blend
+		# takes over, so the two agree instead of leaving a gap.
+		if h > 92.0:
 			_rej_height += 1
 			continue
-		if _terrain.get_slope_at(x, z) > 0.52:
+		# 0.52 -> 0.78. At 0.52 the field skipped roughly 27 degrees of slope, which
+		# is most of a hilly valley - the grass stopped wherever the ground started
+		# to rise, and the hillsides above it were bare. 0.78 (~38 degrees) still
+		# keeps blades off cliffs and scree.
+		if _terrain.get_slope_at(x, z) > 0.78:
 			_rej_slope += 1
 			continue
 		# Exclude actual water, not a circle around it. The old blanket

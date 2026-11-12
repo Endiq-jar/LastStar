@@ -260,6 +260,66 @@ func _ready() -> void:
 			if cav.size() < 150:
 				failures.append("composed boulder has only %d vertices" % cav.size())
 
+	# Trees. The spawner builds its own meshes through _merge_parts/_leaf_shell,
+	# which is a completely separate pipeline from vegetation_meshes.gd and was not
+	# covered by anything here. Its UV support was missing entirely for several
+	# rounds: trunk.png, leaf.png and wood.png sat in assets/ loaded by no code at
+	# all, and every tree drew as a flat vertex colour.
+	print("MESH_CHECK trees")
+	var Spawner = load("res://scripts/vegetation_spawner.gd")
+	if Spawner == null:
+		failures.append("could not load vegetation_spawner.gd")
+	else:
+		# Instantiated as a Node, not constructed bare: the script extends Node3D,
+		# and `Spawner.new()` on a Node script outside the tree is not reliable.
+		# Freed at the end so the test does not leave a stray node in the tree.
+		var sp: Node = Spawner.new()
+		add_child(sp)
+		# _leaf_shell is the card crown; it must produce real geometry with UVs, or
+		# the canopy is either empty or a single flat colour.
+		var shell: Array = sp.call("_leaf_shell", 26, 1.55, 2.05, 3.95)
+		if shell.is_empty():
+			failures.append("_leaf_shell produced no cards")
+		else:
+			var merged: ArrayMesh = sp.call("_merge_parts", shell)
+			if merged == null or merged.get_surface_count() == 0:
+				failures.append("_leaf_shell cards did not merge into a mesh")
+			else:
+				var ta: Array = merged.surface_get_arrays(0)
+				var tv: PackedVector3Array = ta[Mesh.ARRAY_VERTEX]
+				var tu: PackedVector2Array = ta[Mesh.ARRAY_TEX_UV]
+				print("MESH_CHECK leaf_shell cards=%d verts=%d uvs=%d" % [shell.size(), tv.size(), tu.size()])
+				if tv.size() < shell.size() * 6:
+					failures.append("leaf shell has %d verts for %d cards" % [tv.size(), shell.size()])
+				# The whole bug: UVs dropped in the merge.
+				if tu.size() != tv.size():
+					failures.append("leaf shell lost its UVs in the merge (%d uvs vs %d verts) - the leaf texture cannot apply" % [tu.size(), tv.size()])
+				else:
+					# The leaf sheet is a strip of five; a crown must sample more
+					# than one of them or every card shows the same leaf.
+					var us := {}
+					for uv in tu:
+						us[int(clampf(uv.x, 0.0, 0.999) * 5.0)] = true
+					print("MESH_CHECK leaf_shell samples %d of 5 leaf slices" % us.size())
+					if us.size() < 3:
+						failures.append("leaf shell samples only %d of the 5 leaf slices" % us.size())
+
+		# Pine skirts, same question.
+		var skirts: Array = sp.call("_pine_skirts")
+		if skirts.is_empty():
+			failures.append("_pine_skirts produced nothing")
+		else:
+			var sm2: ArrayMesh = sp.call("_merge_parts", skirts)
+			if sm2 == null or sm2.get_surface_count() == 0:
+				failures.append("pine skirts did not merge")
+			else:
+				var sa2: Array = sm2.surface_get_arrays(0)
+				var su: PackedVector2Array = sa2[Mesh.ARRAY_TEX_UV]
+				var sv: PackedVector3Array = sa2[Mesh.ARRAY_VERTEX]
+				print("MESH_CHECK pine_skirts cards=%d verts=%d uvs=%d" % [skirts.size(), sv.size(), su.size()])
+				if su.size() != sv.size():
+					failures.append("pine skirts lost their UVs in the merge")
+
 	if failures.is_empty():
 		print("MESH_CHECK OK")
 		get_tree().quit(0)

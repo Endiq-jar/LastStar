@@ -166,14 +166,19 @@ void fragment() {
 	float dist = length(VERTEX);
 	// Fade to the meadow's own mid tone, not to a dark forest green - the field
 	// has to sit in the hillside, and the hillside is not dark.
-	float far_t = smoothstep(60.0, 140.0, dist);
+	// Stretched with the reach. At 60-140 m the whole field past 140 m sat at the
+	// far colour, which is a flat wash of muted green across half the newly
+	// extended meadow.
+	float far_t = smoothstep(90.0, 190.0, dist);
 	col = mix(col, vec3(0.180, 0.290, 0.175), far_t * 0.45);
 
 	// Dissolve before the streaming edge. Grass only exists in a 130 m radius
 	// around the player, and the shader was drawing right up to that boundary -
 	// a hard arc of blades against bare terrain, plainly visible in the gameplay
-	// frame. This must match VIEW_CHUNKS * CHUNK_SIZE in grass_field.gd.
-	float edge = smoothstep(112.0, 128.0, dist);
+	// frame. This must match VIEW_CHUNKS * CHUNK_SIZE in grass_field.gd, which is
+	// now 7 * 26 = 182 m. Leaving these at 112/128 after raising the field's reach
+	// would have kept the old hard arc and thrown away the new grass.
+	float edge = smoothstep(160.0, 180.0, dist);
 	if (edge > 0.96) {
 		discard;
 	}

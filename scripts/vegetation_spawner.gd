@@ -5,6 +5,9 @@ extends Node3D
 
 @export var terrain_path: NodePath
 
+const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
+const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
+
 const TREE_COUNT := 170
 const PINE_COUNT := 130
 const ROCK_COUNT := 100
@@ -99,6 +102,31 @@ func _toon(color: Color, rim: float = 0.3) -> ShaderMaterial:
 	return m
 
 
+## Toon material carrying a texture.
+##
+## The plain _toon() sets only albedo_color, so a merged tree was a flat vertex
+## colour whatever UVs it had. This variant multiplies the same toon ramp by a
+## painted texture, and tints it, which is how the bark and the leaf sheets get
+## onto the geometry.
+func _toon_tex(color: Color, tex_path: String, rim: float = 0.3,
+		uv_scale: Vector2 = Vector2.ONE) -> ShaderMaterial:
+	var m := _toon(color, rim)
+	var tex := _load_tex(tex_path)
+	if tex != null:
+		# The toon shader has no uv_scale uniform, so the scale is baked into the
+		# merged UVs by the caller instead. Only the sampler is set here.
+		m.set_shader_parameter("albedo_tex", tex)
+	return m
+
+
+func _load_tex(path: String) -> Texture2D:
+	if not ResourceLoader.exists(path):
+		push_warning("LastStar vegetation: missing texture " + path)
+		return null
+	var t := load(path)
+	return t as Texture2D if t is Texture2D else null
+
+
 func _pick(terrain: Node, rng: RandomNumberGenerator, min_h: float, max_h: float, max_slope: float, count: int, avoid_lake: bool = true) -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	var attempts := 0
@@ -158,6 +186,16 @@ func _append_arrays(arrays: Array, src: Array, xform: Transform3D) -> void:
 		arrays[Mesh.ARRAY_NORMAL].append((normal_basis * n).normalized())
 	# A normalised basis keeps the shape correct but can flip winding when the
 	# transform has a negative determinant, so the order is fixed up here.
+	# UVs. A source with none gets a planar projection so the bark grain still
+	# appears on it rather than collapsing to texel (0,0).
+	var uvs: PackedVector2Array = src[Mesh.ARRAY_TEX_UV] if src[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
+	if uvs.size() == verts.size():
+		for uv in uvs:
+			arrays[Mesh.ARRAY_TEX_UV].append(uv)
+	else:
+		for v in verts:
+			var wv := xform * v
+			arrays[Mesh.ARRAY_TEX_UV].append(Vector2(wv.x * 0.35, wv.y * 0.22))
 	var flip := xform.basis.determinant() < 0.0
 	if idx.is_empty():
 		# Non-indexed source: emit sequential indices.
@@ -180,6 +218,11 @@ func _new_arrays() -> Array:
 	a.resize(Mesh.ARRAY_MAX)
 	a[Mesh.ARRAY_VERTEX] = PackedVector3Array()
 	a[Mesh.ARRAY_NORMAL] = PackedVector3Array()
+	# UVs were never carried through the merge, so no texture could ever survive
+	# it - trunk.png and leaf.png existed in assets/ and were loaded by nothing.
+	# Every tree in the valley was a flat vertex colour because of this one
+	# missing line, not because the textures were bad.
+	a[Mesh.ARRAY_TEX_UV] = PackedVector2Array()
 	a[Mesh.ARRAY_INDEX] = PackedInt32Array()
 	return a
 
@@ -262,6 +305,103 @@ func _make_sphere(radius: float, height_ratio: float, segments: int, rings: int)
 	return s
 
 
+## Cards hung around the rim of each cone layer, for pines.
+##
+## Positioned to sit just under the widest part of each cone, angled downward and
+## outward - the silhouette of a real conifer is a ragged skirt, not a cone.
+func _pine_skirts() -> Array:
+	var parts: Array = []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4409
+	for layer in range(4):
+		var cone_r := 1.5 - layer * 0.28
+		var y := 2.2 + layer * 0.78
+		var ring := 7 + layer
+		for i in range(ring):
+			var ang := TAU * float(i) / float(ring) + rng.randf_range(-0.3, 0.3)
+			var r := cone_r * rng.randf_range(0.80, 1.06)
+			var pos := Vector3(cos(ang) * r, y - rng.randf_range(0.0, 0.22), sin(ang) * r)
+			var card := _make_card(rng.randf_range(0.40, 0.70))
+			# Facing outward and down.
+			var outward := Vector3(cos(ang), 0.0, sin(ang))
+			var n := (outward * 0.6 - Vector3.UP * 0.45).normalized()
+			var right := Vector3.UP.cross(n).normalized()
+			var b := Basis(right, n, right.cross(n).normalized())
+			b = b * Basis(Vector3.RIGHT, rng.randf_range(-0.5, 0.5))
+			parts.append([card, Transform3D(b, pos)])
+	return parts
+
+
+## A shell of leaf cards around an ellipsoid crown.
+##
+## Each card is a quad, placed on the crown surface and turned to face outward and
+## slightly upward - leaves grow toward the light, and cards aligned to the
+## normal alone read as spikes. The offsets are jittered so the crown has a ragged
+## edge rather than the clean rim of a sphere.
+func _leaf_shell(count: int, radius: float, height: float, centre_y: float) -> Array:
+	var parts: Array = []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 8123
+	for i in range(count):
+		# Fibonacci sphere: even coverage with no clumping, unlike random angles.
+		var t := (float(i) + 0.5) / float(count)
+		var phi := acos(1.0 - 2.0 * t)
+		var theta := PI * (1.0 + sqrt(5.0)) * float(i)
+		var dir := Vector3(sin(phi) * cos(theta), cos(phi), sin(phi) * sin(theta))
+		# Flattened upward: the crown is taller than it is wide.
+		var pos := Vector3(dir.x * radius, dir.y * height * 0.55, dir.z * radius) \
+			+ Vector3(0.0, centre_y, 0.0)
+		# Skip the underside. Cards there are never seen, and they double the
+		# overdraw of the whole forest.
+		if pos.y < centre_y - height * 0.30:
+			continue
+		var card := _make_card(rng.randf_range(0.55, 0.95))
+		# Face outward, tilted up by a random amount so the shell is not a sphere.
+		var up := Vector3.UP
+		var outward := dir.normalized()
+		if absf(outward.dot(up)) > 0.98:
+			outward = Vector3.RIGHT
+		var right := up.cross(outward).normalized()
+		var fwd := right.cross(up).normalized()
+		# Bias the facing toward the sky and jitter the roll.
+		var n := (outward * 0.7 + Vector3.UP * rng.randf_range(0.25, 0.7)).normalized()
+		var b := Basis(right, n, right.cross(n).normalized())
+		b = Basis(Vector3.UP, rng.randf_range(-0.6, 0.6)) * b
+		b = b * Basis(Vector3.RIGHT, rng.randf_range(-0.4, 0.4))
+		parts.append([card, Transform3D(b, pos)])
+	return parts
+
+
+## One unit leaf card, centred on its origin, carrying a slice of the leaf sheet.
+##
+## The leaf texture is a horizontal strip of five different leaves. Each card
+## samples its own fifth, so a crown shows a mix of leaf shapes instead of 26
+## copies of the same one. That is the whole point of the strip, and a UV of 0..1
+## across it would have shown all five squashed onto every card.
+func _make_card(size: float, slice_index: int = -1) -> Mesh:
+	var idx := slice_index
+	if idx < 0:
+		idx = randi() % 5
+	var u0 := float(idx) / 5.0
+	var u1 := float(idx + 1) / 5.0
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var h := size
+	var w := size * 0.8
+	var quad := [
+		[Vector3(-w * 0.5, -h * 0.5, 0), Vector2(u0, 1)],
+		[Vector3(w * 0.5, -h * 0.5, 0), Vector2(u1, 1)],
+		[Vector3(w * 0.5, h * 0.5, 0), Vector2(u1, 0)],
+		[Vector3(-w * 0.5, h * 0.5, 0), Vector2(u0, 0)],
+	]
+	var order := [0, 1, 2, 0, 2, 3]
+	for o in order:
+		st.set_normal(Vector3(0, 0, 1))
+		st.set_uv(quad[o][1])
+		st.add_vertex(quad[o][0])
+	return st.commit()
+
+
 func _spawn_round_trees(terrain: Node) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 771
@@ -274,17 +414,36 @@ func _spawn_round_trees(terrain: Node) -> void:
 	var trunk_mesh := _merge_parts([
 		[_make_cylinder(0.16, 0.3, 3.2, 8), Transform3D(Basis(), Vector3(0, 1.6, 0))],
 	])
-	var canopy_a := _merge_parts([
-		[_make_sphere(1.5, 1.55 * 0.5, 10, 6), Transform3D(Basis(), Vector3(0, 3.3, 0))],
-		[_make_sphere(1.2, 1.55 * 0.5, 10, 6), Transform3D(Basis(), Vector3(0, 4.15, 0))],
-		[_make_sphere(0.9, 1.55 * 0.5, 10, 6), Transform3D(Basis(), Vector3(0, 5.0, 0))],
-	])
+	# Canopy: a core of three lobes, wrapped in leaf cards.
+	#
+	# It used to be three bare spheres. A sphere with a flat colour is the single
+	# most recognisable placeholder in a stylised game - it has no silhouette
+	# break, no leaf shapes, and no texture, so a forest of them reads as green
+	# balls on sticks. The lobes stay, because they give the crown its mass and
+	# its shadow; the cards provide the outline and the leaves.
+	var lobes := [
+		[_make_sphere(1.5, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 3.3, 0))],
+		[_make_sphere(1.2, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 4.15, 0))],
+		[_make_sphere(0.9, 1.55 * 0.5, 8, 5), Transform3D(Basis(), Vector3(0, 5.0, 0))],
+	]
+	var canopy_a := _merge_parts(lobes)
 	# A slightly lighter tint gets its own batch rather than a per-tree material.
 	var canopy_b := canopy_a
+
+	# The leaf-card shell. Built once and instanced on every tree.
+	#
+	# Cards are placed on the surface of an ellipsoid and turned to face outward,
+	# which is what makes the crown read as a cluster of leaves from any angle
+	# instead of as a solid lump with a texture wrapped round it. 26 cards is
+	# enough to break the silhouette; more just costs overdraw at the distances
+	# these trees are seen.
+	var leaf_cards := _merge_parts(_leaf_shell(26, 1.55, 2.05, 3.95))
 
 	var trunk_xf: Array = []
 	var leaf_a_xf: Array = []
 	var leaf_b_xf: Array = []
+	var card_a_xf: Array = []
+	var card_b_xf: Array = []
 
 	for i in range(spots.size()):
 		var s := rng.randf_range(0.8, 1.6)
@@ -293,8 +452,10 @@ func _spawn_round_trees(terrain: Node) -> void:
 		trunk_xf.append(xf)
 		if i % 2 == 0:
 			leaf_a_xf.append(xf)
+			card_a_xf.append(xf)
 		else:
 			leaf_b_xf.append(xf)
+			card_b_xf.append(xf)
 
 		# Trunk collision so the player can't run through the big ones. These are
 		# still individual bodies - a StaticBody3D per tree is a physics-space
@@ -315,11 +476,21 @@ func _spawn_round_trees(terrain: Node) -> void:
 		add_child(body)
 		_collision_bodies.append(body)
 
-	_add_multimesh("BroadleafTrunks", trunk_mesh, _toon(Color(0.42, 0.29, 0.22)), trunk_xf)
+	# Textures, finally. trunks sample the bark, canopies a leaf tile. Before
+	# this every one of these was a flat albedo_color and the two painted
+	# textures in assets/ were loaded by nothing at all.
+	_add_multimesh("BroadleafTrunks", trunk_mesh,
+		_toon_tex(Color(0.72, 0.62, 0.55), "res://assets/environment/trees/trunk.png", 0.28), trunk_xf)
 	_add_multimesh("BroadleafCanopyA", canopy_a,
-		_toon(Color(0.36, 0.66, 0.32), 0.45), leaf_a_xf)
+		_toon_tex(Color(0.40, 0.72, 0.34), "res://assets/environment/leaves/leaf.png", 0.45), leaf_a_xf)
 	_add_multimesh("BroadleafCanopyB", canopy_b,
-		_toon(Color(0.46, 0.76, 0.36), 0.45), leaf_b_xf)
+		_toon_tex(Color(0.50, 0.82, 0.38), "res://assets/environment/leaves/leaf.png", 0.45), leaf_b_xf)
+	# The card shell is alpha-cut, so it needs the foliage shader rather than the
+	# opaque toon one.
+	var card_mat := VegPresets.material_for("leaves", 0.30, Color(0.84, 1.0, 0.80))
+	card_mat.set_shader_parameter("albedo_texture", _load_tex("res://assets/environment/leaves/leaf.png"))
+	_add_multimesh("BroadleafCardsA", leaf_cards, card_mat, card_a_xf, false)
+	_add_multimesh("BroadleafCardsB", leaf_cards, card_mat, card_b_xf, false)
 
 
 func _spawn_pines(terrain: Node) -> void:
@@ -355,9 +526,27 @@ func _spawn_pines(terrain: Node) -> void:
 		else:
 			cone_b_xf.append(xf)
 
-	_add_multimesh("PineTrunks", trunk_mesh, _toon(Color(0.38, 0.27, 0.21)), trunk_xf)
-	_add_multimesh("PineConesA", cone_mesh, _toon(Color(0.22, 0.44, 0.30), 0.4), cone_a_xf)
-	_add_multimesh("PineConesB", cone_mesh, _toon(Color(0.26, 0.50, 0.33), 0.4), cone_b_xf)
+	# Bark texture on the trunks, and a ragged skirt of cards around each cone
+	# layer. A pine of smooth cones is a Christmas-tree icon; the cards break the
+	# straight cone rim, which is the only thing that reads as needles at range.
+	var skirt := _merge_parts(_pine_skirts())
+	var skirt_a_xf: Array = []
+	var skirt_b_xf: Array = []
+	for i in range(cone_a_xf.size()):
+		skirt_a_xf.append(cone_a_xf[i])
+	for i in range(cone_b_xf.size()):
+		skirt_b_xf.append(cone_b_xf[i])
+
+	_add_multimesh("PineTrunks", trunk_mesh,
+		_toon_tex(Color(0.78, 0.66, 0.56), "res://assets/environment/trees/trunk_stripped.png", 0.26), trunk_xf)
+	_add_multimesh("PineConesA", cone_mesh,
+		_toon_tex(Color(0.52, 0.86, 0.58), "res://assets/environment/leaves/leaf.png", 0.4), cone_a_xf)
+	_add_multimesh("PineConesB", cone_mesh,
+		_toon_tex(Color(0.60, 0.94, 0.62), "res://assets/environment/leaves/leaf.png", 0.4), cone_b_xf)
+	var needle_mat := VegPresets.material_for("border_grass", 0.18, Color(0.78, 1.0, 0.76))
+	needle_mat.set_shader_parameter("albedo_texture", _load_tex("res://assets/environment/leaves/leaf.png"))
+	_add_multimesh("PineSkirtsA", skirt, needle_mat, skirt_a_xf, false)
+	_add_multimesh("PineSkirtsB", skirt, needle_mat, skirt_b_xf, false)
 
 
 func _spawn_rocks(terrain: Node) -> void:
@@ -434,7 +623,8 @@ func _spawn_fallen_logs(terrain: Node) -> void:
 		var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, PI * 0.5 + tilt)
 		basis = basis.scaled(Vector3(log_r, log_len, log_r))
 		xfs.append(Transform3D(basis, p + Vector3(0, log_r * 0.85, 0)))
-	_add_multimesh("FallenLogs", log_mesh, _toon(Color(0.34, 0.26, 0.20), 0.18), xfs)
+	_add_multimesh("FallenLogs", log_mesh,
+		_toon_tex(Color(0.86, 0.74, 0.62), "res://assets/environment/wood/wood.png", 0.18), xfs)
 
 
 func _spawn_pebbles(terrain: Node) -> void:
