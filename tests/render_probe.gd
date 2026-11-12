@@ -1189,5 +1189,15 @@ func _probe_near_ground(world: Node, cam: Camera3D) -> void:
 	if terrain != null and terrain.has_method("surface_height_at"):
 		var th: float = terrain.surface_height_at(flat.x, flat.z)
 		var cam_y := cam.global_position.y
-		_log("INFO", "NEAR_GROUND height field y=%.2f, camera y=%.2f, drop=%.2f m" % [
-			th, cam_y, cam_y - th])
+		# Two different numbers, and confusing them cost two rounds.
+		#
+		# `rise_ahead` is how much higher the ground is 6 m in front of the lens.
+		# `buried` is how far the lens is under the surface directly beneath it.
+		# A large rise ahead with a small burial means the camera is fine and
+		# simply pointed at a hillside - which is a framing question, not a bug.
+		# I read the rise ahead as burial and spent two rounds "lifting a camera
+		# out of a hill" that was never in one.
+		var under: float = terrain.surface_height_at(cam.global_position.x, cam.global_position.z) \
+			if terrain.has_method("surface_height_at") else th
+		_log("INFO", "NEAR_GROUND rise_ahead=%.2f m, buried=%.2f m (negative = clear)" % [
+			th - cam.global_position.y, under - cam.global_position.y])
