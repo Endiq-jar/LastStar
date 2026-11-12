@@ -739,12 +739,15 @@ func _build_spawn_glade() -> void:
 		# spawn is at z = +6 and she faces -Z.
 		carpet.position = center + Vector3(0.0, 0.03, 3.6)
 		add_child(carpet)
-	var banner := BoneCloth.hanging(Color(0.88, 0.85, 0.78), 0.42)
-	if banner != null:
-		# Behind the altar, so it frames the view from the spawn instead of
-		# hanging between the camera and the thing the player is meant to see.
-		banner.position = center + Vector3(0.0, 3.3, -2.6)
-		add_child(banner)
+	# Two standards flanking the altar. Nothing hangs over this glade - there is
+	# no beam, no lintel - so these stand on their own bone feet, planted on the
+	# edge of the altar disc rather than in the grass that would swallow them.
+	for side in [-1.0, 1.0]:
+		var standard := BoneCloth.standard(Color(0.90, 0.87, 0.79), 0.55)
+		if standard != null:
+			standard.position = center + Vector3(2.3 * side, 0.14, 1.5)
+			standard.rotation_degrees = Vector3(0, 24.0 * side, 0)
+			add_child(standard)
 
 
 ## Weathered stone, textured and triplanar.

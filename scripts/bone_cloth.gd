@@ -107,6 +107,27 @@ static func hanging(tint: Color, size: float = 1.0) -> Node3D:
 	return root
 
 
+## A free-standing standard: the banner above, the pole planted in a cairn of
+## bones at the foot. The origin is on the ground, so a caller only has to say
+## where it stands - which is what the spawn altar needs, since there is no
+## beam over the glade to hang a banner from.
+static func standard(tint: Color, size: float = 1.0) -> Node3D:
+	var hung := hanging(tint, size)
+	if hung == null:
+		return null
+	var box := bounds_of(hung)
+	hung.position.y = box.size.y
+	var root := Node3D.new()
+	root.name = "BoneCloth_standard"
+	root.add_to_group("bone_cloth")
+	root.add_child(hung)
+	var foot := bone_pile(0.55 * size)
+	if foot != null:
+		foot.position = Vector3(0.0, 0.0, 0.0)
+		root.add_child(foot)
+	return root
+
+
 ## The same idea on the narrower wall banner, for a statue or a pillar.
 static func totem(tint: Color, size: float = 1.0) -> Node3D:
 	var root := make("banner_wall", tint, size)
