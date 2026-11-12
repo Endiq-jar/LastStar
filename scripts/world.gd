@@ -904,6 +904,10 @@ func _build_grass_field() -> void:
 	_build_environment_vegetation(t, player)
 
 
+## The five authored leaf silhouettes, one per leaf layer instance.
+const LEAF_VARIETIES := ["lance", "oval", "round", "needle", "lobed"]
+
+
 func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 	## The authored environment species: border grass, flowers, bushes, fallen
 	## leaves and pebbles, plus a second grass layer that shares one material.
@@ -948,6 +952,12 @@ func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 		layer.set("max_height", spec["hmax"])
 		layer.set("max_slope", spec["slope"])
 		layer.set("mesh_kind", spec["mesh"])
+		# Variant selection for the generated cluster meshes. `hash` is stable
+		# within a run but not across platforms, so it is only used to pick a
+		# variant, never for placement.
+		layer.set("mesh_variant", absi(hash(spec["name"])) % 8)
+		layer.set("seed_for_mesh", absi(hash(spec["name"])) % 97 + 1)
+		layer.set("leaf_variety", LEAF_VARIETIES[absi(hash(spec["name"])) % LEAF_VARIETIES.size()])
 		# Per-species streaming radius. Small detail does not need to exist at
 		# 130 m; see the note on the species table.
 		layer.set("chunk_radius", int(spec["radius"]))

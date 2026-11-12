@@ -49,6 +49,12 @@ const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
 @export var alpha_texture: Texture2D
 ## Which generated mesh to instance: "crossed" for foliage cards, "rock", "lobe".
 @export var mesh_kind: String = "crossed"
+## Which generated variant to use for kinds that have several (flowers, bushes).
+@export var mesh_variant: int = 0
+## Seed for randomised cluster meshes, so a species looks the same every run.
+@export var seed_for_mesh: int = 1
+## Which leaf silhouette a "leaf" layer instances: lance, oval, round, needle, lobed.
+@export var leaf_variety: String = "lance"
 
 var _terrain: Node
 var _player: Node3D
@@ -70,9 +76,12 @@ func setup(terrain: Node, player: Node3D, seed_value: int = 1) -> void:
 	_terrain = terrain
 	_player = player
 	_rng.seed = seed_value
-	_mesh = VegMeshes.crossed() if mesh_kind == "crossed" else VegMeshes.rock()
-	if mesh_kind == "lobe":
-		_mesh = VegMeshes.lobe()
+	_mesh = _resolve_mesh()
+	# Report which mesh path is actually live. The flower and leaf meshes were
+	# written, tested and never instanced for two commits - the layer fell through
+	# to `rock()` for every kind it did not recognise, so the field was pebbles and
+	# cards and nothing said so.
+	print("VEG_LAYER %s mesh_kind=%s mesh=%s" % [name, mesh_kind, _mesh.resource_name if _mesh else "null"])
 	_noise.seed = seed_value
 	# Low frequency: patches roughly 40 m across, which is the scale at which a
 	# real meadow varies as the ground changes.
@@ -81,6 +90,33 @@ func setup(terrain: Node, player: Node3D, seed_value: int = 1) -> void:
 	if material != null and alpha_texture != null:
 		material.set_shader_parameter("albedo_texture", alpha_texture)
 	_refresh_center()
+
+
+## Maps `mesh_kind` onto a generated mesh.
+##
+## The fallthrough is deliberately a rock and not a card: an unrecognised kind
+## should look wrong, loudly, rather than silently degrade to something plausible.
+## It used to be the other way round for every non-"crossed" value, which is how
+## flowers spent two commits as pebbles.
+func _resolve_mesh() -> Mesh:
+	match mesh_kind:
+		"crossed":
+			return VegMeshes.crossed()
+		"lobe":
+			return VegMeshes.lobe()
+		"rock":
+			return VegMeshes.rock()
+		"bush":
+			return VegMeshes.bush_cluster(seed_for_mesh)
+		"leaf":
+			return VegMeshes.leaf_cluster(leaf_variety, 5)
+		"flower":
+			return VegMeshes.flower_cluster(mesh_variant, 5, max_height)
+		"trunk":
+			return VegMeshes.trunk(2.6, 0.16, 0.32, 0.05)
+		_:
+			push_warning("VegetationLayer '%s': unknown mesh_kind '%s'" % [name, mesh_kind])
+			return VegMeshes.rock()
 
 
 func _process(_delta: float) -> void:

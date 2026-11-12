@@ -370,3 +370,140 @@ static func leaf_variety(kind: String) -> Mesh:
 			return leaf(1.3, 0.05, 0.22, 0.10, 0.30)
 		_:
 			return leaf(0.9, 0.24, 0.42, 0.30, 0.10)
+
+
+## A clump of flower heads on their own stems, as ONE mesh.
+##
+## The layers instance one mesh across a whole chunk, so a species either draws
+## in one call or in twenty. A cluster keeps it at one. `variety` selects which
+## heads make up the mix, so different chunks can carry different flowers while
+## each still costs a single draw call.
+##
+## Stems matter as much as heads: a head floating at its own centre with nothing
+## under it reads as confetti the moment the camera is below it, which on a
+## hillside it always is.
+static func flower_cluster(variety: int, heads: int = 5, height: float = 0.42) -> Mesh:
+	var key := "cluster_%d_%d_%.2f" % [variety, heads, height]
+	if _cache.has(key):
+		return _cache[key]
+	var table := _flower_table()
+	var names: Array = table.keys()
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7919 * (variety + 1)
+	for i in range(heads):
+		var kind: String = names[(variety * 3 + i) % names.size()]
+		var head := flower(kind)
+		var spread := rng.randf_range(0.06, 0.20)
+		var ang := rng.randf() * TAU
+		var h := height * rng.randf_range(0.75, 1.15)
+		var pos := Vector3(cos(ang) * spread, h, sin(ang) * spread)
+		var b := Basis(Vector3.UP, rng.randf() * TAU)
+		b = b.scaled(Vector3.ONE * rng.randf_range(0.7, 1.05))
+		# Tip the head toward the light a little so the fan does not read as a
+		# flat disc lying in the grass.
+		b = b * Basis(Vector3.RIGHT, rng.randf_range(-0.25, 0.25))
+		_append_mesh(st, head, Transform3D(b, pos))
+		# Stem: a thin three-sided prism from the ground to the head.
+		_append_stem(st, Vector3(0.0, 0.0, 0.0), pos, 0.008)
+	st.generate_normals()
+	var mesh := st.commit()
+	_cache[key] = mesh
+	return mesh
+
+
+## A bush built from several lobes at different offsets and scales, so the
+## silhouette is irregular rather than a single sphere.
+static func bush_cluster(seed_value: int = 1, lobes: int = 7) -> Mesh:
+	var key := "bush_%d_%d" % [seed_value, lobes]
+	if _cache.has(key):
+		return _cache[key]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value * 104729
+	var lobe := _dome(0.5, 0.35)
+	for i in range(lobes):
+		var ang := TAU * float(i) / float(lobes) + rng.randf_range(-0.3, 0.3)
+		var r := rng.randf_range(0.05, 0.34)
+		var pos := Vector3(cos(ang) * r, rng.randf_range(0.10, 0.42), sin(ang) * r)
+		var b := Basis(Vector3.UP, rng.randf() * TAU)
+		b = b.scaled(Vector3(rng.randf_range(0.5, 0.95), rng.randf_range(0.35, 0.7), rng.randf_range(0.5, 0.95)))
+		_append_mesh(st, lobe, Transform3D(b, pos))
+	st.generate_normals()
+	var mesh := st.commit()
+	_cache[key] = mesh
+	return mesh
+
+
+## A small group of leaves sprouting from a shared point, folded along the midrib.
+static func leaf_cluster(variety: String, count: int = 5) -> Mesh:
+	var key := "leafcl_%s_%d" % [variety, count]
+	if _cache.has(key):
+		return _cache[key]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31337 + count
+	var blade := leaf_variety(variety)
+	for i in range(count):
+		var ang := TAU * float(i) / float(count) + rng.randf_range(-0.25, 0.25)
+		var tilt := rng.randf_range(0.35, 1.05)
+		var b := Basis(Vector3.UP, ang) * Basis(Vector3.RIGHT, tilt)
+		b = b.scaled(Vector3.ONE * rng.randf_range(0.7, 1.2))
+		_append_mesh(st, blade, Transform3D(b, Vector3(0.0, rng.randf_range(0.05, 0.18), 0.0)))
+	st.generate_normals()
+	var mesh := st.commit()
+	_cache[key] = mesh
+	return mesh
+
+
+## Appends every triangle of `src`, transformed. Used to compose clusters.
+static func _append_mesh(st: SurfaceTool, src: Mesh, xform: Transform3D) -> void:
+	if src == null:
+		return
+	var arr: ArrayMesh = src
+	for si in range(arr.get_surface_count()):
+		var a: Array = arr.surface_get_arrays(si)
+		var verts: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+		if idx.is_empty():
+			for i in range(0, verts.size() - 2, 3):
+				_tri(st, xform, verts[i], verts[i + 1], verts[i + 2])
+		else:
+			for i in range(0, idx.size() - 2, 3):
+				_tri(st, xform, verts[idx[i]], verts[idx[i + 1]], verts[idx[i + 2]])
+
+
+static func _tri(st: SurfaceTool, xf: Transform3D, a: Vector3, b: Vector3, c: Vector3) -> void:
+	# Reject degenerate triangles. A zero-area triangle produces a zero normal,
+	# which the toon shader turns into a black speck - visible as flecks of dirt
+	# over the whole meadow.
+	if (b - a).cross(c - a).length_squared() < 1e-12:
+		return
+	st.add_vertex(xf * a)
+	st.add_vertex(xf * b)
+	st.add_vertex(xf * c)
+
+
+static func _append_stem(st: SurfaceTool, from: Vector3, to: Vector3, radius: float) -> void:
+	var axis := to - from
+	if axis.length_squared() < 1e-8:
+		return
+	var up := axis.normalized()
+	var side := up.cross(Vector3.FORWARD)
+	if side.length_squared() < 1e-6:
+		side = up.cross(Vector3.RIGHT)
+	side = side.normalized()
+	var other := up.cross(side).normalized()
+	var sides := 3
+	var ring: Array[Vector3] = []
+	for i in range(sides):
+		var a := TAU * float(i) / float(sides)
+		ring.append(side * cos(a) * radius + other * sin(a) * radius)
+	for i in range(sides):
+		var a0 := ring[i]
+		var a1 := ring[(i + 1) % sides]
+		_tri(st, Transform3D(), from + a0, to + a0, to + a1)
+		_tri(st, Transform3D(), from + a0, to + a1, from + a1)
