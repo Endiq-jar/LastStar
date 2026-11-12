@@ -343,13 +343,22 @@ func _update_camera_occlusion(delta: float) -> void:
 	# What the camera actually needs is ground clearance - a separate question
 	# from whether something is between it and the player. Ask the terrain
 	# directly: how far is the lens above the surface beneath it?
+	#
+	# Measure against the *un-lifted* camera, not the current one. Keying the
+	# correction off the camera's actual height makes it a fixed point: each frame
+	# it lifts part of the way, then re-measures a camera that has already been
+	# lifted and finds a smaller error. It converges to half the needed lift and
+	# stops - the measured lift was 0.36 with a 2.97 m burial, and raising the cap
+	# from 2.4 to 4.5 changed it by exactly nothing, because the cap was never what
+	# was binding.
 	var want_lift := 0.0
 	var terr := _terrain()
 	if terr != null and terr.has_method("surface_height_at"):
 		var gx := _camera.global_position.x
 		var gz := _camera.global_position.z
 		var ground: float = terr.surface_height_at(gx, gz)
-		var clearance := _camera.global_position.y - ground
+		var base_y := _camera.global_position.y - _arm_lift
+		var clearance := base_y - ground
 		want_lift = clampf(CAM_CLEARANCE - clearance, 0.0, CAM_LIFT_MAX)
 		# A surface can also be between the lens and the pivot without the lens
 		# being under it; the crushed-arm case is still worth lifting for.
