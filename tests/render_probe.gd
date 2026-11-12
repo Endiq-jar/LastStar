@@ -1175,6 +1175,16 @@ func _probe_near_ground(world: Node, cam: Camera3D) -> void:
 		var parent := str(col.get_parent().name) if col != null and col.get_parent() != null else "-"
 		_log("INFO", "NEAR_GROUND at (%.1f,%.1f): hit %s/%s at y=%.2f" % [
 			flat.x, flat.z, parent, nm, (hit["position"] as Vector3).y])
+	# What is the spring arm doing? `get_hit_length()` is the length at which it
+	# hit something, and 0.0 means "hit nothing" - so a camera that is not where
+	# its own arm says it should be can only be explained by one of those two.
+	var player := world.get_node_or_null("Player")
+	if player != null and player.get("_spring") != null:
+		var spring = player.get("_spring")
+		var pl := player as Node3D
+		_log("INFO", "CAMERA_ARM player_y=%.2f spring_pos=%s hit_len=%.2f lift=%.2f" % [
+			pl.global_position.y, str(spring.position),
+			spring.get_hit_length(), float(player.get("_arm_lift"))])
 	if terrain != null and terrain.has_method("surface_height_at"):
 		var th: float = terrain.surface_height_at(flat.x, flat.z)
 		var cam_y := cam.global_position.y
