@@ -804,8 +804,25 @@ func perf_census() -> String:
 			bodies += 1
 		for c in n.get_children():
 			stack.append(c)
-	return "census meshes=%d multimeshes=%d multimesh_instances=%d lights=%d bodies=%d" % [
+	var out := "census meshes=%d multimeshes=%d multimesh_instances=%d lights=%d bodies=%d" % [
 		meshes, multimeshes, instances, lights, bodies]
+	# One line per vegetation layer, naming the mesh it actually resolved.
+	#
+	# "flowers are in the scene" and "flowers are drawn as flowers" are different
+	# claims, and for two commits only the first was true: the layer fell through
+	# to a rock for every kind it did not recognise and the species table asked
+	# for "crossed" anyway. Vertex counts make the difference visible - a flower
+	# cluster is hundreds of vertices, a rock sphere is a few dozen.
+	for spec in VegPresets.species():
+		var n := "Veg_%s" % spec["name"]
+		var layer := get_node_or_null(n)
+		if layer == null or not layer.has_method("census"):
+			continue
+		var c: Dictionary = layer.call("census")
+		out += "\nVEG_LAYERS %s kind=%s mesh=%s verts=%s chunks=%s instances=%s" % [
+			spec["name"], c.get("mesh_kind", "?"), c.get("mesh_class", "?"),
+			c.get("mesh_verts", 0), c.get("chunks", 0), c.get("instances", 0)]
+	return out
 
 
 func _spawn_waypoints() -> void:

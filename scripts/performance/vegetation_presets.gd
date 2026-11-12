@@ -66,15 +66,20 @@ static func species() -> Array:
 		{"name": "border_grass", "tex": TEX_BORDER, "density": 0.55, "hmin": 0.55, "hmax": 1.05,
 			"wind": 0.16, "tint": Color(0.92, 1.0, 0.90), "slope": 0.42, "mesh": "crossed",
 			"radius": 4},
-		{"name": "flowers", "tex": TEX_FLOWERS, "density": 0.16, "hmin": 0.28, "hmax": 0.46,
+		{"name": "flowers", "tex": TEX_FLOWERS, "density": 0.16,
 			"wind": 0.30, "tint": Color(1.0, 1.0, 1.0), "slope": 0.38, "mesh": "flower",
-			"radius": 3},
-		{"name": "bush", "tex": TEX_BUSH, "density": 0.035, "hmin": 0.85, "hmax": 1.60,
+			# Cluster meshes carry their own metric height, so the layer's
+			# hmin/hmax acts as a *scale*, not a size. 0.28-0.46 on top of a
+			# 0.42 m cluster made flowers under 2 cm tall - they rendered as the
+			# pale specks visible in the meadow and nothing else. Near 1.0 the
+			# authored height survives.
+			"hmin": 0.85, "hmax": 1.25, "radius": 3},
+		{"name": "bush", "tex": TEX_BUSH, "density": 0.035,
 			"wind": 0.08, "tint": Color(1.0, 1.0, 1.0), "slope": 0.45, "mesh": "bush",
-			"radius": 4},
-		{"name": "leaves", "tex": TEX_LEAF, "density": 0.12, "hmin": 0.18, "hmax": 0.30,
+			"hmin": 1.35, "hmax": 2.30, "radius": 4},
+		{"name": "leaves", "tex": TEX_LEAF, "density": 0.12,
 			"wind": 0.34, "tint": Color(1.0, 1.0, 1.0), "slope": 0.40, "mesh": "leaf",
-			"radius": 2},
+			"hmin": 0.70, "hmax": 1.20, "radius": 2},
 		{"name": "pebbles", "tex": TEX_PEBBLES, "density": 0.22, "hmin": 0.12, "hmax": 0.26,
 			"wind": 0.0, "tint": Color(1.0, 1.0, 1.0), "slope": 0.70, "mesh": "rock",
 			"radius": 2},

@@ -404,7 +404,10 @@ static func flower_cluster(variety: int, heads: int = 5, height: float = 0.42) -
 		# Tip the head toward the light a little so the fan does not read as a
 		# flat disc lying in the grass.
 		b = b * Basis(Vector3.RIGHT, rng.randf_range(-0.25, 0.25))
-		_append_mesh(st, head, Transform3D(b, pos))
+		# Each head takes its own square of the atlas, so a cluster is a mix of
+		# colours rather than five copies of one flower.
+		_append_mesh(st, head, Transform3D(b, pos),
+			Rect2(Vector2((i % 4) * 0.25, (i / 4) * 0.25), Vector2(0.25, 0.25)))
 		# Stem: a thin three-sided prism from the ground to the head.
 		_append_stem(st, Vector3(0.0, 0.0, 0.0), pos, 0.008)
 	st.generate_normals()
@@ -430,7 +433,8 @@ static func bush_cluster(seed_value: int = 1, lobes: int = 7) -> Mesh:
 		var pos := Vector3(cos(ang) * r, rng.randf_range(0.10, 0.42), sin(ang) * r)
 		var b := Basis(Vector3.UP, rng.randf() * TAU)
 		b = b.scaled(Vector3(rng.randf_range(0.5, 0.95), rng.randf_range(0.35, 0.7), rng.randf_range(0.5, 0.95)))
-		_append_mesh(st, lobe, Transform3D(b, pos))
+		_append_mesh(st, lobe, Transform3D(b, pos),
+			Rect2(Vector2(0.5, 0.0), Vector2(0.5, 0.5)))
 	st.generate_normals()
 	var mesh := st.commit()
 	_cache[key] = mesh
@@ -452,7 +456,8 @@ static func leaf_cluster(variety: String, count: int = 5) -> Mesh:
 		var tilt := rng.randf_range(0.35, 1.05)
 		var b := Basis(Vector3.UP, ang) * Basis(Vector3.RIGHT, tilt)
 		b = b.scaled(Vector3.ONE * rng.randf_range(0.7, 1.2))
-		_append_mesh(st, blade, Transform3D(b, Vector3(0.0, rng.randf_range(0.05, 0.18), 0.0)))
+		_append_mesh(st, blade, Transform3D(b, Vector3(0.0, rng.randf_range(0.05, 0.18), 0.0)),
+			Rect2(Vector2(0.5, 0.5), Vector2(0.5, 0.5)))
 	st.generate_normals()
 	var mesh := st.commit()
 	_cache[key] = mesh
@@ -460,7 +465,8 @@ static func leaf_cluster(variety: String, count: int = 5) -> Mesh:
 
 
 ## Appends every triangle of `src`, transformed. Used to compose clusters.
-static func _append_mesh(st: SurfaceTool, src: Mesh, xform: Transform3D) -> void:
+static func _append_mesh(st: SurfaceTool, src: Mesh, xform: Transform3D,
+		uv_patch: Rect2 = Rect2(Vector2.ZERO, Vector2.ONE)) -> void:
 	if src == null:
 		return
 	# `src` is a Mesh, not an ArrayMesh. Assuming ArrayMesh and writing
@@ -484,23 +490,40 @@ static func _append_mesh(st: SurfaceTool, src: Mesh, xform: Transform3D) -> void
 	for a in arrays_list:
 		var verts: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
 		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
-		if idx.is_empty():
-			for i in range(0, verts.size() - 2, 3):
-				_tri(st, xform, verts[i], verts[i + 1], verts[i + 2])
-		else:
-			for i in range(0, idx.size() - 2, 3):
-				_tri(st, xform, verts[idx[i]], verts[idx[i + 1]], verts[idx[i + 2]])
+		var uvs: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
+		var has_uv := uvs.size() == verts.size()
+		# Remap the source atlas's own UV range into the patch this piece was
+		# asked to occupy. Without this every cluster would draw the whole flower
+		# sheet across every head.
+		for i in range(0, idx.size() - 2, 3):
+			var i0 := idx[i]
+			var i1 := idx[i + 1]
+			var i2 := idx[i + 2]
+			var u0 := Vector2.ZERO
+			var u1 := Vector2.ZERO
+			var u2 := Vector2.ZERO
+			if has_uv:
+				u0 = uv_patch.position + uvs[i0] * uv_patch.size
+				u1 = uv_patch.position + uvs[i1] * uv_patch.size
+				u2 = uv_patch.position + uvs[i2] * uv_patch.size
+			_tri(st, xform, verts[i0], verts[i1], verts[i2], u0, u1, u2)
 
 
-static func _tri(st: SurfaceTool, xf: Transform3D, a: Vector3, b: Vector3, c: Vector3) -> void:
+static func _tri(st: SurfaceTool, xf: Transform3D, a: Vector3, b: Vector3, c: Vector3,
+		uv_a: Vector2 = Vector2.ZERO, uv_b: Vector2 = Vector2.ZERO,
+		uv_c: Vector2 = Vector2.ZERO) -> void:
 	# Reject degenerate triangles. A zero-area triangle produces a zero normal,
 	# which the toon shader turns into a black speck - visible as flecks of dirt
 	# over the whole meadow.
 	if (b - a).cross(c - a).length_squared() < 1e-12:
 		return
-	st.add_vertex(xf * a)
-	st.add_vertex(xf * b)
-	st.add_vertex(xf * c)
+	# UVs must be set explicitly. SurfaceTool.add_vertex does not carry them from
+	# anything, so every vertex of a composed cluster sampled texel (0,0) - the
+	# flowers were drawn, correctly, in one flat colour taken from the corner of
+	# the atlas, and read as pale specks in the grass.
+	st.set_uv(uv_a); st.add_vertex(xf * a)
+	st.set_uv(uv_b); st.add_vertex(xf * b)
+	st.set_uv(uv_c); st.add_vertex(xf * c)
 
 
 static func _append_stem(st: SurfaceTool, from: Vector3, to: Vector3, radius: float) -> void:
@@ -521,5 +544,8 @@ static func _append_stem(st: SurfaceTool, from: Vector3, to: Vector3, radius: fl
 	for i in range(sides):
 		var a0 := ring[i]
 		var a1 := ring[(i + 1) % sides]
-		_tri(st, Transform3D(), from + a0, to + a0, to + a1)
-		_tri(st, Transform3D(), from + a0, to + a1, from + a1)
+		# Stems sample the middle of the patch, where the atlas has foliage
+		# rather than a petal edge.
+		var uc := Vector2(0.5, 0.5)
+		_tri(st, Transform3D(), from + a0, to + a0, to + a1, uc, uc, uc)
+		_tri(st, Transform3D(), from + a0, to + a1, from + a1, uc, uc, uc)

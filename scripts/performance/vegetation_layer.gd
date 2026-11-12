@@ -235,6 +235,23 @@ func _build_chunk(key: Vector2i) -> void:
 	_chunks_built += 1
 
 
+## Vertices in the instanced mesh. A layer drawing 40 vertices per patch where its
+## kind promises a flower cluster is a fallthrough, and this is where a probe can
+## see it.
+func _mesh_vert_count() -> int:
+	if _mesh == null:
+		return 0
+	if _mesh is ArrayMesh:
+		var total := 0
+		var am := _mesh as ArrayMesh
+		for i in range(am.get_surface_count()):
+			total += (am.surface_get_arrays(i)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+		return total
+	if _mesh is PrimitiveMesh:
+		return ((_mesh as PrimitiveMesh).get_mesh_arrays()[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	return 0
+
+
 ## Census for the performance probe and the on-screen debug readout.
 func census() -> Dictionary:
 	return {
@@ -242,4 +259,7 @@ func census() -> Dictionary:
 		"instances": _instances_built,
 		"built": _chunks_built,
 		"pending": _queued.size(),
+		"mesh_kind": mesh_kind,
+		"mesh_verts": _mesh_vert_count(),
+		"mesh_class": _mesh.get_class() if _mesh else "null",
 	}
