@@ -157,6 +157,26 @@ jobs:
           set -uo pipefail
           timeout -k 10 240 /opt/godot/godot --headless --path . \
             res://tests/compile_check.tscn > /tmp/compile.log 2>&1 || true
+          # Geometry gate. The brief asks for 20 flower silhouettes and 5 leaf
+          # varieties as meshes; a table of 20 names pointing at one petal would
+          # satisfy a human reading the source and fail a player looking at the
+          # meadow. This asserts on the vertices instead. Its own exit code is
+          # the verdict, so it is deliberately NOT `|| true` - a failure here
+          # must fail the job, unlike the compile log which is scraped.
+          timeout -k 10 240 /opt/godot/godot --headless --path . \
+            res://tests/mesh_check.tscn > /tmp/mesh.log 2>&1
+          MESH_RC=$?
+          grep -E "^MESH_CHECK" /tmp/mesh.log | tail -40 || true
+          if [ "$MESH_RC" -ne 0 ]; then
+            echo "::error title=mesh check::exited $MESH_RC - see MESH_CHECK lines above"
+            tail -30 /tmp/mesh.log | while IFS= read -r l; do echo "::error title=mesh::$l"; done || true
+            # This step runs under `set -uo pipefail` with no `-e`, so nothing
+            # above fails the job on its own. The exit has to be explicit, or
+            # the geometry gate reports a failure and the build goes green
+            # anyway - which is exactly how a broken check becomes worse than
+            # no check.
+            exit 1
+          fi
           grep -E "^COMPILE_" /tmp/compile.log | tail -40 || true
           # Surface the per-file verdict as annotations. Step logs live on blob
           # storage and are not always fetchable, which left "it compiled" as an
