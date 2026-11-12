@@ -7,7 +7,6 @@ extends Control
 @onready var party_row: HBoxContainer = %PartyRow
 @onready var quality_btn: Button = %QualityButton
 
-var _diorama: Node3D
 var _pivot: Node3D
 var _time := 0.0
 var _sigils: Array[Node3D] = []

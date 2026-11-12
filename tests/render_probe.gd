@@ -729,6 +729,66 @@ func _report_frame_cost(world: Node) -> void:
 		var census: String = world.call("perf_census")
 		if census != "":
 			_log("INFO", "PERF %s" % census)
+	_check_cull_actually_culls(world)
+
+
+## Assert that the scenes and batches are split finely enough for the frustum
+## test to reject anything at all.
+##
+## This is the one performance property that can be verified without a
+## framebuffer and without a phone, and it is the one that was broken for a long
+## time. Godot culls by object AABB: a single MeshInstance3D spanning the whole
+## valley, or a single MultiMeshInstance3D holding every tree, always intersects
+## the frustum, so it is always submitted in full and half the world is drawn
+## from behind the camera every frame. Nothing in the image looks wrong, and no
+## test noticed, so the world just ran slowly.
+##
+## What is asserted is not a frame time - that is llvmpipe here and meaningless -
+## but the structural precondition: enough drawables, and each one bounded to a
+## small enough region that the count of them outside the view is large.
+func _check_cull_actually_culls(world: Node) -> void:
+	if world == null:
+		return
+	# Terrain tiles. One mesh covering 900 m means nothing is ever culled.
+	var terrain := world.get_node_or_null("Terrain")
+	var tiles := 0
+	var biggest_extent := 0.0
+	if terrain != null:
+		for c in terrain.get_children():
+			if c is MeshInstance3D and (c as MeshInstance3D).mesh != null:
+				tiles += 1
+				var aabb: AABB = (c as MeshInstance3D).mesh.get_aabb()
+				biggest_extent = maxf(biggest_extent, maxf(aabb.size.x, aabb.size.z))
+	if tiles < 4:
+		_fail = true
+		_log("FAIL", "CULL terrain is %d drawable(s); one mesh spanning the valley can never be culled" % tiles)
+	else:
+		_log("INFO", "CULL terrain tiles=%d largest_extent=%.0fm" % [tiles, biggest_extent])
+
+	# Vegetation. Count the batches and the largest instance count in any one of
+	# them; a batch holding the entire population is the failure mode.
+	var batches := 0
+	var largest := 0
+	var total := 0
+	var stack: Array[Node] = [world]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MultiMeshInstance3D:
+			var mm := (n as MultiMeshInstance3D).multimesh
+			if mm != null:
+				batches += 1
+				total += mm.instance_count
+				largest = maxi(largest, mm.instance_count)
+		for c in n.get_children():
+			stack.append(c)
+	if batches < 8:
+		_fail = true
+		_log("FAIL", "CULL only %d MultiMesh batch(es); the scatter is not split into cullable tiles" % batches)
+	elif largest > 4000:
+		_fail = true
+		_log("FAIL", "CULL one batch holds %d instances; its AABB cannot be culled" % largest)
+	else:
+		_log("INFO", "CULL multimesh_batches=%d instances=%d largest_batch=%d" % [batches, total, largest])
 
 
 func _report_palette(img: Image, label: String) -> void:

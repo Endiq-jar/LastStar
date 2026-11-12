@@ -173,10 +173,42 @@ func _queue_around(center: Vector2i) -> void:
 			_chunks.erase(key)
 
 
+## True when a chunk lies entirely behind the camera and so cannot draw.
+##
+## The shader culls per instance, which is what removes blades behind the lens
+## from an already-built chunk. This is the cheaper filter one level up: a chunk
+## that is entirely behind the camera should never be *built* in the first
+## place. The player walks forward, so a third of the ring is queued, built,
+## uploaded and then culled every time they move - paying full CPU cost for
+## geometry that provably contributes nothing.
+##
+## Conservative by SIGHT_CULL_MARGIN: a chunk is only skipped if the whole of
+## it is behind a plane pushed that far back, so a chunk the camera can still
+## see at the edge of a wide FOV - or that holds the character in view when the
+## camera swings - is always built. False negatives cost a chunk that gets built
+## and culled later; false positives would be a hole in the meadow, so the test
+## errs toward building.
+const SIGHT_CULL_MARGIN := 34.0
+
+
+func _behind_camera(key: Vector2i) -> bool:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return false
+	var fwd := -cam.global_basis.z
+	var c := Vector3((float(key.x) + 0.5) * CHUNK_SIZE, 0.0,
+		(float(key.y) + 0.5) * CHUNK_SIZE)
+	# Half-diagonal of a chunk, so the test covers every corner of it.
+	var reach := CHUNK_SIZE * 0.7072
+	return (c - cam.global_position).dot(fwd) < -(reach + SIGHT_CULL_MARGIN)
+
+
 func _build_chunk(key: Vector2i) -> void:
 	if _terrain == null:
 		return
 	if _chunks.size() >= MAX_CHUNKS:
+		return
+	if _behind_camera(key):
 		return
 	# Distance is measured from where the player is *now*: chunks are queued in
 	# batches and the player keeps moving while they are built.
@@ -323,6 +355,12 @@ func _push_view_params() -> void:
 	var cam := get_viewport().get_camera_3d()
 	if cam != null:
 		_material.set_shader_parameter("cam_origin", cam.global_position)
+		# Forward is -Z of the camera basis. Handed to the shader as a uniform
+		# because the camera built-ins are fragment-stage only, and the vertex
+		# stage is where the behind-camera cull has to happen.
+		_material.set_shader_parameter("cam_forward", -cam.global_basis.z)
+	if _player != null:
+		_material.set_shader_parameter("view_origin", _player.global_position)
 	if _player != null:
 		# The player node's origin is at her feet; lift the clearing centre to her
 		# waist so the smoothstep removes grass around her body, not below it.

@@ -19,7 +19,6 @@ const MAX_SLOTS := 5
 const MAX_SPELL_LEVEL := 30
 
 ## Element ids match Game.PARTY[x]["element_id"].
-const ELEMENT_NAMES := ["Anemo", "Pyro", "Electro", "Hydro", "Cryo", "Geo", "Arcane"]
 
 ## The starter codex. `cost` is Light, `power` multiplies the character's attack,
 ## `radius` is the effect area in metres (0 = single target / projectile).

@@ -53,7 +53,6 @@ var _dead := false
 var _spawn_pos := Vector3.ZERO
 var _wander_target := Vector3.ZERO
 var _wander_timer := 0.0
-var _base_scale := 1.0
 
 
 func _ready() -> void:

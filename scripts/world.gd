@@ -25,8 +25,14 @@ var _rng := RandomNumberGenerator.new()
 var _props: Node3D
 var _enemies: Node3D
 var _collectibles: Node3D
+## One hundredth of a day is about 15 in-game minutes with the default cycle
+## speed - finer than the lighting curve moves perceptibly, coarse enough that
+## the environment is rewritten a few times a second instead of every frame.
+const DAY_UPDATE_STEP := 0.01
 var _day_time: float = 0.32
 var _day_speed: float = 0.0055
+## Last _day_time value whose lighting was actually pushed to the engine.
+var _day_applied := -1.0
 var _time := 0.0
 ## True once _ready() finished wiring the environment, sun and player.
 var _built := false
@@ -266,6 +272,28 @@ func apply_quality() -> void:
 		if veg.has_method("set_detail_scale"):
 			veg.call("set_detail_scale", 1.0 if tier >= 2 else (0.8 if tier == 0 else 0.55))
 
+	# --- resolution scale ----------------------------------------------------
+	#
+	# The single most effective lever on a fill-rate-bound mobile GPU, and the
+	# one the quality tiers were missing entirely. Every earlier tier changed
+	# how much geometry existed; none changed how many pixels the screen has.
+	# Rendering the 3D pass at 0.8x and letting the canvas upscale costs a
+	# little softness on a 6-inch screen and removes a third of the fragment
+	# work - which is where the grass, the terrain shader and the shadow
+	# resolve all actually live.
+	#
+	# 3D scaling on the Compatibility renderer only became available in 4.3,
+	# which is the version pinned in project.godot, so this is safe on the
+	# GLES3 path the phone build uses. It is a no-op rather than an error on any
+	# driver that refuses it.
+	match tier:
+		1:
+			_set_3d_scale(0.75)
+		0:
+			_set_3d_scale(0.9)
+		_:
+			_set_3d_scale(1.0)
+
 	if env == null:
 		return
 
@@ -303,6 +331,18 @@ func apply_quality() -> void:
 	# Re-apply the grade so a tier change never leaves the frame at whatever
 	# saturation it happened to be using.
 	_grade_env(env)
+
+
+func _set_3d_scale(scale: float) -> void:
+	## 3D buffer resolution as a fraction of the window. 2D (the HUD) stays at
+	## native, so text and buttons keep their crispness while the world behind
+	## them renders cheaper - which is the whole reason to scale here rather
+	## than dropping the viewport size.
+	var vp := get_viewport()
+	if vp == null:
+		return
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = scale
 
 
 func _env_msaa(mode: RenderingServer.ViewportMSAA) -> void:
@@ -417,7 +457,23 @@ func _process(delta: float) -> void:
 	if Game.is_paused or not _built:
 		return
 	_day_time = fposmod(_day_time + delta * _day_speed, 1.0)
-	_update_time_of_day()
+	# _update_time_of_day() was called every single frame, and it is not a cheap
+	# function: it writes ~20 Environment properties, reassigns the sun's
+	# rotation, colour and energy, and re-applies the whole colour grade. Every
+	# one of those is an engine-side setter that dirties the environment and, for
+	# the sky, re-sends shader uniforms to the GPU - so the cost is not the
+	# GDScript, it is that the renderer re-uploaded lighting state 60 times a
+	# second to describe a sun that moves about a degree per minute.
+	#
+	# The projected-set getter for the environment is a full redraw of the
+	# lighting rig, and on the target phone it was a measurable slice of a frame
+	# budget that had nothing to spare. Nothing in here changes perceptibly
+	# faster than a hundredth of a day, so that is the resolution it is updated
+	# at. _set_beauty_time() still calls it directly, so the render probe gets a
+	# deterministic frame.
+	if absf(_day_time - _day_applied) >= DAY_UPDATE_STEP or _day_applied < 0.0:
+		_day_applied = _day_time
+		_update_time_of_day()
 	# One-shot black-frame check, a few frames in (no renderer awaits).
 	if not _render_checked and _render_check_countdown >= 0:
 		_render_check_countdown -= 1

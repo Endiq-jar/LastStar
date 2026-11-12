@@ -65,6 +65,20 @@ uniform vec3 cam_origin = vec3(0.0);
 // density tuning fixes that - only not drawing it there does.
 uniform vec3 player_origin = vec3(0.0);
 uniform float player_clear : hint_range(0.0, 3.0) = 0.95;
+// Direction the camera is looking, pushed in from grass_field.gd.
+//
+// The camera built-ins are fragment-stage only, so a vertex shader cannot ask
+// which way the camera faces - but it can test a plane if the plane's normal is
+// handed to it as a uniform. Everything on the far side of that plane is behind
+// the lens and cannot contribute a pixel, yet the vertex stage was running the
+// full wind sum, the sightline solve and three smoothsteps for all of it, and
+// the rasteriser was feeding millions of degenerate quads to the fragment
+// stage so they could be discarded. On a gameplay camera roughly half of the
+// 182 m grass disc is behind the player.
+uniform vec3 cam_forward = vec3(0.0, 0.0, -1.0);
+// Centre and radius of the live field, so a chunk that has been streamed out
+// but not yet freed stops drawing instead of hanging in the air.
+uniform vec3 view_origin = vec3(0.0);
 uniform sampler2D blade_tex : source_color, filter_linear_mipmap, repeat_disable;
 uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
 
@@ -75,6 +89,35 @@ varying float v_cull;
 void vertex() {
 	vec3 origin = MODEL_MATRIX[3].xyz;
 	float height = max(VERTEX.y, 0.0);
+
+	// ---- view cull ------------------------------------------------------
+	//
+	// Two tests, both evaluated from the instance origin, so every vertex of a
+	// quad reaches the same answer and the branch below is perfectly coherent
+	// (no divergence, no wasted work on the far side of it).
+	//
+	//   1. Behind the camera. Signed distance along the view direction, with a
+	//      6 m margin so a blade that straddles the near plane - part of it
+	//      still on screen - is never dropped.
+	//   2. Outside the streamed disc. Chunks are freed when the player walks
+	//      away; this covers the frames between "out of range" and "queue_free
+	//      actually ran".
+	//
+	// Collapsing the quad to a point rather than branching to a discard keeps
+	// the instance buffer untouched - no reallocation, no popping of the
+	// transform array, and the degenerate triangles cost the rasteriser
+	// essentially nothing.
+	float view_depth = dot(origin - cam_origin, cam_forward);
+	float view_keep = smoothstep(-6.0, 3.0, view_depth);
+	float field_dist = length(origin.xz - view_origin.xz);
+	view_keep *= 1.0 - smoothstep(176.0, 182.0, field_dist);
+	if (view_keep <= 0.0) {
+		VERTEX = vec3(0.0);
+		v_tint = 0.0;
+		v_height = 0.0;
+		v_cull = 0.0;
+		return;
+	}
 
 	// Two overlapping waves: a slow gust field plus a faster ripple, both
 	// driven by world position so neighbouring chunks move as one meadow.
@@ -130,6 +173,10 @@ void vertex() {
 	v_cull = smoothstep(near_clear * 0.22, near_clear * 0.72, cam_dist);
 	v_cull *= smoothstep(player_clear * 0.6, player_clear, player_dist);
 	v_cull *= smoothstep(0.16, 0.52, sightline_dist);
+	// The view cull from the top of this function, folded in rather than
+	// applied as a separate multiply so the near-clear and the sightline clear
+	// keep working exactly as before when the instance survives it.
+	v_cull *= view_keep;
 	VERTEX *= v_cull;
 }
 

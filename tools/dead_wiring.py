@@ -67,6 +67,25 @@ def main() -> int:
             if len(re.findall(r"\b" + re.escape(name) + r"\b", text)) <= 1:
                 problems.append("DEAD PRELOAD        %s -> %s  (%s)" % (name, path, f.as_posix()))
 
+    # Unused member variables and constants. A `var _cull_timer` left behind by a
+    # deleted feature reads as live state to the next person, and this project has
+    # now grown two of them (`_cull_timer`, `CULL_NEAR`) plus `_enabled` and the
+    # retired `FX` preload. Declarations are one line; a whole-function grep is
+    # what misses them.
+    # Scope note: the reference count is taken over the WHOLE source corpus, not
+    # the declaring file. Autoload fields on the `Game` singleton (water_level,
+    # lake_center, touch_move...) are written in game_state.gd and read from four
+    # other scripts, so a per-file count reports all of them as dead. Only a
+    # declaration that appears exactly once across the entire project is
+    # genuinely unreferenced.
+    decl_sites = {}
+    for f, text in corpus.items():
+        for m in re.finditer(r"^(?:var|const) ([_A-Za-z][A-Za-z0-9_]*)\s*(?::|:=|=)", text, re.M):
+            decl_sites.setdefault(m.group(1), []).append(f.as_posix())
+    for name, sites in sorted(decl_sites.items()):
+        if len(re.findall(r"\b" + re.escape(name) + r"\b", joined)) <= 1:
+            problems.append("UNUSED DECLARATION  %s  (%s)" % (name, sites[0]))
+
     # Scenes nothing instantiates.
     for scene in sorted(pathlib.Path(".").rglob("*.tscn")):
         rel = scene.as_posix()

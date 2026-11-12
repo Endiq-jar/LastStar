@@ -45,6 +45,24 @@ var patch_noise: FastNoiseLite
 var surface_noise: FastNoiseLite
 
 var _mesh_instance: MeshInstance3D
+## One MeshInstance3D per terrain tile, built by _build(). See the note there.
+var _tiles: Array[MeshInstance3D] = []
+
+## Visual tiles per axis. The terrain used to be ONE 900 m mesh of 288x288
+## quads, which cost the frame twice over on mobile:
+##
+##   1. Culling is per object. A single mesh has one AABB covering the whole
+##      valley, so the renderer could never reject any of it - every frame drew
+##      all 165,888 triangles, including the entire half of the world behind
+##      the camera. Splitting into tiles lets Godot's own frustum test throw
+##      away roughly half of them before any vertex work happens.
+##   2. One 166k-triangle draw is a slow path for a tile-based mobile GPU: the
+##      whole batch is walked in a single pass with no chance to bin culled
+##      work.
+##
+## 12 tiles per axis gives 75 m tiles - small enough that a typical camera sees
+## under a third of them, large enough that the draw-call count stays trivial.
+const TERRAIN_TILES := 12
 
 
 func _ready() -> void:
@@ -251,42 +269,63 @@ func _terrain_material() -> ShaderMaterial:
 
 
 func _build() -> void:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-
 	var step := TERRAIN_SIZE / float(RESOLUTION)
 	var half := TERRAIN_SIZE * 0.5
+	var tile_quads := int(ceil(float(RESOLUTION) / float(TERRAIN_TILES)))
+	var mat := _terrain_material()
+	var grid := RESOLUTION + 1
 
-	for z in range(RESOLUTION):
-		for x in range(RESOLUTION):
-			var wx0 := -half + x * step
-			var wz0 := -half + z * step
-			var wx1 := wx0 + step
-			var wz1 := wz0 + step
+	# Sample every grid point once. Tiles share their edge rows and columns, so
+	# sampling per tile would run the whole noise chain two to four times for
+	# interior vertices. (RESOLUTION+1)^2 samples is the entire world for the
+	# price of one tile.
+	var pts: Array = []
+	pts.resize(grid * grid)
+	for gz in range(grid):
+		for gx in range(grid):
+			pts[gz * grid + gx] = _surface_point(-half + gx * step, -half + gz * step)
 
-			var p00 := _surface_point(wx0, wz0)
-			var p10 := _surface_point(wx1, wz0)
-			var p01 := _surface_point(wx0, wz1)
-			var p11 := _surface_point(wx1, wz1)
+	for tz in range(TERRAIN_TILES):
+		for tx in range(TERRAIN_TILES):
+			var x0 := tx * tile_quads
+			var z0 := tz * tile_quads
+			var x1 := mini(x0 + tile_quads, RESOLUTION)
+			var z1 := mini(z0 + tile_quads, RESOLUTION)
+			if x0 >= x1 or z0 >= z1:
+				continue
+			var st := SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			for z in range(z0, z1):
+				for x in range(x0, x1):
+					var p00: Vector3 = pts[z * grid + x]
+					var p10: Vector3 = pts[z * grid + x + 1]
+					var p01: Vector3 = pts[(z + 1) * grid + x]
+					var p11: Vector3 = pts[(z + 1) * grid + x + 1]
 
-			# Winding matters: Godot computes a triangle normal as
-			# (p1-p3) x (p1-p2), so (p00,p01,p10) produced a DOWNWARD normal.
-			# That inverted the surface (backface-culled = invisible terrain,
-			# lit from underneath = "world upside down"). Counter-clockwise
-			# when viewed from above is the correct order.
-			for v in [p00, p10, p01, p10, p11, p01]:
-				st.set_uv(Vector2(v.x, v.z) * 0.02)
-				st.add_vertex(v)
+					# Winding matters: Godot computes a triangle normal as
+					# (p1-p3) x (p1-p2), so (p00,p01,p10) produced a DOWNWARD normal.
+					# That inverted the surface (backface-culled = invisible terrain,
+					# lit from underneath = "world upside down"). Counter-clockwise
+					# when viewed from above is the correct order.
+					for v in [p00, p10, p01, p10, p11, p01]:
+						st.set_uv(Vector2(v.x, v.z) * 0.02)
+						st.add_vertex(v)
 
-	st.generate_normals()
-	st.generate_tangents()
-
-	_mesh_instance = MeshInstance3D.new()
-	_mesh_instance.name = "TerrainMesh"
-	_mesh_instance.mesh = st.commit()
-	_mesh_instance.material_override = _terrain_material()
-	_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	add_child(_mesh_instance)
+			st.generate_normals()
+			# No generate_tangents(): nothing in this project samples a normal
+			# map, so a tangent basis is 16 bytes per vertex of buffer that no
+			# shader reads - several MB of VRAM and a second full pass over the
+			# grid at load.
+			var mi := MeshInstance3D.new()
+			mi.name = "TerrainTile_%d_%d" % [tx, tz]
+			mi.mesh = st.commit()
+			mi.material_override = mat
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			add_child(mi)
+			_tiles.append(mi)
+			if _mesh_instance == null:
+				# Kept as "the" terrain mesh for callers that ask for one.
+				_mesh_instance = mi
 
 	# Collision is built from a half-resolution grid: the visual mesh stays
 	# crisp while the physics triangles drop 4x (important on mobile).

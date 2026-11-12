@@ -21,7 +21,6 @@ const TEX_BUSH := "res://assets/environment/bushes/bush.png"
 # billboard sheet.
 const TEX_ROCK_SURFACE := "res://assets/environment/rocks/r_tex_rocks.png"
 const TEX_ROCKS := TEX_ROCK_SURFACE
-const TEX_PEBBLES := "res://assets/environment/pebbles/pebbels.png"
 
 ## One shared material per species. Materials are shared deliberately: a
 ## ShaderMaterial per layer would recompile the shader, which is the stall that

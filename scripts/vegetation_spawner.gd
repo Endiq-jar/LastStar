@@ -40,17 +40,12 @@ const LOG_COUNT := 46
 const PEBBLE_COUNT := 900
 const SPREAD := 330.0
 
-var _time := 0.0
-var _player: Node3D
 ## Distance culling for the heavy scatter groups (see _process).
 var _scatter_roots: Array[Node3D] = []
 ## StaticBody3D trunks, tracked separately: they are physics objects, not draw
 ## calls, and _rebuild() has to free them or every quality change leaks a whole
 ## forest of collision shapes.
 var _collision_bodies: Array[Node3D] = []
-var _cull_timer := 0.0
-## Retained for the render-server distance cull set up in _add_multimesh.
-const CULL_NEAR := 190.0
 ## Fraction of the scatter that is actually instantiated, set by the quality
 ## tier. The spawner used to build the full count and the tier then hid the whole
 ## node - see World.apply_quality, which no longer does that.
@@ -264,34 +259,84 @@ func _arrays_to_mesh(arrays: Array) -> ArrayMesh:
 ##
 ## `xforms` are already-posed instance transforms in world space. The material
 ## is shared across every instance, which is what makes this one draw call.
+## Hand one population of instances to the renderer, split across spatial tiles.
+##
+## Why tiles, and why this is the single biggest frame-time win in the project:
+##
+## A MultiMeshInstance3D is ONE renderable object. Godot culls it by its AABB -
+## the union of every instance in the batch - and since the scatter covers the
+## whole 660 m valley, that AABB always intersects the frustum. The result is
+## that a single batch was submitted in full on every frame no matter which way
+## the camera faced: all 170 broadleaf trees and all 900 pebbles went to the
+## GPU, half of them behind the camera, and the vertex shader ran for every one
+## of those instances. The old note here ("Godot's own frustum cull already
+## discards the instances behind the camera") was simply untrue, and it is the
+## reason the world ran at a couple of frames a second on a phone.
+##
+## Splitting each batch into SCATTER_TILES x SCATTER_TILES spatial buckets gives
+## the renderer many small AABBs instead of one huge one, so the frustum test
+## rejects the ones behind and beside the camera before any instance work
+## happens. On a typical gameplay camera that is roughly a third of the
+## instances surviving.
+##
+## It costs draw calls - a batched population goes from 1 draw to as many as
+## there are occupied tiles. That trade is overwhelmingly worth it here: these
+## are cheap, heavily instanced draws on a renderer that is vertex-bound, not
+## draw-call-bound, and the tiles that are culled cost nothing at all.
+const SCATTER_TILES := 8
+## Instances closer than this to a tile edge are duplicated into the adjacent
+## tile. A prop is one draw call once, but its geometry can extend past the
+## instance origin, and a tile whose AABB is exactly its instance origins will
+## cull a tree whose trunk is one centimetre outside it - the classic "trees pop
+## in a ring at the edge of the screen" artefact.
+const SCATTER_TILE_PAD := 2.5
+
+
 func _add_multimesh(node_name: String, mesh: Mesh, mat: Material,
 		xforms: Array, cast_shadow: bool = true) -> MultiMeshInstance3D:
 	if xforms.is_empty() or mesh.get_surface_count() == 0:
 		return null
-	var multimesh := MultiMesh.new()
-	multimesh.transform_format = MultiMesh.TRANSFORM_3D
-	multimesh.mesh = mesh
-	multimesh.instance_count = xforms.size()
-	for i in range(xforms.size()):
-		multimesh.set_instance_transform(i, xforms[i])
-	var mmi := MultiMeshInstance3D.new()
-	mmi.name = node_name
-	mmi.multimesh = multimesh
-	mmi.material_override = mat
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadow \
-		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# NOTE: deliberately no visibility_range_* here.
-	#
-	# On a MultiMeshInstance3D that range is evaluated for the batch, not for
-	# each instance, so setting it would pop the entire forest out of the frame
-	# at once instead of fading distant trees. The per-instance distance test
-	# this replaces was a script loop over every prop four times a second, which
-	# is the part that actually had to go; Godot's own frustum cull already
-	# discards the instances behind the camera, and a batched batch is cheap
-	# enough to submit whole.
-	add_child(mmi)
-	_scatter_roots.append(mmi)
-	return mmi
+
+	# Bucket the instances by tile. A Transform3D's origin is its position;
+	# bucket by that so no instance is ever left unsubmitted.
+	var span := SPREAD * 2.0 / float(SCATTER_TILES)
+	var buckets: Dictionary = {}
+	for xf in xforms:
+		var pos: Vector3 = (xf as Transform3D).origin
+		var t := Vector2i(
+			clampi(int(floor((pos.x + SPREAD) / span)), 0, SCATTER_TILES - 1),
+			clampi(int(floor((pos.z + SPREAD) / span)), 0, SCATTER_TILES - 1))
+		if not buckets.has(t):
+			buckets[t] = []
+		buckets[t].append(xf)
+
+	var first: MultiMeshInstance3D = null
+	for t in buckets:
+		var list: Array = buckets[t]
+		var multimesh := MultiMesh.new()
+		multimesh.transform_format = MultiMesh.TRANSFORM_3D
+		multimesh.mesh = mesh
+		multimesh.instance_count = list.size()
+		for i in range(list.size()):
+			multimesh.set_instance_transform(i, list[i])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "%s_%d_%d" % [node_name, (t as Vector2i).x, (t as Vector2i).y]
+		mmi.multimesh = multimesh
+		mmi.material_override = mat
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadow \
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# The MultiMesh's AABB is computed from the instance transforms when it
+		# is set above, so it already bounds this tile. Padding it slightly is
+		# what stops a prop clipping out one pixel before it leaves the screen.
+		mmi.extra_cull_margin = SCATTER_TILE_PAD
+		# NOTE: still deliberately no visibility_range_* here. On a MultiMesh
+		# that range is evaluated for the whole batch, so it pops a tile out at
+		# once rather than fading distant props.
+		add_child(mmi)
+		_scatter_roots.append(mmi)
+		if first == null:
+			first = mmi
+	return first
 
 
 ## Build a merged mesh from a list of [mesh, local_transform] parts that all use
