@@ -161,9 +161,25 @@ jobs:
           # Surface the per-file verdict as annotations. Step logs live on blob
           # storage and are not always fetchable, which left "it compiled" as an
           # unverifiable claim - the shader count is the evidence.
-          echo "::notice title=compile::$(grep -c '^COMPILE_SHADER:' /tmp/compile.log) shaders compiled, $(grep -c '^COMPILE_TRY:' /tmp/compile.log) files checked"
+          #
+          # `|| true` on the pipelines below is load-bearing. GitHub runs `run:`
+          # blocks under `bash -e`, so a `grep` that legitimately finds nothing
+          # (0 shaders compiled, which is exactly what a broken import produces)
+          # returns 1 and kills the step instantly - before any of the failure
+          # reporting below it can run. That is how "0 shaders compiled" arrived
+          # as a bare exit code with no error annotation at all.
+          echo "::notice title=compile::$(grep -c '^COMPILE_SHADER:' /tmp/compile.log || true) shaders compiled, $(grep -c '^COMPILE_TRY:' /tmp/compile.log || true) files checked"
           grep -E "^COMPILE_SHADER:" /tmp/compile.log | head -12 \
-            | while IFS= read -r line; do echo "::notice title=shader::$line"; done
+            | while IFS= read -r line; do echo "::notice title=shader::$line"; done || true
+          # Whatever happened, the tail of the log must reach the annotations -
+          # otherwise a crashed compile check is indistinguishable from a clean
+          # one in the only channel that survives.
+          if ! grep -qE "^COMPILE_OK: " /tmp/compile.log; then
+            echo "::warning::compile check produced no COMPILE_OK - log tail follows"
+            tail -30 /tmp/compile.log | while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error title=compilelog::$line"
+            done
+          fi
           # Shader compile failures do not stop the run either - Godot logs an
           # error and falls back to a default white material, which reads as an
           # art bug rather than a build failure. They are errors here.
