@@ -1027,7 +1027,11 @@ func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 		# no wind sway, and a tiled albedo. Set here rather than in the material
 		# cache because material_for() is shared per (species, wind, tint) and the
 		# rock texture is not interchangeable with a leaf sprite.
-		var solid := spec["mesh"] in ["rock", "boulder", "trunk"]
+		# Typed, not inferred. `spec` is an untyped Dictionary, so `spec["mesh"]`
+		# has no static type and `var solid := ... in [...]` fails Godot's analyser
+		# with "Cannot infer the type of solid variable" - at load time, which kills
+		# the whole world script. gdparse and undeclared.py both accept it.
+		var solid: bool = str(spec["mesh"]) in ["rock", "boulder", "trunk"]
 		if solid:
 			mat.set_shader_parameter("solid", 1.0)
 			mat.set_shader_parameter("uv_scale", Vector2(2.2, 2.2))
