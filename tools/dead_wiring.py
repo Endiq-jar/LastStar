@@ -80,11 +80,41 @@ def main() -> int:
     # genuinely unreferenced.
     decl_sites = {}
     for f, text in corpus.items():
-        for m in re.finditer(r"^(?:var|const) ([_A-Za-z][A-Za-z0-9_]*)\s*(?::|:=|=)", text, re.M):
+        for m in re.finditer(r"^(?:static var|var|const) ([_A-Za-z][A-Za-z0-9_]*)\s*(?::|:=|=)",
+                             text, re.M):
             decl_sites.setdefault(m.group(1), []).append(f.as_posix())
+
+    # Two ways a declaration is dead:
+    #
+    #   * it never appears again anywhere in the project; or
+    #   * every other appearance ASSIGNS to it - it is write-only.
+    #
+    # The second form is what a reference count cannot see, and it is the form
+    # this project actually shipped: `_mesh_instance` was declared, null-tested
+    # and assigned inside a loop that only wanted the first tile, and nothing
+    # ever read it back. Three occurrences, so a count said "alive".
+    decl_re = re.compile(r"^\s*(?:static var|var|const) (\w+)")
     for name, sites in sorted(decl_sites.items()):
-        if len(re.findall(r"\b" + re.escape(name) + r"\b", joined)) <= 1:
-            problems.append("UNUSED DECLARATION  %s  (%s)" % (name, sites[0]))
+        occ = [m.start() for m in re.finditer(r"\b" + re.escape(name) + r"\b", joined)]
+        reads = 0
+        for i in occ:
+            line_start = joined.rfind("\n", 0, i) + 1
+            dm = decl_re.match(joined[line_start:i + len(name) + 20])
+            # `dm.group(1) == name` matters: without it any line that merely
+            # STARTS with `var` counted as a declaration of this name, so a
+            # usage on a `var` line was skipped and every constant used once
+            # per line reported as dead.
+            if dm is not None and dm.group(1) == name:
+                continue
+            tail = joined[i + len(name):i + len(name) + 4].lstrip()
+            # `name =`, `name +=`, `name[` (an index write or a read - count it
+            # as a read to stay conservative) - only a bare assignment is skipped.
+            if re.match(r"^(?:\+=|-=|\*=|/=|=)\s*[^=]", tail):
+                continue
+            reads += 1
+        if reads == 0:
+            why = "write-only" if len(occ) > len(sites) else "unreferenced"
+            problems.append("UNUSED DECLARATION  %s  (%s, %s)" % (name, why, sites[0]))
 
     # Scenes nothing instantiates.
     for scene in sorted(pathlib.Path(".").rglob("*.tscn")):

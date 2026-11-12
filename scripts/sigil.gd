@@ -10,7 +10,6 @@ var _halo_mat: StandardMaterial3D
 var _sparkle_timer := 2.5
 var _picked := false
 var _time := 0.0
-var _base_y := 0.0
 var _color := Color(1.0, 0.86, 0.45)
 
 
@@ -98,7 +97,6 @@ func _ready() -> void:
 	# write and no lighting pass.
 
 	body_entered.connect(_on_body_entered)
-	_base_y = position.y
 	_time = randf() * TAU
 
 

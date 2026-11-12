@@ -50,7 +50,6 @@ var _time := 0.0
 var _hop_timer := 0.0
 var _attack_timer := 0.0
 var _dead := false
-var _spawn_pos := Vector3.ZERO
 var _wander_target := Vector3.ZERO
 var _wander_timer := 0.0
 
@@ -59,7 +58,6 @@ func _ready() -> void:
 	add_to_group("enemy")
 	collision_layer = 8
 	collision_mask = 1 | 2
-	_spawn_pos = global_position
 	home = global_position
 	_build()
 	_player = get_tree().get_first_node_in_group("player")

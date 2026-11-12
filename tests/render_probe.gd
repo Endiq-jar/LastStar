@@ -760,7 +760,7 @@ func _check_cull_actually_culls(world: Node) -> void:
 				var aabb: AABB = (c as MeshInstance3D).mesh.get_aabb()
 				biggest_extent = maxf(biggest_extent, maxf(aabb.size.x, aabb.size.z))
 	if tiles < 4:
-		_fail = true
+		_fail += 1
 		_log("FAIL", "CULL terrain is %d drawable(s); one mesh spanning the valley can never be culled" % tiles)
 	else:
 		_log("INFO", "CULL terrain tiles=%d largest_extent=%.0fm" % [tiles, biggest_extent])
@@ -782,10 +782,10 @@ func _check_cull_actually_culls(world: Node) -> void:
 		for c in n.get_children():
 			stack.append(c)
 	if batches < 8:
-		_fail = true
+		_fail += 1
 		_log("FAIL", "CULL only %d MultiMesh batch(es); the scatter is not split into cullable tiles" % batches)
 	elif largest > 4000:
-		_fail = true
+		_fail += 1
 		_log("FAIL", "CULL one batch holds %d instances; its AABB cannot be culled" % largest)
 	else:
 		_log("INFO", "CULL multimesh_batches=%d instances=%d largest_batch=%d" % [batches, total, largest])

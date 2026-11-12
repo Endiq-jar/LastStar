@@ -248,7 +248,7 @@ func next_character() -> void:
 
 
 func _on_party_down() -> void:
-	toast.emit("%s is down — returning to the last waypoint." % character()["name"])
+	toast.emit("%s is down — waking at %s." % [character()["name"], last_waypoint_name])
 	# Revive the whole party at half health, like a Genshin statue heal.
 	for i in range(health.size()):
 		health[i] = float(PARTY[i]["max_hp"]) * 0.5

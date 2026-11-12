@@ -44,7 +44,6 @@ var patch_noise: FastNoiseLite
 ## SURFACE_DETAIL. Only the rendered vertices get it.
 var surface_noise: FastNoiseLite
 
-var _mesh_instance: MeshInstance3D
 ## One MeshInstance3D per terrain tile, built by _build(). See the note there.
 var _tiles: Array[MeshInstance3D] = []
 
@@ -323,9 +322,6 @@ func _build() -> void:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 			add_child(mi)
 			_tiles.append(mi)
-			if _mesh_instance == null:
-				# Kept as "the" terrain mesh for callers that ask for one.
-				_mesh_instance = mi
 
 	# Collision is built from a half-resolution grid: the visual mesh stays
 	# crisp while the physics triangles drop 4x (important on mobile).
