@@ -38,7 +38,7 @@ produces an installable APK on every push.
 | **Day / night** | Sun angle, colour and ambient light drift over time; campfire and crystal lights carry the night |
 | **Environment (rendered)** | ![wide](docs/render_wide.webp) ![gameplay](docs/render_world.webp) |
 | **Character (rendered, front)** | ![front](docs/render_player.webp) |
-| **Grass** | The painted carpet is back: two crossed alpha-cut cards a tuft, **4 triangles an instance** against the 3D tuft's 64, on a jittered grid at 9.2 cards/m² near the player and thinning with distance (6 200 / 2 600 / 460 per 26 m chunk). ~95 000 cards and 0.59 M triangles for the whole meadow. **No wind** — the shader has no `TIME` in it. What it does do is not draw: behind-camera collapse, a clearing around the character, distance fade and a dissolve at the streaming edge |
+| **Grass** | The painted carpet is back, on the original hand-painted card: two crossed alpha-cut cards a tuft, **4 triangles an instance** against the 3D tuft's 64, on a jittered grid at 14.8 cards/m² near the player (10 000 / 3 600 / 500 per 26 m chunk). ~132 000 cards, 0.82 M triangles. **No wind** — the shader has no `TIME` in it. What it does do is not draw: behind-camera collapse, a clearing around the character, distance fade, and the streaming dissolve moved into the vertex stage. The fragment stage reads the card's *alpha only* — the sheet is a flat white stencil, so there is no colour fetch, no `pow()` and no per-pixel `length()` |
 | **Mobile UI** | Touch joystick + right-side camera drag + on-screen action buttons, plus a **Quality** toggle (Balanced / Performance / High) |
 
 ### Controls
@@ -105,6 +105,14 @@ The game is written so it **cannot** show a black screen with only the HUD:
   baked height grid and the structural AABBs, so a slime behind a ridge, a ruin
   wall or a pavilion roof is not drawn, while one glimpsed through the gap
   between two pillars is.
+* **every texture is WebP** — 5.2 MB of PNG became 569 KB, and the APK went
+  from 29.0 MB to 25.7 MB. The meadow's card is encoded *losslessly* (it is a
+  1-bit stencil whose edge the shader scissors on, and the lossless encode is
+  verified bit-exact against it); the icons are 256 px for an 84 px control; the
+  terrain maps are 256 px because neighbouring pixels differ by 0.3/255 — they
+  are smooth gradients that were stored at four times the resolution they
+  contain. `docs/` is excluded from the export: it is 4 MB of README screenshots
+  that was being packed into the APK.
 * the world bootstrap contains **no coroutines and no GPU readbacks** — both
   could wedge the main loop on software/GL drivers.
 * **the environment is one CC0 art pack** — every tree, blade of grass, bush,
@@ -112,7 +120,7 @@ The game is written so it **cannot** show a black screen with only the HUD:
   Nature Pack* (`assets/nature/`, twenty-one `.glb` files), consumed by
   `scripts/nature_pack.gd`, which bakes each model's material colours into
   vertex colours so a whole species can be drawn as one MultiMesh with one
-  material. The painted pngs the vegetation used to sample are gone. The
+  material. The painted vegetation atlases are gone. The
   meadow's tuft is the pack's grass decimated to its tallest 36 blades, because
   a 100-blade tuft at meadow density is tens of millions of triangles.
   The per-instance tint is a function of world position rather than a custom
