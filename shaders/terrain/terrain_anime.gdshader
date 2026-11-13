@@ -18,12 +18,6 @@ uniform sampler2D rock_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D sand_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 
-// Hue-shifted to true green (~120 degrees) to match the grass field. The meadow
-// used a yellow-green tint and the rendered frame's dominant hue bin confirmed
-// it: the terrain and the blades were both leaning straw, and moving only the
-// blades would have put a green carpet on a yellow hillside.
-uniform vec4 meadow_tint : source_color = vec4(0.205, 0.340, 0.180, 1.0);
-uniform vec4 meadow_deep : source_color = vec4(0.105, 0.205, 0.118, 1.0);
 // Slightly warm grey. A neutral 0.42 grey under a cool sky turns every cliff the
 // same slate blue and the mountains lose all separation from the sky behind them.
 uniform vec4 rock_tint : source_color = vec4(0.40, 0.38, 0.36, 1.0);
@@ -78,19 +72,9 @@ void fragment() {
 	// texture only adds a faint brush grain on top.
 	float dry = smoothstep(0.55, 1.0, patch);
 
-	// Detail from the painted textures, scaled to a painterly size rather than
-	// a photographic one. tri() picks the best projection per surface so cliffs
-	// do not stretch the meadow.
-	//
-	// Only the *luminance* of these is used, never their colour, and it is
-	// centred on 1.0 so it modulates rather than tints. Multiplying the albedo
-	// by the raw texture was the main source of the neon: the painted greens are
-	// blue-poor (blue channel around 0.16), so squaring them into an already
-	// blue-poor meadow albedo drove blue near zero and left a pure, saturated
-	// green with nothing to hold it back. Luminance detail keeps the texture's
-	// brushwork - the variation in value that reads as painted - without
-	// touching the hue the lighting depends on.
-	vec3 meadow_detail = tri(meadow_tex, v_world, wn, uv_scale);
+	// The meadow is a flat #7FBF5A texture, so one sample is enough; the
+	// other terrain textures retain triplanar projection on cliffs.
+	vec3 meadow_detail = texture(meadow_tex, v_world.xz * uv_scale).rgb;
 	vec3 rock_detail = tri(rock_tex, v_world, wn, uv_scale * 0.62);
 	vec3 sand_detail = tri(sand_tex, v_world, wn, uv_scale * 1.25);
 	// A second, much finer sample at a different scale. One texture at one scale
@@ -98,28 +82,12 @@ void fragment() {
 	// flat colour: there is nothing between the macro patch (hundreds of metres)
 	// and the base tint. Blending two scales of the same paint gives the
 	// mid-frequency breakup a painted hillside has.
-	vec3 meadow_fine = tri(meadow_tex, v_world, wn, uv_scale * 4.7);
-	float meadow_fl = dot(meadow_fine, vec3(0.2126, 0.7152, 0.0722));
-
-	// A third scale, sampled from the UV grid rather than triplanar because it is
-	// only ever seen on the ground. At 0.62 m this is the size of a patch of
-	// longer grass, and it is the scale the camera actually looks at from 4 m -
-	// without it the ground immediately under the player is one unbroken fill no
-	// matter how much larger-scale paint is layered above it.
-	vec3 near_detail = texture(meadow_tex, v_world.xz * 1.6).rgb;
-	float near_l = dot(near_detail, vec3(0.2126, 0.7152, 0.0722));
-	float meadow_l = dot(meadow_detail, vec3(0.2126, 0.7152, 0.0722));
 	float rock_l = dot(rock_detail, vec3(0.2126, 0.7152, 0.0722));
 	float sand_l = dot(sand_detail, vec3(0.2126, 0.7152, 0.0722));
 
-	// Meadow: two greens, broken up by the soft macro patches, modulated by the
-	// painted detail (kept subtle so the flat anime bands still dominate).
-	vec3 grass = mix(meadow_deep.rgb, meadow_tint.rgb, 0.35 + patch * 0.65);
-	grass *= mix(1.0, meadow_l * 1.9, 0.50);
-	grass *= mix(1.0, meadow_fl * 1.7, 0.30);
-	// Weighted by distance: the fine grain is only visible up close, and applying
-	// it at range would just be noise under the haze.
-	grass *= mix(1.0, near_l * 1.7, 0.52 * (1.0 - smoothstep(18.0, 70.0, length(VERTEX))));
+	// Use the meadow texture's actual colour rather than discarding its hue.
+	// Lighting, terrain variation, and fog still affect the final screen colour.
+	vec3 grass = meadow_detail * mix(0.72, 1.0, patch);
 	// A little golden meadow mixed in, the way open-world grass reads. Kept
 	// low: push this and the hillsides turn acid yellow-green.
 	// The dry blend is nearly as weak as it can be while still breaking up the

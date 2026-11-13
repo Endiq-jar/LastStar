@@ -10,7 +10,7 @@ extends Node3D
 ##   mid   (26 - 70 m)  half density, slightly taller so bare ground never shows
 ##   far   (70 - 130 m) sparse, cheap - reads as distant meadow texture
 ##
-## The tuft is a painted card again: two crossed alpha-cut quads, 4 triangles an
+## The tuft is a painted card again: one upright camera-facing alpha-cut quad, 2 triangles an
 ## instance, drawn from assets/grass/tuft.webp (hand-painted; see below).
 ##
 ## It spent a while as real geometry from the nature pack, at 64 triangles a
@@ -61,19 +61,9 @@ const VIEW_CHUNKS := 7
 ## sparse to overlap you do not get a carpet - you get green boxes with tufts
 ## sticking out of them, which is exactly what this looked like at 9.2/m2.
 ##
-## Cost, counted in triangles because that is what the frame pays: 4 triangles an
-## instance, two crossed quads. The disc is 9 near / 19 mid / 93 far chunks, so
-## the old numbers bought 364 300 cards and 1.46 M triangles - four times the
-## meadow's previous triangle count, because the old version drew ONE quad a card
-## and this draws two. That is too much to spend on the way to "less laggy".
-##
-## The card is deliberately smaller than the old meadow's 0.71 x 0.73 m, at
-## 0.52 x 0.54. A card that size at two metres from the lens is about 300 pixels
-## tall, so the foreground was a handful of enormous cards with their solid bases
-## reading as slabs - the meadow only looked like grass from about 15 m out. Half
-## a metre at the same density is a carpet all the way in, and it lets the count
-## go up without the triangles following: 9*10000*4 + 19*3600*4 + 93*500*4 =
-## 0.82 M triangles for 240 000 cards, 14.8 cards/m2 near the player.
+## Each tuft is one camera-facing quad (2 triangles). The density falls off
+## across near, mid and far rings; quality tiers scale all three counts.
+## The 0.52 x 0.54 m card keeps the painted tuft's proportions.
 ##
 ## It is the largest line item in the frame, so quality tier 1 multiplies all
 ## three tiers by 0.35 and the far ring is deliberately sparse.
@@ -165,38 +155,15 @@ func _build_resources() -> void:
 	_material.set_shader_parameter("card_height", CARD_HEIGHT)
 
 
-## Two quads crossed at right angles, origin at the root, UV.y running from the
-## soil to the tip.
-##
-## Normals are the quad's own - horizontal, pointing out of the card - and not
-## straight up.
-##
-## Up normals were a mistake worth recording, because the reasoning sounded
-## right: a vertical card lit by its own normal is edge-on to the sun half the
-## time, so half the meadow goes dark depending on which way a tuft is turned,
-## whereas an up normal lights grass the way it lights the ground and makes the
-## field read as one surface.
-##
-## What it actually did was make the meadow *brighter*, uniformly, and the sun on
-## this map is why. It sits 0.74 above the horizon, so a vertical card facing the
-## light gets N.L = 1.00 while an up-facing one gets 0.74. Every card was being
-## handed the maximum the key light can give, which is what turned the field into
-## flat lime-green sheets in front of the camera - three quarters of the frame's
-## contrast between one blade and the next is that dot product, and it had been
-## constant across the whole meadow.
-##
-## The old painted grass this replaces used the quad's own normal, and its cards
-## are crossed for exactly this reason: the pair always presents a face to the
-## light, so a tuft is lit without all of it being lit the same.
+## A single camera-facing card with its origin at the root. The vertical
+## texture coordinate follows the image: V=0 at the tips and V=1 at the base.
 func _build_tuft_mesh() -> ArrayMesh:
+	# One upright card: the shader turns it towards the camera around the Y
+	# axis. This avoids visible crossed planes and halves the triangle count.
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var half := CARD_WIDTH * 0.5
-	for i in range(2):
-		var ang := float(i) * PI * 0.5
-		var edge := Vector3(cos(ang), 0.0, sin(ang)) * half
-		# The quad's own outward normal: perpendicular to the card and horizontal.
-		_add_quad(st, -edge, edge, Vector3(-sin(ang), 0.0, cos(ang)))
+	_add_quad(st, Vector3(-half, 0.0, 0.0), Vector3(half, 0.0, 0.0), Vector3.FORWARD)
 	st.index()
 	return st.commit()
 
@@ -204,8 +171,10 @@ func _build_tuft_mesh() -> ArrayMesh:
 func _add_quad(st: SurfaceTool, a: Vector3, b: Vector3, normal: Vector3) -> void:
 	var up := Vector3(0.0, CARD_HEIGHT, 0.0)
 	var verts := PackedVector3Array([a, b, b + up, a, b + up, a + up])
-	var uvs := PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1),
-		Vector2(0, 0), Vector2(1, 1), Vector2(0, 1)])
+	# Images have their top row at V=0. The painted tuft's roots are at the
+	# bottom of the image, so ground vertices must sample V=1, not V=0.
+	var uvs := PackedVector2Array([Vector2(0, 1), Vector2(1, 1), Vector2(1, 0),
+		Vector2(0, 1), Vector2(1, 0), Vector2(0, 0)])
 	for i in range(6):
 		st.set_uv(uvs[i])
 		st.set_normal(normal)

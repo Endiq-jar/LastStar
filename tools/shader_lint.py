@@ -137,7 +137,7 @@ def check(path: pathlib.Path) -> None:
         if in_vertex:
             depth += code.count("{") - code.count("}")
             for builtin in FRAGMENT_ONLY:
-                if builtin in code:
+                if re.search(r"\b%s\b" % re.escape(builtin), code):
                     problems.append(
                         f"{path}:{number}: {builtin} is fragment-stage only and "
                         f"cannot be read in vertex() - pass it as a uniform"

@@ -1,7 +1,7 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 
-// The meadow's grass card. Two crossed alpha-cut quads per tuft, 4 triangles an
+// The meadow's grass card. One upright camera-facing quad, 2 triangles an
 // instance, drawn through one MultiMesh per 26 m chunk. This is the surface
 // stamped ~95 000 times a frame, so it is the one shader in the game where a
 // saved ALU op is worth having, and it is written with that in mind.
@@ -84,6 +84,18 @@ varying float v_dist;
 
 void vertex() {
 	vec3 origin = MODEL_MATRIX[3].xyz;
+	// Rotate only around world Y so the single plane faces the camera while
+	// its roots remain fixed. Preserve the instance's uniform size and origin.
+	vec3 right = INV_VIEW_MATRIX[0].xyz;
+	right.y = 0.0;
+	right = length(right) > 0.001 ? normalize(right) : vec3(1.0, 0.0, 0.0);
+	vec3 forward = cross(right, vec3(0.0, 1.0, 0.0));
+	float instance_scale = length(MODEL_MATRIX[0].xyz);
+	mat4 billboard = mat4(vec4(right * instance_scale, 0.0),
+		vec4(0.0, instance_scale, 0.0, 0.0),
+		vec4(forward * instance_scale, 0.0), MODEL_MATRIX[3]);
+	MODELVIEW_MATRIX = VIEW_MATRIX * billboard;
+	MODELVIEW_NORMAL_MATRIX = mat3(MODELVIEW_MATRIX);
 
 	// ---- view cull ------------------------------------------------------
 	//
@@ -175,7 +187,7 @@ void fragment() {
 	//
 	// clamp() is not needed: UV is 0..1 on a QuadMesh by construction, and the
 	// ramp is a polynomial that cannot leave 0..1 for 0..1 input.
-	float t = UV.y;
+	float t = 1.0 - UV.y;
 	// t^1.35, in two multiplies instead of a pow. Max error 0.02 over the ramp.
 	float ramp = t * (0.35 + 0.65 * t) * 0.66;
 

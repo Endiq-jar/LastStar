@@ -306,7 +306,7 @@ func _ready() -> void:
 		if nature_tris < 4000:
 			failures.append("nature pack baked only %d triangles" % nature_tris)
 		# The meadow's tuft is a painted card again, and its budget depends on
-		# the card actually being a card: two quads, four triangles, with UVs and
+		# the card actually being a single quad with UVs and
 		# an alpha sheet to cut them out of. A regression here is invisible in code
 		# review - a mesh with six quads still "builds" - and shows up only as the
 		# frame's triangle count.
@@ -324,10 +324,29 @@ func _ready() -> void:
 			var cuv: PackedVector2Array = ca2[Mesh.ARRAY_TEX_UV]
 			var cverts: PackedVector3Array = ca2[Mesh.ARRAY_VERTEX]
 			print("MESH_CHECK grass card verts=%d tris=%d uv=%d" % [cverts.size(), cidx.size() / 3, cuv.size()])
-			if cidx.size() / 3 != 4:
-				failures.append("grass card has %d triangles, expected 4 (two quads)" % (cidx.size() / 3))
+			if cidx.size() / 3 != 2:
+				failures.append("grass card has %d triangles, expected 2 (one quad)" % (cidx.size() / 3))
 			if cuv.size() != cverts.size():
 				failures.append("grass card has no UVs - the alpha sheet cannot cut it out")
+			else:
+				for i in range(cverts.size()):
+					var expected_v := 1.0 if cverts[i].y < 0.01 else 0.0
+					if not is_equal_approx(cuv[i].y, expected_v):
+						failures.append("grass card UV is upside down at vertex %d" % i)
+						break
+
+		var meadow := Image.load_from_file("res://textures/terrain/meadow.webp")
+		if meadow == null or meadow.is_empty():
+			failures.append("could not read the meadow source texture")
+		else:
+			var target := Color8(127, 191, 90)
+			for y in range(meadow.get_height()):
+				for x in range(meadow.get_width()):
+					if not meadow.get_pixel(x, y).is_equal_approx(target):
+						failures.append("meadow texture has a pixel other than #7FBF5A at %d,%d" % [x, y])
+						break
+				if not failures.is_empty():
+					break
 
 	# Surface textures must be opaque.
 	#
