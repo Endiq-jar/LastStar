@@ -231,6 +231,10 @@ func _run() -> void:
 	if gf != null:
 		_log("INFO", "GRASS_SUMMARY blades=%d chunks=%d diag=%s" % [
 			gf.call("blade_count"), gf.call("chunk_count"), str(gf.call("diagnostics"))])
+		# The card's alpha is what cuts the blade shape out of the quad. If it is
+		# missing the meadow draws as plain green rectangles, which looks like a
+		# shader bug but is a texture-import one.
+		_log("INFO", "GRASS_CARD %s" % str(gf.call("card_report")))
 
 	# --- environment dressing ----------------------------------------------
 	# Logs and pebbles are what stop the grass reading as a flat painted

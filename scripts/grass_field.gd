@@ -416,6 +416,36 @@ func chunk_count() -> int:
 	return _chunks.size()
 
 
+## What the meadow's card actually is once the engine has imported it.
+##
+## Written after a frame in which every card drew as a plain green rectangle:
+## alpha-scissor had stopped cutting anything out, and there is no way to tell
+## from a screenshot whether the texture failed to import, arrived without an
+## alpha channel, or was never bound to the sampler at all. This reports all
+## three, because they have completely different fixes.
+func card_report() -> String:
+	if _material == null:
+		return "material=NULL"
+	var bound = _material.get_shader_parameter("blade_tex")
+	if not (bound is Texture2D):
+		return "blade_tex=UNBOUND"
+	var tex: Texture2D = bound
+	var out := "%dx%d format=%d" % [tex.get_width(), tex.get_height(), tex.get_format()]
+	# Ask the engine for the decoded pixels rather than trusting the file: an
+	# import that drops alpha, or compresses to a format with none, looks
+	# identical on disk.
+	var img := tex.get_image()
+	if img == null:
+		return out + " image=NULL (imported without CPU-readable pixels)"
+	var samples: Array[String] = []
+	# Top of the sheet is empty, the bottom is solid - so three vertical samples
+	# say whether alpha survived the import in one line.
+	for y in [8, 128, 248]:
+		samples.append("%.2f" % img.get_pixel(tex.get_width() / 2, y).a)
+	out += " alpha(top/mid/bottom)=%s" % "/".join(samples)
+	return out
+
+
 func diagnostics() -> String:
 	# `_tier_counts` used to hold one key per density constant, written by the
 	# builder. When the constants changed the keys were stale and this reported
