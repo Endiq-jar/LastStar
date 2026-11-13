@@ -49,25 +49,35 @@ const CHUNK_SIZE := 26.0          ## metres per chunk
 const VIEW_CHUNKS := 7
 ## Instances per 26 m chunk.
 ##
-## These are counts of CARDS, and a card is 0.78 m of clump - so the number that
-## matters is cards per square metre, not cards per chunk. 26 m squared is 676 m2,
-## so BLADES_NEAR is 9.2 cards/m2 and neighbouring cards overlap, which is what
-## makes a carpet instead of a scattering. The two previous passes had this at
-## 2.2 and 3.1 cards/m2 and both read as grass dotted onto a bare hillside,
-## which is the actual reason the meadow looked wrong at 27 000 cards - not the
-## card's shape, which by then was already the old painted fan.
+## Counts of CARDS, so the number that matters is cards per square metre. A chunk
+## is 676 m2, and the card is 0.71 m of painted grass - the same paint, on the
+## same kind of card, as the old meadow this restores.
 ##
-## Cost, counted in triangles rather than cards because that is what the frame
-## pays: 4 triangles an instance, and the disc is 9 near / 19 mid / 93 far
-## chunks. 9*6241*4 + 19*2601*4 + 93*484*4 = 0.59 M triangles for the whole
-## meadow. The 14 000-card field this replaces spent 14 000 * 4 per near chunk,
-## which by itself was more than half a million - and it drew one quad a card,
-## so it had 3.8 cards/m2 to this one's 9.2. The same triangles, twice the
-## cover. It is still the largest line item in the frame, so quality tier 1
-## multiplies all three tiers by 0.35 and the far ring is deliberately sparse.
-const BLADES_NEAR := 6200         ## instances in a chunk adjacent to the player
+## The old meadow's own numbers, from c7b415f: BLADES_NEAR 14000, i.e. 20.7
+## cards/m2, with a 0.62 x 0.56 m quad. That is the density its frame shows, and
+## the sheet is a top-heavy tuft whose solid base is a *quarter* of its height, so
+## at 0.73 m tall every card puts 0.18 m of opaque paint on the ground. Just
+## under a quarter of the frame's pixels are that base, and if the cards are too
+## sparse to overlap you do not get a carpet - you get green boxes with tufts
+## sticking out of them, which is exactly what this looked like at 9.2/m2.
+##
+## Cost, counted in triangles because that is what the frame pays: 4 triangles an
+## instance, two crossed quads. The disc is 9 near / 19 mid / 93 far chunks, so
+## the old numbers bought 364 300 cards and 1.46 M triangles - four times the
+## meadow's previous triangle count, because the old version drew ONE quad a card
+## and this draws two. That is too much to spend on the way to "less laggy".
+##
+## So the counts are set to land the TRIANGLES where the old frame had them,
+## 9*7000*4 + 19*2600*4 + 93*750*4 = 0.66 M, which against a 4.6 M primitive
+## frame is affordable. That still buys 11.4 cards/m2 near the player - better
+## than the old 20.7/m2 at one quad a card, because two crossed quads cover a
+## square metre from any yaw and one quad does not.
+##
+## It is the largest line item in the frame, so quality tier 1 multiplies all
+## three tiers by 0.35 and the far ring is deliberately sparse.
+const BLADES_NEAR := 7000         ## instances in a chunk adjacent to the player
 const BLADES_MID := 2600
-const BLADES_FAR := 460
+const BLADES_FAR := 750
 ## Hard cap on live chunks. Must be at least (2*VIEW_CHUNKS+1)^2 or the field
 ## silently stops growing: the cap was written for a radius of 5 and stayed at 81
 ## when the radius became 7, which needs 225. Without this the outer ring would

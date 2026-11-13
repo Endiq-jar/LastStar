@@ -167,17 +167,6 @@ void fragment() {
 	if (tex.a < alpha_cut || tex.r < 0.35) {
 		discard;
 	}
-	// TEMPORARY DIAGNOSTIC - remove before this is finished.
-	// Red if the fragment's UVs are outside the quad's own 0..1 range; blue if
-	// the texel that came back is opaque white where the sheet is clear.
-	// Both feed `col`, so the single EMISSION assignment below still carries them
-	// (and tools/fill_check.py still sees one EMISSION expression).
-	vec3 diag = vec3(-1.0);
-	if (UV.x < 0.02 || UV.x > 0.98 || UV.y < 0.02 || UV.y > 0.98) {
-		diag = vec3(1.0, 0.0, 0.0);
-	} else if (tex.a > 0.99 && tex.r > 0.99) {
-		diag = vec3(0.0, 0.0, 1.0);
-	}
 
 	// Root-to-tip gradient. Dark at the base anchors the tuft in the soil,
 	// brighter at the tip catches the sky. Narrowed from what it was: a wide
@@ -191,9 +180,6 @@ void fragment() {
 	float ramp = t * (0.35 + 0.65 * t) * 0.66;
 
 	vec3 col = mix(grass_color.rgb, grass_tip.rgb, ramp);
-	if (diag.r >= 0.0) {
-		col = diag;
-	}
 	// The dry variant, at a twelfth of the variance weight.
 	col = mix(col, dry_color.rgb, v_tint * color_variance * 0.12);
 	// Cheap per-tuft value variation, so the field is not one surface. Centred a
