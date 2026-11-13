@@ -26,18 +26,19 @@ produces an installable APK on every push.
 | System | Details |
 |---|---|
 | **Renderer** | OpenGL ES 3.0 (Compatibility) — runs on every Android device since 2013, including PowerVR GPUs like the Helio P95 where the Vulkan path black-screens |
-| **Anime terrain** | 900 m procedural valley, 144² heightfield, custom `terrain_anime` shader: painterly banded meadow, slope-aware rock, wet shoreline and snow caps |
+| **Anime terrain** | A **10 km** procedural world, streamed in three layers around the player (96 m tiles at 4 m, 672 m tiles at 32 m, one coarse shell over the whole map), custom `terrain_anime` shader: painterly banded meadow, slope-aware rock, wet shoreline and snow caps. Mountains stand 2–3.2 km out; a concave collision patch follows the player instead of a shape over the map |
 | **Cel shading** | `anime_toon.gdshader` — world-space two-band ramp, cool tinted shadows, a small cool rim + inverted-hull outline pass. No specular lobe: on near-black cloth it only ever painted grey patches, so the ramp and the outline carry the form |
 | **Party of three** | Sora (Anemo, sword), Ember (Pyro, catalyst), Volt (Electro, bow). Switch instantly with **T** or the portrait row |
 | **Traversal** | Sprint with stamina, double jump, **gliding** with wind wings, plunge attack from a dive |
 | **Combat** | 3-hit melee combo, elemental skill (E) with cooldown, elemental burst (Q) that spends energy, damage numbers, hit flashes, shockwaves |
 | **Enemies** | Elemental slimes that hop at you and take **reaction multipliers** (same element resisted, opposite empowered) |
 | **Progression** | 12 star sigils to recover, waypoint statues that heal the party and set your respawn, quest tracker, victory banner |
-| **World dressing** | Lake with stylized wave shader, wind arches, glowing crystal formations, campfires, rolling clouds, 3 700+ instanced trees/rocks/flowers and a 2 600-blade swooshing grass carpet |
+| **Water** | One surface at sea level over the whole map, because a sea in the south-east, a lake, a carved river and six ponds are all the same water table. The terrain carves the beds; wherever it falls below the waterline there is water, so a coastline needs no special case |
+| **World dressing** | Scattered trees, pines, dead trees, bushes, ferns, flowers, pebbles and boulders from the Ultimate Stylized Nature Pack, batched into MultiMeshes and occluded per entity; wind arches, glowing crystal clusters, campfires and bone-cloth banners at the shrines |
 | **Day / night** | Sun angle, colour and ambient light drift over time; campfire and crystal lights carry the night |
 | **Environment (rendered)** | ![wide](docs/render_wide.png) ![gameplay](docs/render_world.png) |
 | **Character (rendered, front)** | ![front](docs/render_player.png) |
-| **Grass** | A streaming meadow over the whole valley: 26 m chunks rebuilt around the player out to 130 m, density falling off with distance (9,000 / 3,600 / 1,100 blades per chunk), ~80,000 instances at full quality. Wind-waved, per-instance colour variation, root-to-tip gradient and faked subsurface scattering |
+| **Grass** | The painted carpet is back: two crossed alpha-cut cards a tuft, **4 triangles an instance** against the 3D tuft's 64, on a jittered grid at 9.2 cards/m² near the player and thinning with distance (6 200 / 2 600 / 460 per 26 m chunk). ~95 000 cards and 0.59 M triangles for the whole meadow. **No wind** — the shader has no `TIME` in it. What it does do is not draw: behind-camera collapse, a clearing around the character, distance fade and a dissolve at the streaming edge |
 | **Mobile UI** | Touch joystick + right-side camera drag + on-screen action buttons, plus a **Quality** toggle (Balanced / Performance / High) |
 
 ### Controls
