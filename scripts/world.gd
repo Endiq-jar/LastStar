@@ -856,11 +856,18 @@ func _scatter_landmarks() -> void:
 			banner.position = Vector3(0.0, 7.85, 0.15)
 			gate.add_child(banner)
 
-	# Floating crystal formations.
+	# Crystal formations.
+	#
+	# Opaque, and half as many. These were 85%-alpha prisms with an emission
+	# energy of 1.2, and from any distance at all a transparent prism lit from
+	# inside reads as a flat coloured plank lying on the hill - which is what the
+	# thin blue rectangles scattered across the wide shot were. A crystal is a
+	# solid object; the emission is what makes it glow, and it does not need the
+	# alpha channel to do it.
 	var crystal_colors := [Color(0.55, 0.85, 1.0), Color(0.75, 0.6, 1.0), Color(1.0, 0.78, 0.55)]
-	for i in range(14):
+	for i in range(9):
 		var a := _rng.randf() * TAU
-		var r := _rng.randf_range(40.0, 760.0)
+		var r := _rng.randf_range(60.0, 760.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
 		var y := _height(x, z)
@@ -877,13 +884,15 @@ func _scatter_landmarks() -> void:
 			mesh.size = Vector3(_rng.randf_range(0.3, 0.7), h, _rng.randf_range(0.3, 0.7))
 			crystal.mesh = mesh
 			var m := StandardMaterial3D.new()
-			m.albedo_color = Color(col.r, col.g, col.b, 0.85)
-			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			# Opaque, and the albedo is darker than the glow on purpose: the
+			# emission is what the eye reads as the crystal, and an albedo as
+			# bright as the emission just blows the shape out to a flat plate.
+			m.albedo_color = Color(col.r * 0.55, col.g * 0.55, col.b * 0.60, 1.0)
 			m.emission_enabled = true
 			m.emission = col
-			m.emission_energy_multiplier = 1.2
-			m.roughness = 0.15
-			m.metallic = 0.4
+			m.emission_energy_multiplier = 0.9
+			m.roughness = 0.18
+			m.metallic = 0.35
 			crystal.material_override = m
 			crystal.position = Vector3(_rng.randf_range(-1.2, 1.2), h * 0.5, _rng.randf_range(-1.2, 1.2))
 			crystal.rotation_degrees = Vector3(_rng.randf_range(-18, 18), _rng.randf() * 360, _rng.randf_range(-18, 18))
