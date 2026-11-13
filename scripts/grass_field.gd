@@ -484,8 +484,12 @@ func card_report() -> String:
 	# file on disk answers it directly and without a GPU. What the *importer*
 	# does with it is a separate check, and the width/height above already
 	# proves the resource loaded at the size it should.
-	out += " alpha(top/mid/bottom)=%s" % _alpha_from_source()
-	return out
+	var alpha_col := _alpha_from_source()
+	# Never return just the size line: a report with fields silently missing is
+	# what made this useless for three builds.
+	if alpha_col.is_empty():
+		return out + " alpha=UNREADABLE"
+	return out + " alpha(top/mid/bottom)=%s" % alpha_col
 
 
 ## Alpha at three points down the middle of the card, read from the committed
