@@ -39,8 +39,8 @@ extends Node3D
 ## proportions lands on the same silhouette, which is the whole point of using the
 ## old card. The field is denser now than it was then, so this is 0.71 x 0.73
 ## rather than the 1.3 m footprint that read as gaps between tufts.
-const CARD_WIDTH := 0.71
-const CARD_HEIGHT := 0.73
+const CARD_WIDTH := 0.52
+const CARD_HEIGHT := 0.54
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
 ## Radius, in chunks. 5 * 26 = 130 m, which with the shader's dissolve put a
@@ -67,17 +67,19 @@ const VIEW_CHUNKS := 7
 ## meadow's previous triangle count, because the old version drew ONE quad a card
 ## and this draws two. That is too much to spend on the way to "less laggy".
 ##
-## So the counts are set to land the TRIANGLES where the old frame had them,
-## 9*7000*4 + 19*2600*4 + 93*750*4 = 0.66 M, which against a 4.6 M primitive
-## frame is affordable. That still buys 11.4 cards/m2 near the player - better
-## than the old 20.7/m2 at one quad a card, because two crossed quads cover a
-## square metre from any yaw and one quad does not.
+## The card is deliberately smaller than the old meadow's 0.71 x 0.73 m, at
+## 0.52 x 0.54. A card that size at two metres from the lens is about 300 pixels
+## tall, so the foreground was a handful of enormous cards with their solid bases
+## reading as slabs - the meadow only looked like grass from about 15 m out. Half
+## a metre at the same density is a carpet all the way in, and it lets the count
+## go up without the triangles following: 9*10000*4 + 19*3600*4 + 93*500*4 =
+## 0.82 M triangles for 240 000 cards, 14.8 cards/m2 near the player.
 ##
 ## It is the largest line item in the frame, so quality tier 1 multiplies all
 ## three tiers by 0.35 and the far ring is deliberately sparse.
-const BLADES_NEAR := 7000         ## instances in a chunk adjacent to the player
-const BLADES_MID := 2600
-const BLADES_FAR := 750
+const BLADES_NEAR := 10000        ## instances in a chunk adjacent to the player
+const BLADES_MID := 3600
+const BLADES_FAR := 500
 ## Hard cap on live chunks. Must be at least (2*VIEW_CHUNKS+1)^2 or the field
 ## silently stops growing: the cap was written for a radius of 5 and stayed at 81
 ## when the radius became 7, which needs 225. Without this the outer ring would
