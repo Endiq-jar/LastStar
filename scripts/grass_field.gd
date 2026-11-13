@@ -129,6 +129,24 @@ func _build_resources() -> void:
 	_material = ShaderMaterial.new()
 	_material.shader = shader
 	var sheet := load("res://assets/grass/tuft.png")
+	# Log what the import produced, at load time.
+	#
+	# A card whose alpha did not survive importing draws as a plain rectangle, and
+	# that is indistinguishable from a shader fault in a screenshot. Printing the
+	# decoded format and a few alpha values here settles which it is, on the one
+	# run where it happens.
+	if sheet is Texture2D:
+		var img: Image = (sheet as Texture2D).get_image()
+		if img == null:
+			print("GRASS_SHEET %dx%d format=%d image=NONE" % [
+				(sheet as Texture2D).get_width(), (sheet as Texture2D).get_height(),
+				(sheet as Texture2D).get_format()])
+		else:
+			print("GRASS_SHEET %dx%d format=%d alpha(top/mid/bottom)=%.2f/%.2f/%.2f" % [
+				img.get_width(), img.get_height(), img.get_format(),
+				img.get_pixel(img.get_width() / 2, 8).a,
+				img.get_pixel(img.get_width() / 2, 128).a,
+				img.get_pixel(img.get_width() / 2, 248).a])
 	if sheet is Texture2D:
 		_material.set_shader_parameter("blade_tex", sheet)
 	else:

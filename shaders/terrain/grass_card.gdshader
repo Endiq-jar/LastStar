@@ -154,10 +154,17 @@ void fragment() {
 		discard;
 	}
 
-	// Cut the blade shape out of the quad. ALPHA is the only thing this shader
-	// wants from the sheet - see the note at the top of the file - so the sample
-	// is taken as a scalar and the other three channels are never unpacked.
-	if (texture(blade_tex, UV).a < alpha_cut) {
+	// Cut the blade shape out of the quad.
+	//
+	// The sheet is a 1-bit stencil: every texel is either opaque or fully clear,
+	// so ALPHA and the painted value carry the same mask - transparent texels are
+	// black, opaque ones are near-white. Both are tested, and the cost is one
+	// compare on a channel the fetch already brought back. That is deliberate
+	// belt-and-braces: a texture imported into a format without an alpha channel
+	// reads alpha 1.0 everywhere and the meadow draws as plain rectangles, and
+	// that failure looks exactly like a broken shader from the outside.
+	vec4 tex = texture(blade_tex, UV);
+	if (tex.a < alpha_cut || tex.r < 0.35) {
 		discard;
 	}
 
