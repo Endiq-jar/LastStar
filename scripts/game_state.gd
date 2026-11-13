@@ -124,6 +124,9 @@ const QUALITY_NAMES := ["Balanced", "Performance", "High"]
 
 ## Shared world facts used by water, enemies and weather systems.
 var water_level: float = 1.2
+## Metres across the whole world. The terrain publishes this at startup so the
+## map, the water surface and the compass agree on where the edge is.
+var world_size: float = 10000.0
 var lake_center: Vector2 = Vector2(48.0, 52.0)
 var lake_radius: float = 92.0
 

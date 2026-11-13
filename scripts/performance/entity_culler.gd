@@ -64,7 +64,11 @@ const SHOW_GRACE := 0.75
 ## only needs to know whether the ground rises across the sight line, and a
 ## finer grid would cost a hundred thousand noise evaluations at boot.
 const GRID_STEP := 8.0
-const GRID_EXTENT := 520.0
+## Half-width of the baked height field. It follows the viewer instead of
+## covering the map: the culler only ever asks about entities within FAR_CULL
+## metres, and a grid over a 10 km world at this resolution is 1.5M samples for
+## ground nobody is standing near.
+const GRID_EXTENT := 260.0
 ## A sight line is sampled this often when checking it against the height grid.
 const TERRAIN_STEP := 3.0
 ## How far above the interpolated height a point must be to count as clear.
@@ -91,6 +95,7 @@ var _states := {}
 
 var _heights := PackedFloat32Array()
 var _grid_n := 0
+var _grid_center := Vector2(1e9, 1e9)
 var _grid_ready := false
 var _bake_started := false
 
@@ -164,6 +169,17 @@ func _process(delta: float) -> void:
 	if _box_timer <= 0.0:
 		_box_timer = 5.0
 		_refresh_boxes()
+	# Re-bake the height field when the viewer has walked out from under it.
+	# Throttled to the probe interval so the cost lands at most a few times a
+	# second, and only after a real distance has been covered.
+	if _task_id < 0:
+		var players := get_tree().get_nodes_in_group("player") if get_tree() != null else []
+		if not players.is_empty() and players[0] is Node3D:
+			var p := (players[0] as Node3D).global_position
+			var v := Vector2(p.x, p.z)
+			if v.distance_to(_grid_center) > GRID_EXTENT * 0.45:
+				_bake_terrain()
+				_grid_center = v
 	_probe_timer -= delta
 	if _probe_timer <= 0.0 and _task_id < 0:
 		_probe_timer = _interval()
@@ -192,14 +208,20 @@ func _bake_terrain() -> void:
 	if not _terrain.has_method("get_height_at"):
 		push_warning("LastStar: entity culler has no terrain to sample")
 		return
+	var center := _grid_center
+	var players := get_tree().get_nodes_in_group("player") if get_tree() != null else []
+	if not players.is_empty() and players[0] is Node3D:
+		var p := (players[0] as Node3D).global_position
+		center = Vector2(snappedf(p.x, 40.0), snappedf(p.z, 40.0))
+	_grid_center = center
 	var n := int((GRID_EXTENT * 2.0) / GRID_STEP) + 1
 	var heights := PackedFloat32Array()
 	heights.resize(n * n)
 	var origin := -GRID_EXTENT
 	for gz in range(n):
 		for gx in range(n):
-			var x := origin + float(gx) * GRID_STEP
-			var z := origin + float(gz) * GRID_STEP
+			var x := origin + float(gx) * GRID_STEP + center.x
+			var z := origin + float(gz) * GRID_STEP + center.y
 			heights[gz * n + gx] = float(_terrain.call("get_height_at", x, z))
 	_heights = heights
 	_grid_n = n
@@ -308,7 +330,7 @@ func _launch() -> void:
 		"heights": _heights,
 		"grid_n": _grid_n,
 		"grid_step": GRID_STEP,
-		"grid_origin": -GRID_EXTENT,
+		"grid_center": _grid_center,
 		"boxes": _boxes,
 		"box_count": _box_count,
 		"near_hold": NEAR_HOLD,
@@ -504,7 +526,9 @@ static func _terrain_blocks(snap: Dictionary, a: Vector3, b: Vector3) -> bool:
 	if heights.size() < n * n:
 		return false
 	var step: float = snap["grid_step"]
-	var origin: float = snap["grid_origin"]
+	var center: Vector2 = snap["grid_center"]
+	var origin_x: float = -GRID_EXTENT + center.x
+	var origin_z: float = -GRID_EXTENT + center.y
 	var seg := b - a
 	var dist := seg.length()
 	if dist < 0.5:
@@ -513,7 +537,7 @@ static func _terrain_blocks(snap: Dictionary, a: Vector3, b: Vector3) -> bool:
 	for i in range(1, steps):
 		var t := float(i) / float(steps)
 		var p := a + seg * t
-		var ground := _grid_height(heights, n, step, origin, p.x, p.z)
+		var ground := _grid_height(heights, n, step, origin_x, origin_z, p.x, p.z)
 		if ground > p.y + TERRAIN_MARGIN:
 			return true
 	return false
@@ -522,9 +546,9 @@ static func _terrain_blocks(snap: Dictionary, a: Vector3, b: Vector3) -> bool:
 ## Bilinear height at a world position, or a very low value outside the grid
 ## (nothing is known there, and inventing a hill would cull the whole horizon).
 static func _grid_height(heights: PackedFloat32Array, n: int, step: float,
-		origin: float, x: float, z: float) -> float:
-	var fx := (x - origin) / step
-	var fz := (z - origin) / step
+		origin_x: float, origin_z: float, x: float, z: float) -> float:
+	var fx := (x - origin_x) / step
+	var fz := (z - origin_z) / step
 	if fx < 0.0 or fz < 0.0 or fx >= float(n - 1) or fz >= float(n - 1):
 		return -100000.0
 	var ix := int(fx)
@@ -698,7 +722,7 @@ func self_test() -> Dictionary:
 		"heights": heights,
 		"grid_n": n,
 		"grid_step": step,
-		"grid_origin": origin,
+		"grid_center": Vector2.ZERO,
 		"boxes": boxes,
 		"box_count": 2,
 		"viewer": Vector3(-40.0, 2.0, 40.0),

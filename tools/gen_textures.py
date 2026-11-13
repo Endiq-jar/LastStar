@@ -14,6 +14,7 @@ Style targets, consistent across the set:
 import math
 import os
 import random
+import sys
 
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -593,6 +594,23 @@ def generate_all():
     return made
 
 
+## The meadow's tuft, on its own.
+##
+## The full environment set this script used to draw has been retired - the valley
+## is built from a 3D art pack now - but the grass came back: two crossed
+## alpha-cut cards are 4 triangles against the pack tuft's 64, and the meadow is
+## the one surface in the game that is drawn tens of thousands of times. So the
+## grass source stays, at 256 rather than 512 because a card is 0.6 m wide and the
+## extra resolution was never visible.
+def generate_grass_atlas(out_dir="assets/grass"):
+    os.makedirs(out_dir, exist_ok=True)
+    return [gen_grass(os.path.join(out_dir, "tuft.png"), 256, 256)]
+
+
 if __name__ == "__main__":
-    for p in generate_all():
-        print(p)
+    if "--grass-atlas" in sys.argv:
+        for p in generate_grass_atlas():
+            print(p)
+    else:
+        for p in generate_all():
+            print(p)

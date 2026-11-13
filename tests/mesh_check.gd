@@ -305,22 +305,29 @@ func _ready() -> void:
 		print("MESH_CHECK nature total tris=%d" % nature_tris)
 		if nature_tris < 4000:
 			failures.append("nature pack baked only %d triangles" % nature_tris)
-		# The grass clump is the one derived asset, and the meadow's budget
-		# depends on it actually being smaller than the tuft it comes from.
-		var full: ArrayMesh = NP.mesh_of("grass")
-		var clump: ArrayMesh = NP.clump("grass", 36)
-		if clump == null or clump.get_surface_count() == 0:
-			failures.append("grass clump baked no surface")
+		# The meadow's tuft is a painted card again, and its budget depends on
+		# the card actually being a card: two quads, four triangles, with UVs and
+		# an alpha sheet to cut them out of. A regression here is invisible in code
+		# review - a mesh with six quads still "builds" - and shows up only as the
+		# frame's triangle count.
+		var grass_script := load("res://scripts/grass_field.gd")
+		var card: ArrayMesh = null
+		if grass_script != null:
+			var field: Node = grass_script.new()
+			card = field.call("_build_tuft_mesh") as ArrayMesh
+			field.free()
+		if card == null or card.get_surface_count() == 0:
+			failures.append("the meadow's grass card built no surface")
 		else:
-			var fa: Array = full.surface_get_arrays(0)
-			var ca: Array = clump.surface_get_arrays(0)
-			var ftris := (fa[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
-			var ctris := (ca[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
-			print("MESH_CHECK grass tuft tris=%d clump(36) tris=%d" % [ftris, ctris])
-			if ctris >= ftris:
-				failures.append("grass clump kept %d of %d triangles - the decimation did nothing" % [ctris, ftris])
-			if ctris < 24:
-				failures.append("grass clump has only %d triangles - too coarse to read as grass" % ctris)
+			var ca2: Array = card.surface_get_arrays(0)
+			var cidx: PackedInt32Array = ca2[Mesh.ARRAY_INDEX]
+			var cuv: PackedVector2Array = ca2[Mesh.ARRAY_TEX_UV]
+			var cverts: PackedVector3Array = ca2[Mesh.ARRAY_VERTEX]
+			print("MESH_CHECK grass card verts=%d tris=%d uv=%d" % [cverts.size(), cidx.size() / 3, cuv.size()])
+			if cidx.size() / 3 != 4:
+				failures.append("grass card has %d triangles, expected 4 (two quads)" % (cidx.size() / 3))
+			if cuv.size() != cverts.size():
+				failures.append("grass card has no UVs - the alpha sheet cannot cut it out")
 
 	# Surface textures must be opaque.
 	#

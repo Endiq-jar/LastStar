@@ -21,15 +21,19 @@ extends Node3D
 
 const NaturePack := preload("res://scripts/nature_pack.gd")
 
-const TREE_COUNT := 170
-const PINE_COUNT := 130
-const DEAD_COUNT := 34
-const ROCK_COUNT := 100
-const FLOWER_COUNT := 300
-const LOG_COUNT := 46
-const STUMP_COUNT := 38
-const PEBBLE_COUNT := 900
-const SPREAD := 330.0
+const TREE_COUNT := 340
+const PINE_COUNT := 260
+const DEAD_COUNT := 56
+const ROCK_COUNT := 150
+const FLOWER_COUNT := 420
+const LOG_COUNT := 62
+const STUMP_COUNT := 56
+const PEBBLE_COUNT := 1200
+## Half-width of the scattered square. The map is 10 km now, so 330 m of forest
+## around the spawn was a clearing in a field; 600 m is a landscape you can walk
+## across. Everything past this needs streaming rather than a one-time scatter,
+## which is the next piece of work - a 10 km map cannot be populated at load.
+const SPREAD := 600.0
 
 ## The four broadleaf species, one batch each. A MultiMesh draws one mesh, so
 ## variety is a batch per model rather than a property of an instance.

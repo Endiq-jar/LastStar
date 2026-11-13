@@ -36,7 +36,7 @@ import sys
 # plus the sweep variable that stands in for "albedo".
 SURFACES = [
     ("shaders/terrain/terrain_anime.gdshader", ["col", "patch"]),
-    ("shaders/terrain/grass_sway.gdshader", ["base", "col", "t", "v_tint"]),
+    ("shaders/terrain/grass_card.gdshader", ["base", "col", "t", "v_tint"]),
 ]
 
 # Any two surfaces' fills must stay within this factor of each other. A factor

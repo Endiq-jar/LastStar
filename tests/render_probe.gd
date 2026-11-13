@@ -164,9 +164,10 @@ func _run() -> void:
 	var tmesh: MeshInstance3D = null
 	var terrain_node := world.get_node_or_null("Terrain")
 	if terrain_node != null:
-		for c in terrain_node.get_children():
-			if c is MeshInstance3D and (c as MeshInstance3D).mesh != null:
-				tmesh = c as MeshInstance3D
+		for c in terrain_node.find_children("*", "MeshInstance3D", true, false):
+			var tmi2 := c as MeshInstance3D
+			if tmi2.mesh != null and tmi2.name.begins_with("Near"):
+				tmesh = tmi2
 				break
 	if tmesh == null or tmesh.mesh == null:
 		_log("FAIL", "Terrain has no mesh tile - nothing to look at")
@@ -287,16 +288,16 @@ func _run() -> void:
 		_log("INFO", "grass chunks populated=%d/%d, largest=%d" % [
 			populated, chunks, nearest])
 		_log("INFO", "grass diagnostics: %s" % str(grass.call("diagnostics")))
-		# Density gate: the meadow must actually be a meadow. A slope/height
-		# bug once cut this to 5% of intent and nothing noticed.
+		# Density gate: the meadow must actually be a meadow. A slope/height bug
+		# once cut this to 5% of intent and nothing noticed.
 		#
-		# The unit changed when the meadow stopped being painted cards. An
-		# instance is now a 36-blade clump of the nature pack's grass instead of
-		# a two-quad sprite, so the same meadow is ~8x fewer instances and each
-		# instance is ~16x the geometry: 18,000 tufts is roughly 650,000 blades of
-		# real geometry, where the 30,000 this used to demand was 30,000 sprites.
-		if blades < 18000:
-			_log("FAIL", "grass is far too sparse (%d tufts, expected >18000 at 36 blades each)" % blades)
+		# An instance is a two-quad painted card again - 4 triangles, the same unit
+		# this gate was written for before the pack's 64-triangle tuft took over
+		# the meadow - so the floor is back at ~25,000 cards.
+		if blades < 25000:
+			_log("FAIL", "grass is far too sparse (%d cards near the player, expected >25000)" % blades)
+
+	_check_world_scale(world)
 
 	# --- spellbook / spell wheel -------------------------------------------
 	var w: Wander = Game.wander
@@ -796,15 +797,19 @@ func _children_named(parent: Node, prefix: String) -> Array[Node]:
 func _check_cull_actually_culls(world: Node) -> void:
 	if world == null:
 		return
-	# Terrain tiles. One mesh covering 900 m means nothing is ever culled.
+	# Terrain tiles. One mesh covering the map means nothing is ever culled, and
+	# the tiles are no longer direct children: near and mid layers are separate
+	# node groups so the streaming code can free one layer without touching the
+	# other.
 	var terrain := world.get_node_or_null("Terrain")
 	var tiles := 0
 	var biggest_extent := 0.0
 	if terrain != null:
-		for c in terrain.get_children():
-			if c is MeshInstance3D and (c as MeshInstance3D).mesh != null:
+		for c in terrain.find_children("*", "MeshInstance3D", true, false):
+			var tmi := c as MeshInstance3D
+			if tmi.mesh != null:
 				tiles += 1
-				var aabb: AABB = (c as MeshInstance3D).mesh.get_aabb()
+				var aabb: AABB = tmi.mesh.get_aabb()
 				biggest_extent = maxf(biggest_extent, maxf(aabb.size.x, aabb.size.z))
 	if tiles < 4:
 		_fail += 1
@@ -1103,6 +1108,87 @@ func _dark_fraction(img: Image) -> float:
 			total += 1
 	return 100.0 * float(dark) / maxf(1.0, float(total))
 
+
+
+## The map has to be a map: a wide playable interior with no wall inside a
+## kilometre, mountains at the far edge, and all four kinds of water where the
+## terrain says they are.
+##
+## This is the check the old 600 m bowl would have failed. It measures the height
+## field itself rather than trusting constants, so a rim that creeps back in, a
+## river that stops being carved or a sea that never gets below the waterline is a
+## failed build rather than a screenshot somebody has to notice.
+func _check_world_scale(world: Node) -> void:
+	var terrain := world.get_node_or_null("Terrain")
+	if terrain == null:
+		_log("FAIL", "WORLD no terrain node to measure")
+		return
+	if terrain.has_method("census"):
+		_log("INFO", "TERRAIN %s" % str(terrain.call("census")))
+
+	# Playable interior: flat-or-hilly, not a wall, a kilometre out in four
+	# directions.
+	var wall := 0.0
+	for probe in [Vector2(1000.0, 0.0), Vector2(-1000.0, 0.0),
+			Vector2(0.0, 1000.0), Vector2(0.0, -1000.0)]:
+		wall = maxf(wall, _world_height(terrain, probe.x, probe.y))
+	_log("INFO" if wall < 110.0 else "FAIL",
+		"WORLD interior peak at 1 km = %.0f m %s" % [wall, "(a wall, not a landscape)" if wall >= 110.0 else ""])
+
+	# Mountains at the edge: the highest ground 3 km out has to be a real ridge.
+	var peak := -999.0
+	for i in range(12):
+		var a := TAU * float(i) / 12.0
+		peak = maxf(peak, _world_height(terrain, cos(a) * 3000.0, sin(a) * 3000.0))
+	_log("INFO" if peak > 130.0 else "FAIL",
+		"WORLD mountains at 3 km = %.0f m %s" % [peak, "(no ridge - the map just ends)" if peak <= 130.0 else ""])
+
+	# Water. Every body is terrain below the waterline; the surface is scenery.
+	var level := Game.water_level
+	var lake_d := Vector2(Game.lake_center.x, Game.lake_center.y)
+	var lake_h := _world_height(terrain, lake_d.x, lake_d.y)
+	_log("INFO" if lake_h < level else "FAIL", "WATER lake bed = %.1f m (level %.1f)" % [lake_h, level])
+	var pond_ok := false
+	var pond_h := 99.0
+	var script: Script = terrain.get_script()
+	var ponds: Array = []
+	if script != null:
+		var constants: Dictionary = script.get_script_constant_map()
+		if constants.has("PONDS"):
+			ponds = constants["PONDS"]
+	for i in range(ponds.size()):
+		var pond: Vector3 = ponds[i]
+		pond_h = minf(pond_h, _world_height(terrain, pond.x, pond.y))
+		if pond_h < level:
+			pond_ok = true
+	_log("INFO" if pond_ok else "FAIL",
+		"WATER %d pond(s), lowest bed = %.1f m" % [ponds.size(), pond_h])
+	var river_h := 99.0
+	if terrain.has_method("river_x"):
+		for z in [-800.0, -200.0, 400.0, 900.0]:
+			var rx := float(terrain.call("river_x", z))
+			river_h = minf(river_h, _world_height(terrain, rx, z))
+	_log("INFO" if river_h < level else "FAIL", "WATER river bed = %.1f m at four points along it" % river_h)
+	var sea_h := _world_height(terrain, 1700.0, 1650.0)
+	_log("INFO" if sea_h < level else "FAIL", "WATER sea bed in the south-east = %.1f m" % sea_h)
+
+	# And the surface that makes it water.
+	var surface: MeshInstance3D = null
+	for node in world.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.name == "WaterSurface":
+			surface = mi
+			break
+	if surface == null:
+		_log("FAIL", "WATER no WaterSurface mesh - the sea, lake, river and ponds have no surface")
+	elif surface.mesh is PlaneMesh:
+		var span := (surface.mesh as PlaneMesh).size.x
+		_log("INFO" if span >= 4000.0 else "FAIL",
+			"WATER surface spans %.0f m at y=%.2f" % [span, surface.position.y])
+
+
+func _world_height(terrain: Node, x: float, z: float) -> float:
+	return float(terrain.call("get_height_at", x, z))
 
 
 ## The environment, asserted as baked geometry.
