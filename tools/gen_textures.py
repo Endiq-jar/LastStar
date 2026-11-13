@@ -683,17 +683,29 @@ def generate_all():
     return made
 
 
-## The meadow's tuft, on its own.
+## The meadow's tuft is NOT generated here.
 ##
-## The full environment set this script used to draw has been retired - the valley
-## is built from a 3D art pack now - but the grass came back: two crossed
-## alpha-cut cards are 4 triangles against the pack tuft's 64, and the meadow is
-## the one surface in the game that is drawn tens of thousands of times. So the
-## grass source stays, at 256 rather than 512 because a card is 0.6 m wide and the
-## extra resolution was never visible.
+## assets/grass/tuft.png is the hand-painted tuft that shipped with the old
+## carpet, kept verbatim (it came from icons/grass/tuft.png at c7b415f). Three
+## attempts to redraw it procedurally all landed somewhere the owner did not want,
+## and the file he wanted was always that one, so this script no longer writes
+## over it: `--grass-atlas` reports where the card lives and stops.
+##
+## What that sheet actually is, because it is not what it looks like: a flat
+## white stencil. Every opaque pixel lies between 0.85 and 0.95 luminance and it is
+## 100% greyscale - no green in it at all. The old shader read `tex.a` and nothing
+## else, and got every scrap of its colour from uniforms. That is why the card
+## shader reads alpha only and there is no sheet-luminance term left in it;
+## draw_tuft() and gen_grass() below are kept as a record of how that card was
+## drawn, not as something that runs.
 def generate_grass_atlas(out_dir="assets/grass"):
-    os.makedirs(out_dir, exist_ok=True)
-    return [gen_grass(os.path.join(out_dir, "tuft.png"), 256, 256)]
+    card = os.path.join(out_dir, "tuft.png")
+    if os.path.exists(card):
+        print("%s (hand-painted, kept as-is)" % card)
+    else:
+        print("%s is missing: restore it with "
+              "`git show c7b415f:icons/grass/tuft.png`" % card)
+    return []
 
 
 if __name__ == "__main__":

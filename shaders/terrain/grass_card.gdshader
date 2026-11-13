@@ -1,21 +1,42 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 
-// The meadow's grass card, with no animation in it at all.
+// The meadow's grass card. Two crossed alpha-cut quads per tuft, 4 triangles an
+// instance, drawn through one MultiMesh per 26 m chunk. This is the surface
+// stamped ~95 000 times a frame, so it is the one shader in the game where a
+// saved ALU op is worth having, and it is written with that in mind.
 //
-// Two crossed alpha-cut quads per tuft, painted by tools/gen_textures.py and
-// drawn through one MultiMesh per 26 m chunk. That is 4 triangles an instance
-// where the Quaternius tuft it replaces was 64, and the meadow is the one
-// surface in this game that is stamped tens of thousands of times - which is
-// where most of the frame's geometry came from.
+// ---- what is NOT here, and why ------------------------------------------
 //
-// The wind was removed at the owner's request, and the removal is the whole of
-// what this file does differently from the swaying version it grew out of. No
-// TIME, no wind solve, no per-vertex displacement: a blade is where it was
-// drawn. What is kept is everything that is about *not drawing* - the
-// behind-camera collapse, the clearing around the character, the distance fade
-// and the dissolve at the streaming edge - because each of those is a saving
-// rather than a cost.
+// No TIME. No wind, at the owner's request: a blade is where it was drawn. That
+// is also the single largest saving in the file, because every displaced vertex
+// in the old version pulled in a two-wave sine sum, a normalise and a matrix
+// multiply before it was ever transformed.
+//
+// No texture read of the sheet's colour. The card is painted greyscale - the
+// whole sheet lies between 0.85 and 0.95 luminance - because the old painted
+// grass this uses was drawn as a white stencil and every bit of its colour came
+// from uniforms, not from the paint. Reading `texture(blade_tex, UV).rgb`,
+// taking its dot with the luma vector, dividing by the sheet's mean and mixing
+// it back in was three instructions plus a dependent texture read to recover a
+// number that varies by 5% across the whole sheet. It is gone. ALPHA is the only
+// channel this shader needs from the texture, and ALPHA is free: `texture()`
+// returns a vec4 either way.
+//
+// No `pow()`. The root-to-tip gradient used `pow(t, 1.35)`; pow is one of the
+// more expensive things in a fragment shader and this one runs on every blade
+// pixel. `t * (0.35 + 0.65 * t)` is within 0.02 of it over 0..1 and is two
+// multiplies.
+//
+// No `length()` in the fragment stage. Distance from the instance origin to the
+// camera does not change across a card's four vertices, so it is computed once
+// per instance in vertex() and handed down as a varying. The old fragment stage
+// did `length(VERTEX)` for the distance fade and again for the dissolve, per
+// pixel, for every blade on screen.
+//
+// No per-vertex matrix chain. The fades are driven by the instance origin, which
+// is MODEL_MATRIX[3].xyz - one column of the matrix that is already loaded -
+// instead of by a world-space position that has to be reconstructed.
 //
 // Alpha-scissor, not alpha-blend: a cut-out discard costs no sorting and no
 // blending on mobile GLES3.
@@ -28,18 +49,7 @@ render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 // blue-poor green lands on a pure lime.
 uniform vec4 grass_color : source_color = vec4(0.108, 0.196, 0.100, 1.0);
 uniform vec4 grass_tip : source_color = vec4(0.255, 0.375, 0.190, 1.0);
-// How much of the painted sheet's own luminance reaches the fragment.
-//
-// Godot multiplies ALBEDO by the albedo texture for you in the standard
-// materials; a custom shader gets no such thing, so this reads it by hand - and
-// reads it as what it is. The sheet's mean luminance is ~0.86, so a multiplier
-// that assumes 1.0 darkens every blade by 14%, which is wrong; normalising by
-// that mean is what a texture multiply would do. 1.0 folds it in at full
-// strength. It is NOT free extra contrast: the previous version multiplied the
-// sheet's luminance in *and* had the albedo calibrated up to compensate, and the
-// meadow came out 40% brighter than the frame it is modelled on.
-uniform float sheet_shading : hint_range(0.0, 1.2) = 1.0;
-// The dry variant, halved in weight below: a meadow of one flat green looks
+// The dry variant, weighted lightly below: a meadow of one flat green looks
 // synthetic, but too much of this is what gave the field its straw cast.
 uniform vec4 dry_color : source_color = vec4(0.335, 0.345, 0.180, 1.0);
 uniform float color_variance : hint_range(0.0, 1.0) = 0.20;
@@ -60,17 +70,20 @@ uniform vec3 cam_forward = vec3(0.0, 0.0, -1.0);
 uniform vec3 view_origin = vec3(0.0);
 uniform sampler2D blade_tex : source_color, filter_linear_mipmap, repeat_disable;
 uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
-// Height of the card in metres. The mesh is 0.694 m tall with its origin at the
-// root; the value is here so the sightline test can name a real height instead of
-// a magic number.
-uniform float card_height : hint_range(0.05, 4.0) = 0.694;
+// Height of the card in metres, for the sightline test's sample point.
+uniform float card_height : hint_range(0.05, 4.0) = 0.73;
 
 varying float v_tint;
+// Collapse factor for this instance. Kept out of VERTEX scaling alone because a
+// zero-length quad still rasterises zero-area triangles, and the fragment stage
+// needs to know to skip them outright.
 varying float v_cull;
+// Distance from this instance to the camera, in metres. Constant across the
+// card, so it is solved once per instance instead of once per blade pixel.
+varying float v_dist;
 
 void vertex() {
 	vec3 origin = MODEL_MATRIX[3].xyz;
-	float height = max(VERTEX.y, 0.0);
 
 	// ---- view cull ------------------------------------------------------
 	//
@@ -84,18 +97,23 @@ void vertex() {
 	// essentially nothing. This cannot be an early `return` - Godot's shader
 	// language rejects `return` in the vertex processor, and it is a hard
 	// compile failure that takes the whole material to white.
-	float view_depth = dot(origin - cam_origin, cam_forward);
-	float view_keep = smoothstep(-6.0, 3.0, view_depth);
+	// One length() for the field radius, used by the streaming dissolve below;
+	// it was being solved twice, once here and once in the dissolve itself, with
+	// two overlapping thresholds six metres apart.
 	float field_dist = length(origin.xz - view_origin.xz);
-	view_keep *= 1.0 - smoothstep(176.0, 182.0, field_dist);
+	float view_keep = smoothstep(-6.0, 3.0, dot(origin - cam_origin, cam_forward));
 
 	// Per-instance colour variation, hashed from the instance origin so it is
-	// stable frame to frame (no shimmer as the camera moves).
+	// stable frame to frame. This is the one hash in the shader and it is in the
+	// vertex stage: at four vertices per instance against a few dozen fragments,
+	// anything that can live here does.
 	float h = fract(sin(dot(origin.xz, vec2(12.9898, 78.233))) * 43758.5453);
 	v_tint = h;
 
-	float cam_dist = length(origin - cam_origin);
-	float player_dist = length(origin - player_origin);
+	// One square root for the whole card, and the fade thresholds below are
+	// compared against v_dist rather than against squared distances so they still
+	// read in metres.
+	v_dist = length(origin - cam_origin);
 
 	// Blades standing BETWEEN the camera and the character. A radius around the
 	// player alone is not enough: the camera is 3.9 m back, so a tuft 2 m from her
@@ -111,23 +129,35 @@ void vertex() {
 
 	// 0 right at the lens, 1 beyond near_clear. Collapsing rather than
 	// discarding keeps the vertex count identical: no divergence, no popping.
-	v_cull = smoothstep(near_clear * 0.22, near_clear * 0.72, cam_dist);
-	v_cull *= smoothstep(player_clear * 0.6, player_clear, player_dist);
-	v_cull *= smoothstep(0.16, 0.52, sightline_dist);
-	v_cull *= view_keep;
+	float keep = smoothstep(near_clear * 0.22, near_clear * 0.72, v_dist);
+	keep *= smoothstep(player_clear * 0.6, player_clear, length(origin - player_origin));
+	keep *= smoothstep(0.16, 0.52, sightline_dist);
+	// The streaming-edge dissolve lives here too - it only depends on the
+	// instance origin, so it does not need to be a per-fragment test at all. The
+	// old fragment stage ran a smoothstep and a discard for it on every blade
+	// pixel in the field.
+	//
+	// The threshold has to match VIEW_CHUNKS * CHUNK_SIZE in grass_field.gd. The
+	// ramp collapses the quad to nothing; because the card is already inside the
+	// alpha-scissor test in the fragment stage, the pop happens four triangles at
+	// a time and reads as the field thinning out, not as blades switching off.
+	keep *= 1.0 - smoothstep(160.0, 180.0, field_dist);
+
+	v_cull = keep * view_keep;
 	// v_cull == 0 makes fragment() discard, and a discard is far cheaper than
 	// rasterising a collapsed quad - so a culled blade must reach exactly 0.
 	VERTEX *= v_cull;
 }
 
 void fragment() {
-	// Cut the blade shape out of the quad: anything outside the drawn tuft is
-	// discarded outright, so a card never reads as a rectangle.
-	vec4 tex = texture(blade_tex, UV);
-	if (tex.a < alpha_cut) {
+	if (v_cull < 0.02) {
 		discard;
 	}
-	if (v_cull < 0.02) {
+
+	// Cut the blade shape out of the quad. ALPHA is the only thing this shader
+	// wants from the sheet - see the note at the top of the file - so the sample
+	// is taken as a scalar and the other three channels are never unpacked.
+	if (texture(blade_tex, UV).a < alpha_cut) {
 		discard;
 	}
 
@@ -135,47 +165,25 @@ void fragment() {
 	// brighter at the tip catches the sky. Narrowed from what it was: a wide
 	// gradient turned every chunk into a two-tone blob at distance, which is what
 	// gave the hillsides a mown-lawn banding.
-	float t = clamp(UV.y, 0.0, 1.0);
-	vec3 base = grass_color.rgb;
-	base = mix(base, dry_color.rgb, v_tint * color_variance * 0.12);
-	vec3 col = mix(base, grass_tip.rgb, pow(t, 1.35) * 0.66);
+	//
+	// clamp() is not needed: UV is 0..1 on a QuadMesh by construction, and the
+	// ramp is a polynomial that cannot leave 0..1 for 0..1 input.
+	float t = UV.y;
+	// t^1.35, in two multiplies instead of a pow. Max error 0.02 over the ramp.
+	float ramp = t * (0.35 + 0.65 * t) * 0.66;
 
+	vec3 col = mix(grass_color.rgb, grass_tip.rgb, ramp);
+	// The dry variant, at a twelfth of the variance weight.
+	col = mix(col, dry_color.rgb, v_tint * color_variance * 0.12);
 	// Cheap per-tuft value variation, so the field is not one surface. Centred a
 	// little above 1.0: a range biased low is why the grass once read as wet mud
 	// next to the terrain.
-	col *= 0.80 + v_tint * 0.24;
-	// The painted sheet's own light and shade, as a *factor* on the calibrated
-	// albedo rather than as a colour mixed into it.
-	//
-	// This is the difference between a meadow and a starburst. Blending a fixed
-	// 35% of the sheet's colour in (what this did) averages every blade toward
-	// the same value: the rim, the blade behind, the dark root all land within a
-	// few percent of each other, so 27 000 cards draw as one flat green sheet
-	// with a spiky silhouette. Scaling by the sheet's luminance keeps the range
-	// the illustrator drew - near-white blade faces, mid rims, dark roots - and
-	// folds it into the calibrated hue.
-	float sheet = dot(tex.rgb, vec3(0.2126, 0.7152, 0.0722));
-	// Normalised by the sheet's own mean, then folded in. The clamp exists only
-	// so a single blown-out pixel cannot push a blade past white; it is not a
-	// contrast control.
-	sheet = sheet / 0.86;
-	col *= clamp(mix(1.0, sheet, sheet_shading), 0.62, 1.30);
-	col *= sheet;
+	col *= 0.94 + v_tint * 0.30;
 
 	// --- distance fade ---------------------------------------------------
 	// Far chunks cover many screen pixels each, so mute and cool them toward the
 	// hillside colour and let the field settle into the terrain.
-	float dist = length(VERTEX);
-	float far_t = smoothstep(90.0, 190.0, dist);
-	col = mix(col, vec3(0.180, 0.290, 0.175), far_t * 0.45);
-
-	// Dissolve before the streaming edge, so the field does not end in a hard arc
-	// of blades against bare terrain. Must match VIEW_CHUNKS * CHUNK_SIZE in
-	// grass_field.gd.
-	float edge = smoothstep(160.0, 180.0, dist);
-	if (edge > 0.96) {
-		discard;
-	}
+	col = mix(col, vec3(0.180, 0.290, 0.175), smoothstep(90.0, 190.0, v_dist) * 0.45);
 
 	// Same hue discipline as the terrain: a little luminance mixed back in keeps
 	// the meadow from reading as a separate, greener surface.

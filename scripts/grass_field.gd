@@ -28,11 +28,19 @@ extends Node3D
 ## Chunks are recycled as the player walks, so walking 5 km never grows the
 ## instance count. One draw call per chunk.
 
-## The painted tuft. Twice as wide as it is tall in practice: a meadow needs the
-## footprint more than it needs the height, and a card that is taller than it is
-## wide reads as a reedy clump when the same sheet is stamped everywhere.
-const CARD_WIDTH := 0.88
-const CARD_HEIGHT := 0.50
+## The painted tuft, at the proportions that card is drawn at.
+##
+## The sheet is a 1:1 tuft - a fountain about as wide as it is tall - so the card
+## is close to square. Stretching it wide squashed the blades into ribbons;
+## stretching it tall made it a reedy clump.
+##
+## This is the old painted grass's own quad: it was BLADE_W 0.62 by BLADE_H 0.56,
+## scaled 1.15 across and 1.30 up, so 0.713 x 0.728 m. The same paint at the same
+## proportions lands on the same silhouette, which is the whole point of using the
+## old card. The field is denser now than it was then, so this is 0.71 x 0.73
+## rather than the 1.3 m footprint that read as gaps between tufts.
+const CARD_WIDTH := 0.71
+const CARD_HEIGHT := 0.73
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
 ## Radius, in chunks. 5 * 26 = 130 m, which with the shader's dissolve put a
