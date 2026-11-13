@@ -154,11 +154,9 @@ func _build_resources() -> void:
 				(sheet as Texture2D).get_width(), (sheet as Texture2D).get_height(),
 				(sheet as Texture2D).get_format()])
 		else:
-			print("GRASS_SHEET %dx%d format=%d alpha(top/mid/bottom)=%.2f/%.2f/%.2f" % [
+			print("GRASS_SHEET %dx%d format=%d alpha(top/mid/bottom)=%s" % [
 				img.get_width(), img.get_height(), img.get_format(),
-				img.get_pixel(img.get_width() / 2, 8).a,
-				img.get_pixel(img.get_width() / 2, 128).a,
-				img.get_pixel(img.get_width() / 2, 248).a])
+				_alpha_down_column(img)])
 	if sheet is Texture2D:
 		_material.set_shader_parameter("blade_tex", sheet)
 	else:
@@ -484,13 +482,25 @@ func card_report() -> String:
 	var img := tex.get_image()
 	if img == null:
 		return out + " image=NULL (imported without CPU-readable pixels)"
-	var samples: Array[String] = []
-	# Top of the sheet is empty, the bottom is solid - so three vertical samples
-	# say whether alpha survived the import in one line.
-	for y in [8, 128, 248]:
-		samples.append("%.2f" % img.get_pixel(tex.get_width() / 2, y).a)
-	out += " alpha(top/mid/bottom)=%s" % "/".join(samples)
+	out += " alpha(top/mid/bottom)=%s" % _alpha_down_column(img)
 	return out
+
+
+## Alpha at three points down the middle of the card, as "top/mid/bottom".
+##
+## The rows are fractions of the image, not pixel numbers. They were 8/128/248,
+## which was right for a 256 px sheet and an out-of-bounds read the moment the
+## card was re-encoded 226 px tall - and get_pixel() on an out-of-range row is a
+## hard error that fails the boot step, so a *diagnostic* took the build down.
+## Anything that indexes into a texture has to derive its indices from the image.
+func _alpha_down_column(img: Image) -> String:
+	var h := img.get_height()
+	var x := img.get_width() / 2
+	var samples: Array[String] = []
+	for frac in [0.03, 0.5, 0.97]:
+		var y := clampi(int(frac * float(h)), 0, h - 1)
+		samples.append("%.2f" % img.get_pixel(x, y).a)
+	return "/".join(samples)
 
 
 func diagnostics() -> String:

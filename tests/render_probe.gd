@@ -23,6 +23,23 @@ var _transcript := PackedStringArray()
 var _out_dir := ""
 
 
+## Exclusive upper bound for `for i in range(lo, _sample_end(n, step), step)`.
+##
+## Every sampling loop in this file picks a stride as a fraction of the image
+## (`w / 200`) and then walks `range(0, w, step)`. The stride almost never divides
+## the dimension, so the last iteration lands at or past the edge and the
+## following get_pixel() is a hard error - Image.get_pixel does not clamp, and an
+## out-of-range read takes the whole probe down. That is not hypothetical: the
+## grass diagnostic in scripts/grass_field.gd read row 248 of a 226 px card and
+## failed the boot step.
+##
+## Walking back to the last index the stride actually reaches keeps the sample
+## count identical and stops losing a whole probe to a rounding error.
+func _sample_end(n: int, step: int) -> int:
+	step = maxi(1, step)
+	return maxi(0, n - (n % step))
+
+
 func _log(kind: String, msg: String) -> void:
 	var line := "PROBE_%s: %s" % [kind, msg]
 	print(line)
@@ -630,8 +647,8 @@ func _run() -> void:
 			fimg.save_png(out_dir.path_join("player_flat.png"))
 			var magenta := 0
 			var step := maxi(1, int(fimg.get_width() / 200.0))
-			for y in range(0, fimg.get_height(), step):
-				for x in range(0, fimg.get_width(), step):
+			for y in range(0, _sample_end(fimg.get_height(), step), step):
+				for x in range(0, _sample_end(fimg.get_width(), step), step):
 					var c := fimg.get_pixel(x, y)
 					if c.r > 0.7 and c.b > 0.7 and c.g < 0.3:
 						magenta += 1
@@ -1080,8 +1097,14 @@ func _centre_colour() -> Vector3:
 	var cy := img.get_height() / 2
 	var sum := Vector3.ZERO
 	var n := 0
-	for y in range(cy - 20, cy + 20, 2):
-		for x in range(cx - 20, cx + 20, 2):
+	# Bounded by the image, not by a constant: a probe frame is whatever size the
+	# runner could allocate, and get_pixel() past the edge is a hard error.
+	var lo_y := clampi(cy - 20, 0, img.get_height() - 1)
+	var hi_y := clampi(cy + 20, 0, img.get_height())
+	var lo_x := clampi(cx - 20, 0, img.get_width() - 1)
+	var hi_x := clampi(cx + 20, 0, img.get_width())
+	for y in range(lo_y, hi_y, 2):
+		for x in range(lo_x, hi_x, 2):
 			var c := img.get_pixel(x, y)
 			sum += Vector3(c.r, c.g, c.b)
 			n += 1
@@ -1116,8 +1139,8 @@ func _dark_fraction(img: Image) -> float:
 	var step := maxi(1, h / 200)
 	var dark := 0
 	var total := 0
-	for y in range(int(h * 0.18), h, step):
-		for x in range(0, w, step):
+	for y in range(int(h * 0.18), _sample_end(h, step), step):
+		for x in range(0, _sample_end(w, step), step):
 			var c := img.get_pixel(x, y)
 			if maxf(c.r, maxf(c.g, c.b)) < 0.10:
 				dark += 1
@@ -1350,8 +1373,8 @@ func _report_palette(img: Image, label: String) -> void:
 	var hot := 0
 	var counted := 0
 	var step := maxi(1, int(img.get_width() / 120.0))
-	for y in range(0, img.get_height(), step):
-		for x in range(0, img.get_width(), step):
+	for y in range(0, _sample_end(img.get_height(), step), step):
+		for x in range(0, _sample_end(img.get_width(), step), step):
 			counted += 1
 			var c2 := img.get_pixel(x, y)
 			var hsv2 := _hsv_of(c2)
@@ -1544,8 +1567,8 @@ func _check_blob(img: Image, label: String) -> void:
 	var max_x := 0
 	var min_y := h
 	var max_y := 0
-	for y in range(0, h, step):
-		for x in range(0, w, step):
+	for y in range(0, _sample_end(h, step), step):
+		for x in range(0, _sample_end(w, step), step):
 			total += 1
 			var c := img.get_pixel(x, y)
 			if c.r > 0.97 and c.g > 0.97 and c.b > 0.95 and c.a > 0.5:
@@ -1632,8 +1655,8 @@ func _analyse(img: Image) -> Dictionary:
 	var nonblack := 0
 	var sky := 0
 	var seen := {}
-	for y in range(0, h, step):
-		for x in range(0, w, step):
+	for y in range(0, _sample_end(h, step), step):
+		for x in range(0, _sample_end(w, step), step):
 			var c := img.get_pixel(x, y)
 			var l := c.get_luminance()
 			luma_sum += l
@@ -1702,8 +1725,10 @@ func _measure_ground_ratio(img: Image) -> Dictionary:
 	var step := maxi(1, int(w / 220.0))
 	var vals: Array[float] = []
 	var pts: Array[Vector2i] = []
-	for y in range(int(h * 0.28), int(h * 0.82), step):
-		for x in range(0, w, step):
+	# Upper bound is `_sample_end` too: `int(h * 0.82)` is not on the step grid
+	# either, so the last row it lands on can be one past the band.
+	for y in range(int(h * 0.28), _sample_end(int(h * 0.82), step), step):
+		for x in range(0, _sample_end(w, step), step):
 			# The character sits centre-frame; her costume is not ground.
 			if x > int(w * 0.38) and x < int(w * 0.62):
 				continue
@@ -1873,10 +1898,12 @@ func _image_difference(a: Image, b: Image) -> float:
 	var step_y := maxi(1, int(h / 90))
 	var changed := 0
 	var total := 0
-	for y in range(0, h, step_y):
-		for x in range(0, w, step_x):
-			var ca := a.get_pixel(x, y)
-			var cb := b.get_pixel(x, y)
+	for y in range(0, _sample_end(h, step_y), step_y):
+		for x in range(0, _sample_end(w, step_x), step_x):
+			# Clamped for the same reason as the mesh check: a step that does not
+			# divide the dimension overshoots on its last iteration.
+			var ca := a.get_pixel(mini(x, w - 1), mini(y, h - 1))
+			var cb := b.get_pixel(mini(x, w - 1), mini(y, h - 1))
 			var la := 0.2126 * ca.r + 0.7152 * ca.g + 0.0722 * ca.b
 			var lb := 0.2126 * cb.r + 0.7152 * cb.g + 0.0722 * cb.b
 			total += 1

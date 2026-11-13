@@ -361,9 +361,12 @@ func _ready() -> void:
 		var near_black := 0
 		var transparent := 0
 		var total := 0
+		# Clamped: a fixed step does not divide the image evenly, so the last
+		# iteration lands past the edge and get_pixel() on an out-of-range
+		# coordinate is a hard error, not a clamped read.
 		for yy in range(0, h, step):
 			for xx in range(0, w, step):
-				var c := im.get_pixel(xx, yy)
+				var c := im.get_pixel(mini(xx, w - 1), mini(yy, h - 1))
 				total += 1
 				if c.a < 0.9:
 					transparent += 1
