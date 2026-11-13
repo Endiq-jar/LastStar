@@ -104,6 +104,13 @@ func _run() -> void:
 	var world := packed.instantiate()
 	get_tree().root.add_child(world)
 
+	# Calling the tuner before sampling must not disable the later measurement.
+	world.call("_autotune_performance")
+	if bool(world.get("_perf_done")):
+		_log("FAIL", "performance tuner stopped before collecting frames")
+	else:
+		_log("INFO", "performance tuner waits for frame samples")
+
 	# Let _ready() chains, vegetation (one frame await) and tweens settle.
 	# Bounded by a wall-clock guard as well as a frame count: `process_frame`
 	# stops arriving if the main loop is blocked, which would hang the job.
@@ -324,14 +331,26 @@ func _run() -> void:
 		_log("INFO", "grass chunks populated=%d/%d, largest=%d" % [
 			populated, chunks, nearest])
 		_log("INFO", "grass diagnostics: %s" % str(grass.call("diagnostics")))
+		# A quality change must retire the old dense batches rather than merely
+		# changing the budget for future chunks. Restore the original setting
+		# afterwards; subsequent frames stream the ring back in.
+		var old_density: float = float(grass.get("_density"))
+		grass.call("set_density_scale", 0.2 if old_density > 0.3 else 0.65)
+		if int(grass.call("chunk_count")) != 0:
+			_log("FAIL", "grass quality change left old chunks alive")
+		else:
+			_log("INFO", "grass quality change queues a fresh density")
+		grass.call("set_density_scale", old_density)
+		for i in range(45):
+			await get_tree().process_frame
+
 		# Density gate: the meadow must actually be a meadow. A slope/height bug
 		# once cut this to 5% of intent and nothing noticed.
 		#
-		# An instance is a two-quad painted card again - 4 triangles, the same unit
-		# this gate was written for before the pack's 64-triangle tuft took over
-		# the meadow - so the floor is back at ~25,000 cards.
-		if blades < 25000:
-			_log("FAIL", "grass is far too sparse (%d cards near the player, expected >25000)" % blades)
+		# Performance mode deliberately builds fewer cards, and the ring is
+		# streamed over multiple frames rather than generated in one startup hitch.
+		if blades < 5000:
+			_log("FAIL", "grass is far too sparse (%d cards near the player, expected >5000)" % blades)
 
 	_check_world_scale(world)
 

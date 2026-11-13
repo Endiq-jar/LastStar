@@ -98,7 +98,6 @@ func _ready() -> void:
 	_built = true
 	_ensure_camera.call_deferred()
 	_watch_render()
-	_autotune_performance()
 
 
 func _autotune_performance() -> void:
@@ -109,10 +108,10 @@ func _autotune_performance() -> void:
 	## Purely frame-driven - no coroutines, no timers - so it cannot wedge.
 	if _perf_done:
 		return
-	_perf_done = true
 	var measured := _perf_frames - _perf_warmup
 	if measured < 20:
 		return
+	_perf_done = true
 	var avg_ms := (_perf_accum / float(measured)) * 1000.0
 	print("LastStar: average frame time %.1f ms over %d frames" % [avg_ms, measured])
 	# Worse than ~24 fps: shed effects instead of stuttering.
@@ -1189,6 +1188,8 @@ func _build_grass_field() -> void:
 	var field := Node3D.new()
 	field.set_script(GrassFieldScript)
 	add_child(field)
+	# Set the chosen density before setup queues any grass.
+	field.call("set_density_scale", 1.0 if Game.quality_tier >= 2 else (0.65 if Game.quality_tier == 0 else 0.35))
 	field.call("setup", t, player)
 	_grass_field = field
 	_build_environment_vegetation(t, player)

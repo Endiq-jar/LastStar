@@ -103,7 +103,7 @@ var _pending: Array[Vector2i] = []
 var _blade_mesh: Mesh
 var _material: ShaderMaterial
 var _last_center := Vector2i(9999, 9999)
-var _build_budget := 3             ## chunks built per frame, to avoid hitches
+var _build_budget := 1             ## chunks built per frame, to avoid hitches
 ## Multiplies every tier's instance count. This is the real density control.
 ##
 ## set_density_scale() used to write _build_budget and nothing else, so the
@@ -125,7 +125,7 @@ func setup(terrain: Node, player: Node3D) -> void:
 	_player = player
 	name = "GrassField"
 	_build_resources()
-	_refresh(true)
+	_refresh(false)
 
 
 func _build_resources() -> void:
@@ -262,7 +262,10 @@ func _queue_around(center: Vector2i) -> void:
 				continue
 			if not _chunks.has(key):
 				_pending.append(key)
-	# Drop chunks that fell out of range. Anything still queued stays queued.
+	# Build the visible ground near the player first, not the far edge of the ring.
+	_pending.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return (a - center).length_squared() < (b - center).length_squared())
+	# Drop chunks that fell out of range.
 	for key in _chunks.keys():
 		var d: Vector2i = key - center
 		if Vector2(d).length() > float(VIEW_CHUNKS) + 1.5:
@@ -587,16 +590,15 @@ func focus_at(point: Vector3) -> void:
 
 
 func set_density_scale(scale: float) -> void:
-	## Used by the quality tuner: 1.0 = full, 0.65 = Balanced, 0.35 = Performance.
-	##
-	## Only affects chunks built AFTER the call, so existing geometry is rebuilt
-	## by dropping the ring and streaming it again - otherwise the player would
-	## see the density change only once they had walked far enough to cycle every
-	## chunk, which at 26 m chunks and 130 m of view is well over a minute.
-	_build_budget = maxi(2, int(round(4.0 * scale)))
+	## Rebuild existing chunks gradually when the quality setting changes.
 	visible = scale > 0.01
 	if is_equal_approx(scale, _density):
 		return
 	_density = scale
 	if _player != null:
-		_last_center = Vector2i(9999, 9999)
+		for node in _chunks.values():
+			if is_instance_valid(node):
+				node.queue_free()
+		_chunks.clear()
+		_last_center = _chunk_of(_player.global_position)
+		_queue_around(_last_center)
