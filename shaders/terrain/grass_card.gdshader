@@ -28,6 +28,15 @@ render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 // blue-poor green lands on a pure lime.
 uniform vec4 grass_color : source_color = vec4(0.125, 0.255, 0.125, 1.0);
 uniform vec4 grass_tip : source_color = vec4(0.285, 0.430, 0.215, 1.0);
+// How much of the painted sheet's own luminance survives into the lit colour.
+//
+// The sheet is drawn near-white on purpose: it carries the *shape* of the tuft -
+// which blade is in front, where its rim is, how dark it is at the root - and
+// the shader owns the hue. Multiplying a green shader colour by the green sheet
+// that used to be here gave one flat lime for every blade; multiplying it by a
+// pale sheet gives the same green with the tuft's own light and shade in it,
+// which is what makes a field of four-triangle cards read as grass.
+uniform float sheet_shading : hint_range(0.0, 1.0) = 0.78;
 // The dry variant, halved in weight below: a meadow of one flat green looks
 // synthetic, but too much of this is what gave the field its straw cast.
 uniform vec4 dry_color : source_color = vec4(0.335, 0.345, 0.180, 1.0);
@@ -133,10 +142,22 @@ void fragment() {
 	// little above 1.0: a range biased low is why the grass once read as wet mud
 	// next to the terrain.
 	col *= 0.94 + v_tint * 0.30;
-	// The painted sheet's own colour, folded in lightly. The albedo above is the
-	// calibration that took several rounds to land, and the sheet was drawn to a
-	// brighter palette than that; sampling it raw would undo the calibration.
-	col = mix(col, tex.rgb, 0.35);
+	// The painted sheet's own light and shade, as a *factor* on the calibrated
+	// albedo rather than as a colour mixed into it.
+	//
+	// This is the difference between a meadow and a starburst. Blending a fixed
+	// 35% of the sheet's colour in (what this did) averages every blade toward
+	// the same value: the rim, the blade behind, the dark root all land within a
+	// few percent of each other, so 27 000 cards draw as one flat green sheet
+	// with a spiky silhouette. Scaling by the sheet's luminance keeps the range
+	// the illustrator drew - near-white blade faces, mid rims, dark roots - and
+	// folds it into the calibrated hue.
+	float sheet = dot(tex.rgb, vec3(0.2126, 0.7152, 0.0722));
+	// Clamped: the brightest blade faces come back at 0.8-0.9 and a 1.55x gain
+	// would push them past 1.0, where the albedo clips and the highlight is a
+	// flat white blob instead of a lit blade.
+	sheet = clampf(mix(1.0, sheet * 1.55, sheet_shading), 0.55, 1.28);
+	col *= sheet;
 
 	// --- distance fade ---------------------------------------------------
 	// Far chunks cover many screen pixels each, so mute and cool them toward the

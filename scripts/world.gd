@@ -703,8 +703,9 @@ func _build_spawn_glade() -> void:
 	altar.add_child(disc)
 
 	var stone := MeshInstance3D.new()
-	# A monolith with a taper, not a 1x2.2x0.6 box.
-	stone.mesh = VegMeshes.trunk(2.2, 0.55, 0.30, 0.10, 5)
+	# A monolith with a taper, not a 1x2.2x0.6 box. Knee-high on the altar, not
+	# chest-high: the glowing disc is the thing to look at here.
+	stone.mesh = VegMeshes.trunk(1.5, 0.5, 0.26, 0.10, 5)
 	var sm := StandardMaterial3D.new()
 	# 0.82 albedo under a 1.3-energy sun clipped to white; these read as blank
 	# white slabs. A weathered grey stone matches the rock band on the terrain.
@@ -712,22 +713,29 @@ func _build_spawn_glade() -> void:
 	sm.roughness = 0.85
 	sm.metallic = 0.0
 	stone.material_override = sm
-	stone.position.y = 1.1
+	stone.position.y = 0.75
 	stone.rotation_degrees = Vector3(0, 25, 0)
 	altar.add_child(stone)
 
-	for i in range(6):
-		var a := TAU * float(i) / 6.0
+	# Seven stones around an 11 m ring, 1.5-2.6 m tall.
+	#
+	# They were six at 3.4-5.2 m on a 9 m ring, which reads as a quarry wall
+	# around the character's neck: at the spawn camera, three of them filled the
+	# middle third of the frame and read as grey slabs standing in the grass. A
+	# shrine's standing stones should be taller than her and no taller than twice
+	# her, and they should leave the view out.
+	for i in range(7):
+		var a := TAU * float(i) / 7.0
 		var pillar := MeshInstance3D.new()
 		# A tapered, slightly leaning stone column instead of a box. Still
 		# rectangular in plan - these are built ruins, not boulders - but with a
 		# taper, a lean and a real rock texture, which is the difference between
 		# "standing stone" and "grey rectangle".
-		var ph := _rng.randf_range(3.4, 5.2)
+		var ph := _rng.randf_range(1.5, 2.6)
 		var mesh := VegMeshes.trunk(ph, 0.46, 0.18, _rng.randf_range(-0.06, 0.06), 6)
 		pillar.mesh = mesh
 		pillar.material_override = sm
-		pillar.position = center + Vector3(cos(a) * 9.0, -0.4, sin(a) * 9.0)
+		pillar.position = center + Vector3(cos(a) * 11.0, -0.4, sin(a) * 11.0)
 		pillar.rotation_degrees = Vector3(0, rad_to_deg(a) + 8.0, _rng.randf_range(-5.0, 5.0))
 		_props.add_child(pillar)
 
@@ -740,7 +748,7 @@ func _build_spawn_glade() -> void:
 		# such property, so this had to be rewritten with the pillar rather than
 		# left to fail at runtime.
 		var shape := BoxShape3D.new()
-		shape.size = Vector3(0.92, ph, 0.92)
+		shape.size = Vector3(0.72, ph, 0.72)
 		col.shape = shape
 		body.add_child(col)
 		pillar.add_child(body)

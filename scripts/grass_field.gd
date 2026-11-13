@@ -31,8 +31,8 @@ extends Node3D
 ## The painted tuft. Twice as wide as it is tall in practice: a meadow needs the
 ## footprint more than it needs the height, and a card that is taller than it is
 ## wide reads as a reedy clump when the same sheet is stamped everywhere.
-const CARD_WIDTH := 0.62
-const CARD_HEIGHT := 0.694
+const CARD_WIDTH := 0.78
+const CARD_HEIGHT := 0.52
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
 ## Radius, in chunks. 5 * 26 = 130 m, which with the shader's dissolve put a
@@ -44,9 +44,9 @@ const VIEW_CHUNKS := 7
 ## blotches of green on bare ground rather than a carpet. Roughly doubled to close
 ## that up. The far tiers stay cheap because each tuft there covers more screen
 ## area.
-const BLADES_NEAR := 1500         ## instances in a chunk adjacent to the player
-const BLADES_MID := 620
-const BLADES_FAR := 200
+const BLADES_NEAR := 2100         ## instances in a chunk adjacent to the player
+const BLADES_MID := 800
+const BLADES_FAR := 220
 ## Hard cap on live chunks. Must be at least (2*VIEW_CHUNKS+1)^2 or the field
 ## silently stops growing: the cap was written for a radius of 5 and stayed at 81
 ## when the radius became 7, which needs 225. Without this the outer ring would
@@ -268,10 +268,12 @@ func _build_chunk(key: Vector2i) -> void:
 	var made: Array[Transform3D] = []
 	var origin_x := float(key.x) * CHUNK_SIZE
 	var origin_z := float(key.y) * CHUNK_SIZE
-	# Taller blades further away hide the reduced density.
-	# Taller further out hides the reduced density without turning the mid ring
-	# into reeds.
-	var height_scale := 1.0 + clampf(float(dist) * 0.045, 0.0, 0.22)
+	# Taller blades further away hide the reduced density without turning the
+	# mid ring into reeds.
+	# Capped lower than it was (0.22 -> 0.14): the far tiers are down to 220
+	# cards a chunk, and stretching those by a fifth was the last version's way
+	# of hiding it, which turns the outer ring into reeds.
+	var height_scale := 1.0 + clampf(float(dist) * 0.030, 0.0, 0.14)
 	count = maxi(1, int(round(float(count) * _density)))
 	_tier_counts[count] = int(_tier_counts.get(count, 0)) + 1
 	# Placement runs in tufts, not independent blades.
@@ -351,16 +353,17 @@ func _build_chunk(key: Vector2i) -> void:
 		var centre_bias := 1.0 - clampf(rad / maxf(tuft_radius, 0.001), 0.0, 1.0)
 		# Knee height on a 1.8 m character: a card is 0.69 m tall, so the scale
 		# range puts the top of a tuft between 0.35 and 0.62 m.
-		var s := rng.randf_range(0.52, 0.92) * height_scale * (0.84 + centre_bias * 0.34)
+		var s := rng.randf_range(0.86, 1.22) * height_scale * (0.88 + centre_bias * 0.22)
 		var lean := (1.0 - centre_bias) * 0.22
 		var basis := Basis(Vector3.UP, ang + rng.randf_range(-0.5, 0.5))
 		basis = basis * Basis(Vector3(cos(ang), 0.0, sin(ang)), lean)
-		# Wider than tall, for the same reason the card is: a meadow needs the
-		# footprint more than it needs the height.
-		basis = basis.scaled(Vector3(s * 1.45, s, s * 1.45))
+		# Near-square. The card used to be stretched 1.45x sideways because it was
+		# a cheap wide quad; it is now a painted clump, and stretching a clump
+		# reads as a smear.
+		basis = basis.scaled(Vector3(s * 1.06, s, s * 1.06))
 		# The card's origin is at its root, so it goes straight on the ground. The
 		# 4 cm sink hides the seam where the lowest blades meet the terrain.
-		made.append(Transform3D(basis, Vector3(x, h - 0.04, z)))
+		made.append(Transform3D(basis, Vector3(x, h - 0.02, z)))
 	if made.is_empty():
 		return
 	multimesh.instance_count = made.size()

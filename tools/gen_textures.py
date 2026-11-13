@@ -68,25 +68,68 @@ def blade(draw, x, base_y, length, width, lean, col, tip_col, rim=(18, 46, 26)):
     draw.polygon(inner_l + inner_r, fill=tuple(col[:3]) + (255,))
 
 
-def draw_tuft(draw, cx, cy, scale, rng, palette):
-    """A fan of blades from one root - the shape of a real grass clump."""
-    n = rng.randint(11, 17)
+## The meadow's card is painted in near-white, not green, and that is the whole
+## reason it reads as a meadow instead of as a starburst of green spikes.
+##
+## The shader owns the colour: it lays a root-to-tip gradient over the card and
+## multiplies that by a per-tuft value. A sheet that is already saturated green
+## gets that green mixed in on top (the old code blended 35% of the sheet's own
+## colour back in), so every tuft lands on the same acid green and the field reads
+## as one flat surface. A pale sheet carries only the *shading* - which blade is
+## in front, where its rim is, how dark it is at the root - and the shader turns
+## that into grass. This is the same trick the old tuft used, and it is why the
+## old frame is a soft pale carpet while the new one was a lime starburst.
+## Two per-tuft value steps rather than a continuous ramp, because the whole set
+## is drawn in two or three bands by design.
+PALE_GREENS = [
+    (206, 206, 202), (222, 222, 214), (192, 196, 188),
+    (232, 232, 224), (186, 190, 182),
+]
+
+# Ground cover for the bottom of the card. Without it a tuft has a row of bare
+# blade roots sitting on the terrain, which at 0.4 m from the camera reads as
+# sticks in dirt; with it the card has a base that merges with the ground plane.
+THATCH = (150, 138, 112)
+
+
+def draw_tuft(draw, cx, cy, scale, rng, palette=None):
+    """A dense, even fan of blades from one root.
+
+    The old tuft this replaces drew 18-30 blades with a narrow spread and only
+    about a third of the card's width in lean, which is what makes the silhouette
+    read as a clump. The first version of this function drew 11-17 blades with
+    the full width in lean from each one, and at 256 px it looked like a firework:
+    every blade left the root at a visible angle and the card became a starburst
+    of separate lines rather than a mass of grass.
+    """
+    palette = palette or PALE_GREENS
+    # A few clods of thatch at the base, then the blades rising out of them.
+    # Deliberately sparse and low: a solid bar along the bottom edge is a stripe
+    # of sand at the foot of every card, and the meadow tiles into a plaid.
+    base_r = scale * 0.26
+    for _ in range(5):
+        ox = rng.uniform(-base_r, base_r)
+        r = rng.uniform(base_r * 0.30, base_r * 0.55)
+        draw.ellipse([cx + ox - r, cy - r * 0.34,
+                      cx + ox + r, cy + r * 0.30],
+                     fill=tuple(shade(THATCH, rng.uniform(0.70, 0.94))) + (255,))
+
+    n = rng.randint(18, 30)
     for i in range(n):
         t = i / max(n - 1, 1)
-        lean = (t - 0.5) * 2.0 * rng.uniform(0.45, 1.0)
-        length = scale * rng.uniform(0.55, 1.0)
-        width = scale * rng.uniform(0.035, 0.062)
+        # Most blades stand near-upright; only the outermost third lean, and even
+        # then by less than half the card's width.
+        edge = abs(t - 0.5) * 2.0
+        lean = (t - 0.5) * 2.0 * rng.uniform(0.16, 0.52) * (0.55 + edge)
+        length = scale * rng.uniform(0.62, 1.0) * (1.0 - 0.30 * edge * edge)
+        width = scale * rng.uniform(0.030, 0.058)
         col = rng.choice(palette)
         # Back blades are darker and shorter, front blades lighter: cheap depth.
-        depth = 0.72 + 0.28 * (1.0 - abs(lean))
-        blade(draw, cx + lean * scale * 0.10, cy, length, width, lean,
-              shade(col, depth), lerp(col, (210, 240, 160), 0.35))
+        depth = 0.74 + 0.26 * (1.0 - abs(lean))
+        blade(draw, cx + lean * scale * 0.16, cy, length, width, lean,
+              shade(col, depth), lerp(col, (255, 255, 246), 0.30))
 
 
-GRASS_GREENS = [
-    (86, 148, 62), (98, 163, 68), (74, 133, 55), (110, 176, 74),
-    (66, 122, 50), (124, 186, 82), (92, 156, 58),
-]
 BORDER_GREENS = [
     (62, 118, 48), (74, 136, 54), (52, 100, 42), (88, 150, 60),
     (46, 92, 40), (96, 158, 62),
@@ -99,15 +142,20 @@ def gen_grass(path, w=512, h=512):
     d = ImageDraw.Draw(img)
     rng = random.Random(11)
     W, H = w * SS, h * SS
-    # One tuft, centred. This is an instance card, not a mat: the MultiMesh
-    # builds the meadow by stamping this tens of thousands of times, so what it
-    # has to be is a single convincing clump with clean alpha. Filling the frame
-    # with a dozen overlapping clumps made it useless at instance scale.
-    draw_tuft(d, W * 0.5, H * 1.01, H * 0.90, rng, GRASS_GREENS)
-    # A couple of shorter companions at the root, off-centre, so the stamp does
-    # not read as a symmetrical fountain when repeated.
-    draw_tuft(d, W * 0.24, H * 1.01, H * 0.58, rng, GRASS_GREENS)
-    draw_tuft(d, W * 0.78, H * 1.01, H * 0.52, rng, GRASS_GREENS)
+    # One tuft, centred, filling the card. This is an instance card, not a mat:
+    # the MultiMesh builds the meadow by stamping this tens of thousands of
+    # times, so what it has to be is a single clump with clean alpha.
+    #
+    # It fills the card's full height and about 80% of its width. The first
+    # version filled 90% of the height but the blades were drawn from a point, so
+    # the *visible* mass was a narrow spike and the rest of the card was empty -
+    # which is why the meadow looked sparse at 27k instances.
+    draw_tuft(d, W * 0.5, H * 1.01, H * 0.96, rng)
+    # Two shorter companions at the root, off-centre, so the stamp does not read
+    # as a symmetrical fountain when repeated. Low and wide, not tall: they widen
+    # the silhouette at ground level, which is where the eye reads "carpet".
+    draw_tuft(d, W * 0.26, H * 1.01, H * 0.56, rng)
+    draw_tuft(d, W * 0.76, H * 1.01, H * 0.50, rng)
     return finish(img, w, h, path)
 
 

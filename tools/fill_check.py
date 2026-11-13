@@ -56,6 +56,12 @@ MAX_SPREAD = 2.0
 FILL_MIN = 0.03
 FILL_MAX = 0.55
 
+# The multiplier the painted card contributes, after the shader's own gain and
+# clamp. The sheet is drawn near-white (see tools/gen_textures.py), so 1.28 is a
+# lit blade face and 0.55 is the dark rim between two blades - the full range a
+# pixel of the meadow can take.
+SHEET_SWEEP = [1.28, 1.0, 0.55]
+
 # Albedo range swept. Stylised painted ground and grass both live here.
 ALBEDOS = [0.05, 0.08, 0.12, 0.16, 0.20, 0.26, 0.32, 0.40, 0.50]
 
@@ -189,6 +195,15 @@ def analyse(path, verbose):
         return None
     env = uniforms(src)
     # Replay local scalars in declaration order so they see each other.
+    # The grass card multiplies `col` by the painted sheet's luminance before it
+    # reaches EMISSION, so the fill is not a function of the albedo alone. Without
+    # this the gate reads the meadow's fill as if the sheet were 1.0 and misses
+    # exactly the case that matters: a sheet that comes back too dark scales the
+    # whole field down and the meadow reads as a hole. The sheet's own range is
+    # what tools/gen_textures.py draws - near-white faces, mid rims - so the sweep
+    # spans 0.45 (a dark rim, i.e. the darkest pixel a card can draw) to 1.0.
+    if "sheet" in src:
+        env["sheet"] = SHEET_SWEEP[0]
     for name, sub in locals_before(src, expr):
         try:
             env[name] = evaluate(sub, env, {"col": 1.0, "base": 1.0,
@@ -197,14 +212,15 @@ def analyse(path, verbose):
             pass
     local_defs = locals_before(src, expr)
     samples = []
-    for alb in ALBEDOS:
+    for alb_i, alb in enumerate(ALBEDOS):
         # Sweep the shading variables across their meaningful range so the
         # fill is checked everywhere it matters, not only at one midpoint.
-        for patch in (0.0, 0.5, 1.0):
+        for patch_i, patch in enumerate((0.0, 0.5, 1.0)):
             sweep = {k: alb for k in ("col", "base")}
             sweep["patch"] = patch
             sweep["t"] = 0.5
             sweep["v_tint"] = 0.5
+            sweep["sheet"] = SHEET_SWEEP[(alb_i + int(round(patch))) % len(SHEET_SWEEP)]
             # Locals depend on the swept values, so evaluate them per sample.
             local_env = dict(env)
             for name, sub in local_defs:
