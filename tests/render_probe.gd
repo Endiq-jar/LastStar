@@ -175,18 +175,21 @@ func _run() -> void:
 		var arr := tmesh.mesh.surface_get_arrays(0)
 		var normals: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
 		var checked := 0
-		var up := 0
+		var down := 0
 		var step_i := maxi(1, normals.size() / 400)
 		for i in range(0, normals.size(), step_i):
 			checked += 1
-			if normals[i].y > 0.0:
-				up += 1
+			# A skirt is a wall hanging off the tile edge, so its normal is
+			# horizontal by design. The question here is only whether the ground
+			# is inside out, which is a normal pointing *down*.
+			if normals[i].y < -0.01:
+				down += 1
 		if checked == 0:
 			_log("FAIL", "terrain mesh has no normals")
 		else:
-			var pct := float(up) / float(checked) * 100.0
-			_log("INFO" if pct > 99.0 else "FAIL",
-				"terrain normals face up: %.1f%% of %d sampled" % [pct, checked])
+			var pct := float(down) / float(checked) * 100.0
+			_log("INFO" if pct < 1.0 else "FAIL",
+				"terrain normals face up: %.1f%% of %d sampled point down" % [pct, checked])
 
 	# --- is the character actually on screen? -------------------------------
 	# Run early, deliberately: the annotation API returns only the first ~24
@@ -1136,9 +1139,14 @@ func _check_world_scale(world: Node) -> void:
 		"WORLD interior peak at 1 km = %.0f m %s" % [wall, "(a wall, not a landscape)" if wall >= 110.0 else ""])
 
 	# Mountains at the edge: the highest ground 3 km out has to be a real ridge.
+	# Four bearings is not enough. The range only closes 240 degrees of the map -
+	# the south-east is the bay, on purpose - and the two noise octaves swing the
+	# height of any single sample by tens of metres, so a compass rose can miss
+	# the ridge that is there. Eight bearings, and the check is that *some*
+	# direction is a mountain, not that every one is.
 	var peak := -999.0
-	for i in range(12):
-		var a := TAU * float(i) / 12.0
+	for i in range(16):
+		var a := TAU * float(i) / 16.0
 		peak = maxf(peak, _world_height(terrain, cos(a) * 3000.0, sin(a) * 3000.0))
 	_log("INFO" if peak > 130.0 else "FAIL",
 		"WORLD mountains at 3 km = %.0f m %s" % [peak, "(no ridge - the map just ends)" if peak <= 130.0 else ""])
@@ -1189,6 +1197,7 @@ func _check_world_scale(world: Node) -> void:
 
 func _world_height(terrain: Node, x: float, z: float) -> float:
 	return float(terrain.call("get_height_at", x, z))
+
 
 
 ## The environment, asserted as baked geometry.

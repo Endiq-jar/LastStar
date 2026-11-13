@@ -214,7 +214,10 @@ func _ensure_camera() -> void:
 	cam.name = "FallbackCamera"
 	cam.fov = 70.0
 	cam.near = 0.08
-	cam.far = 900.0
+	# The map is 10 km across and the far shell reaches 5 km. A 900 m far plane
+	# would cut the horizon off in a hard line, so the fallback camera matches
+	# the player's.
+	cam.far = 4200.0
 	cam.position = Vector3(0.0, _height(0.0, 0.0) + 9.0, 26.0)
 	cam.rotation_degrees = Vector3(-11.0, 0.0, 0.0)
 	cam.current = true
@@ -414,9 +417,15 @@ func _setup_environment() -> void:
 	# gains depth - the whole map just looks slightly dirty. A begin/end depth
 	# gradient stays at zero through the playable range and then ramps in, which
 	# is what separates the ridge layers the way a painted background does.
+	#
+	# The end depth is also the far draw distance in disguise. The mountains are
+	# 2-3.2 km out and the far shell reaches 5 km; with the fog ending at 780 m
+	# everything past that was a flat blue wall of terrain with no shape to it.
+	# Full fog at 3.7 km puts the ridge line in the haze where it belongs - still
+	# readable as a shape - and hides the point where the drawn ground stops.
 	env.fog_density = 0.0
-	env.fog_depth_begin = 160.0
-	env.fog_depth_end = 780.0
+	env.fog_depth_begin = 200.0
+	env.fog_depth_end = 3700.0
 	env.fog_depth_curve = 1.35
 	env.fog_aerial_perspective = 0.55
 	env.fog_sky_affect = 0.10
@@ -565,8 +574,8 @@ func _update_time_of_day() -> void:
 	# warm-lit rather than grey haze. Pulled in tighter at the warm ends: morning
 	# haze pooling in the valley is a signature of the look.
 	env.fog_light_color = Color(0.78, 0.86, 0.95).lerp(Color(1.0, 0.82, 0.64), warmth)
-	env.fog_depth_begin = lerpf(190.0, 120.0, warmth)
-	env.fog_depth_end = lerpf(820.0, 640.0, warmth)
+	env.fog_depth_begin = lerpf(240.0, 160.0, warmth)
+	env.fog_depth_end = lerpf(3800.0, 3200.0, warmth)
 	env.fog_depth_curve = lerpf(1.25, 1.55, warmth)
 	env.fog_aerial_perspective = lerpf(0.50, 0.62, warmth)
 
@@ -650,6 +659,18 @@ func _height(x: float, z: float) -> float:
 	if terrain and terrain.has_method("get_height_at"):
 		return terrain.get_height_at(x, z)
 	return 0.0
+
+
+## Is this point under the waterline? Every kind of water - the bay, the lake,
+## the river, each pond - is just terrain below sea level, so this one question
+## covers all of them. Placement used to ask "am I inside the lake disc?", which
+## after the map grew was true of a puddle and false of an ocean.
+func _is_wet(x: float, z: float) -> bool:
+	if terrain and terrain.has_method("is_underwater"):
+		return bool(terrain.call("is_underwater", x, z))
+	if terrain and terrain.has_method("get_height_at"):
+		return float(terrain.call("get_height_at", x, z)) < Game.water_level
+	return false
 
 
 func _build_spawn_glade() -> void:
@@ -792,13 +813,11 @@ func _scatter_landmarks() -> void:
 	# Wind arches: tall broken gates that read like Genshin's ruins.
 	for i in range(7):
 		var a := _rng.randf() * TAU
-		var r := _rng.randf_range(60.0, 260.0)
+		var r := _rng.randf_range(60.0, 700.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
-		if Vector2(x, z).distance_to(Game.lake_center) < Game.lake_radius * 0.9:
-			continue
 		var y := _height(x, z)
-		if y < 2.0 or y > 90.0:
+		if y < 2.0 or y > 90.0 or _is_wet(x, z):
 			continue
 		var gate := Node3D.new()
 		gate.position = Vector3(x, y, z)
@@ -833,11 +852,11 @@ func _scatter_landmarks() -> void:
 	var crystal_colors := [Color(0.55, 0.85, 1.0), Color(0.75, 0.6, 1.0), Color(1.0, 0.78, 0.55)]
 	for i in range(14):
 		var a := _rng.randf() * TAU
-		var r := _rng.randf_range(40.0, 300.0)
+		var r := _rng.randf_range(40.0, 760.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
 		var y := _height(x, z)
-		if y < 1.5:
+		if y < 1.5 or _is_wet(x, z):
 			continue
 		var cluster := Node3D.new()
 		cluster.position = Vector3(x, y - 0.2, z)
@@ -867,11 +886,11 @@ func _scatter_landmarks() -> void:
 	wood.albedo_color = Color(0.45, 0.32, 0.23)
 	for i in range(6):
 		var a := _rng.randf() * TAU
-		var r := _rng.randf_range(70.0, 240.0)
+		var r := _rng.randf_range(70.0, 680.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
 		var y := _height(x, z)
-		if y < 2.5 or Vector2(x, z).distance_to(Game.lake_center) < Game.lake_radius:
+		if y < 2.5 or _is_wet(x, z):
 			continue
 		var camp := Node3D.new()
 		camp.position = Vector3(x, y, z)
@@ -1043,8 +1062,8 @@ func perf_census() -> String:
 func _spawn_waypoints() -> void:
 	var spots := [
 		{"name": "Starlit Shore", "pos": Vector3(0.0, 0.0, 0.0)},
-		{"name": "Windrise Lookout", "pos": Vector3(-140.0, 0.0, -60.0)},
-		{"name": "Jadewater Glade", "pos": Vector3(250.0, 0.0, 120.0)},
+		{"name": "Windrise Lookout", "pos": Vector3(-620.0, 0.0, -380.0)},
+		{"name": "Jadewater Glade", "pos": Vector3(250.0, 0.0, 300.0)},
 	]
 	for spot in spots:
 		var p: Vector3 = spot["pos"]
@@ -1067,13 +1086,13 @@ func _spawn_sigils() -> void:
 	while placed < Game.TOTAL_SIGILS and attempts < 600:
 		attempts += 1
 		var a := TAU * float(placed) / float(Game.TOTAL_SIGILS) + _rng.randf_range(-0.25, 0.25)
-		var r := _rng.randf_range(55.0, 300.0)
+		var r := _rng.randf_range(55.0, 820.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
 		var y := _height(x, z)
 		if y < 1.6 or y > 120.0:
 			continue
-		if Vector2(x, z).distance_to(Game.lake_center) < Game.lake_radius * 0.75:
+		if _is_wet(x, z):
 			continue
 		var too_close := false
 		for u in used:
@@ -1094,11 +1113,11 @@ func _spawn_sigils() -> void:
 func _spawn_enemies() -> void:
 	for i in range(ENEMY_COUNT):
 		var a := _rng.randf() * TAU
-		var r := _rng.randf_range(25.0, 250.0)
+		var r := _rng.randf_range(25.0, 620.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
 		var y := _height(x, z)
-		if y < 1.8 or Vector2(x, z).distance_to(Game.lake_center) < Game.lake_radius * 0.8:
+		if y < 1.8 or _is_wet(x, z):
 			continue
 		var slime := CharacterBody3D.new()
 		slime.set_script(SlimeScript)

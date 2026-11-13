@@ -527,8 +527,12 @@ static func _terrain_blocks(snap: Dictionary, a: Vector3, b: Vector3) -> bool:
 		return false
 	var step: float = snap["grid_step"]
 	var center: Vector2 = snap["grid_center"]
-	var origin_x: float = -GRID_EXTENT + center.x
-	var origin_z: float = -GRID_EXTENT + center.y
+	# Derive the origin from the grid that was actually handed over, not from
+	# GRID_EXTENT: the self-test bakes a smaller grid, and an origin that trusts
+	# the constant samples the wrong place and reports the ridge as clear.
+	var half := step * float(n - 1) * 0.5
+	var origin_x: float = center.x - half
+	var origin_z: float = center.y - half
 	var seg := b - a
 	var dist := seg.length()
 	if dist < 0.5:

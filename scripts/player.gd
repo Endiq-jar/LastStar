@@ -254,7 +254,9 @@ func _build_camera() -> void:
 	# cropping the landscape.
 	_camera.fov = 54.0
 	_camera.near = 0.05
-	_camera.far = 900.0
+	# Long enough to see the far ridge (3.2 km) and the far shell behind it. The
+	# streamed tiles only reach 4.7 km, so this is where the world stops anyway.
+	_camera.far = 4200.0
 	_camera.current = true
 	_spring.add_child(_camera)
 

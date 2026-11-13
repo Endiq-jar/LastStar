@@ -194,9 +194,14 @@ func get_height_at(x: float, z: float) -> float:
 		sea_side = (x * 0.72 + z * 0.69) / r
 	var sea_blend := smoothstep(-0.20, 0.60, sea_side)
 
-	# Mountains at the edge of the world, 2.4-3.7 km out - far enough that the
-	# valley reads as a landscape rather than a bowl.
-	var mount := smoothstep(2400.0, 3700.0, r) * (110.0 + ridge * 1.6)
+	# Mountains at the edge of the world, 2.1-3.3 km out - far enough that the
+	# valley reads as a landscape rather than a bowl, and tall enough to be a
+	# horizon. The base noise is +-46 m, so the range has to be well over 100 m
+	# before it survives a low noise sample: at 110 m the far rim was a 106 m
+	# hill that read as "the map just ends". 200 m clears the 130 m floor even
+	# when both noise octaves come out low, so the ridge is guaranteed rather
+	# than usually there.
+	var mount := smoothstep(2000.0, 3200.0, r) * (200.0 + ridge * 2.6)
 	mount *= 1.0 - 0.85 * sea_blend
 
 	# A gently terraced meadow at spawn, so the opening view is not a hillside.
