@@ -252,15 +252,18 @@ func _run() -> void:
 		# missing the meadow draws as plain green rectangles, which looks like a
 		# shader bug but is a texture-import one.
 		#
-		# `has_method` first: this line printed `GRASS_CARD ` with nothing after
-		# it for two builds, because gf.call() on a name the script does not have
-		# returns null and "%s" % null is the empty string. A diagnostic that
-		# silently reports nothing is worse than no diagnostic - it looked like
-		# the card had been checked and was fine.
-		if gf.has_method("card_report"):
-			_log("INFO", "GRASS_CARD %s" % str(gf.call("card_report")))
+		# This line printed `PROBE_INFO: GRASS_CARD ` - with nothing after it -
+		# on every build, and an empty diagnostic is worse than none: it looks
+		# like the card was checked and passed. Rather than guess why, the three
+		# ways it can be blank are now told apart and two of them are failures.
+		if not gf.has_method("card_report"):
+			_log("FAIL", "GrassField has no card_report() - the card was never checked")
 		else:
-			_log("FAIL", "GrassField has no card_report() - the card cannot be checked")
+			var report: String = str(gf.call("card_report"))
+			if report.is_empty():
+				_log("FAIL", "card_report() returned an empty string - the card was not reported")
+			else:
+				_log("INFO", "GRASS_CARD %s" % report)
 
 	# --- environment dressing ----------------------------------------------
 	# Logs and pebbles are what stop the grass reading as a flat painted
