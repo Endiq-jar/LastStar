@@ -39,14 +39,27 @@ const CHUNK_SIZE := 26.0          ## metres per chunk
 ## visible arc of bare terrain at the edge of the meadow. Raised to 7 (182 m) so
 ## the field runs past the point where blades stop being resolvable.
 const VIEW_CHUNKS := 7
-## Instances per 26 m chunk. Near chunks were 3400 - about five tufts per square
-## metre - drawn as 2.1 m quads, which left visible gaps between them and read as
-## blotches of green on bare ground rather than a carpet. Roughly doubled to close
-## that up. The far tiers stay cheap because each tuft there covers more screen
-## area.
-const BLADES_NEAR := 2100         ## instances in a chunk adjacent to the player
-const BLADES_MID := 800
-const BLADES_FAR := 220
+## Instances per 26 m chunk.
+##
+## These are counts of CARDS, and a card is 0.78 m of clump - so the number that
+## matters is cards per square metre, not cards per chunk. 26 m squared is 676 m2,
+## so BLADES_NEAR is 9.2 cards/m2 and neighbouring cards overlap, which is what
+## makes a carpet instead of a scattering. The two previous passes had this at
+## 2.2 and 3.1 cards/m2 and both read as grass dotted onto a bare hillside,
+## which is the actual reason the meadow looked wrong at 27 000 cards - not the
+## card's shape, which by then was already the old painted fan.
+##
+## Cost, counted in triangles rather than cards because that is what the frame
+## pays: 4 triangles an instance, and the disc is 9 near / 19 mid / 93 far
+## chunks. 9*6241*4 + 19*2601*4 + 93*484*4 = 0.59 M triangles for the whole
+## meadow. The 14 000-card field this replaces spent 14 000 * 4 per near chunk,
+## which by itself was more than half a million - and it drew one quad a card,
+## so it had 3.8 cards/m2 to this one's 9.2. The same triangles, twice the
+## cover. It is still the largest line item in the frame, so quality tier 1
+## multiplies all three tiers by 0.35 and the far ring is deliberately sparse.
+const BLADES_NEAR := 6200         ## instances in a chunk adjacent to the player
+const BLADES_MID := 2600
+const BLADES_FAR := 460
 ## Hard cap on live chunks. Must be at least (2*VIEW_CHUNKS+1)^2 or the field
 ## silently stops growing: the cap was written for a radius of 5 and stayed at 81
 ## when the radius became 7, which needs 225. Without this the outer ring would
@@ -85,7 +98,6 @@ var _rej_water := 0
 var _rej_height := 0
 var _rej_slope := 0
 var _tried := 0
-var _tier_counts := {1500: 0, 620: 0, 200: 0}
 
 
 func setup(terrain: Node, player: Node3D) -> void:
@@ -275,95 +287,65 @@ func _build_chunk(key: Vector2i) -> void:
 	# of hiding it, which turns the outer ring into reeds.
 	var height_scale := 1.0 + clampf(float(dist) * 0.030, 0.0, 0.14)
 	count = maxi(1, int(round(float(count) * _density)))
-	_tier_counts[count] = int(_tier_counts.get(count, 0)) + 1
-	# Placement runs in tufts, not independent blades.
+	# Placement is a jittered grid, not random points and not tufts.
 	#
-	# Every blade was an independent uniform random point, which is the definition
-	# of a statistically flat carpet: no clumping, no gaps, no scale between a
-	# single blade and the whole chunk. Real grass grows in tufts, and at the
-	# distances this field is seen the tuft is the unit the eye reads - a blade is
-	# sub-pixel past about 15 m.
+	# Two earlier versions of this loop, and why both were wrong at carpet density:
 	#
-	# So each iteration drops a tuft centre on the noise field and then places a
-	# small cluster of blades around it. The total blade count is unchanged, so
-	# this costs nothing; what changes is that density now varies at 1 m scale as
-	# well as at the 40 m scale of the existing _noise patches.
-	var tuft_size := 3 + int(rng.randf() * 5.0)
-	var tuft_radius := 0.16 + rng.randf() * 0.30
-	var cx := origin_x + rng.randf() * CHUNK_SIZE
-	var cz := origin_z + rng.randf() * CHUNK_SIZE
-	var in_tuft := 0
-	for i in range(count):
-		_tried += 1
-		# Start a new tuft once this one is full, or immediately on the first blade.
-		# A tuft whose centre lands on rejected ground simply places nothing, which
-		# is correct - a tuft on a cliff is not grass.
-		if in_tuft >= tuft_size:
-			in_tuft = 0
-			tuft_size = 3 + int(rng.randf() * 5.0)
-			tuft_radius = 0.16 + rng.randf() * 0.30
-			cx = origin_x + rng.randf() * CHUNK_SIZE
-			cz = origin_z + rng.randf() * CHUNK_SIZE
-		in_tuft += 1
-		# Offset within the tuft, denser toward the centre: a tuft is a bundle
-		# rising from one root, not a disc of grass cut with a cookie cutter.
-		var ang := rng.randf() * TAU
-		var rad := tuft_radius * pow(rng.randf(), 0.65)
-		var x := cx + cos(ang) * rad
-		var z := cz + sin(ang) * rad
-		# surface_height_at(), not get_height_at(): the grass has to sit on the
-		# bumpy mesh the camera actually sees, not on the smooth analytic field
-		# the collision uses. Those differ by up to the sagitta of a 3 m triangle,
-		# which is exactly enough for a tuft to hover with air under it.
-		var h: float = _terrain.surface_height_at(x, z) if _terrain.has_method("surface_height_at") \
-			else _terrain.get_height_at(x, z)
-		# Grass grows on gentle ground above the shoreline, not on cliffs,
-		# not underwater and not on the high rock/snow bands.
-		# 58 -> 92 m. The old ceiling stopped grass well below the rock and snow
-		# bands, so every hill above the valley floor was bare terrain - the
-		# single largest reason the world read as "a meadow patch surrounded by
-		# empty mountains". 92 m is where the terrain shader's own rock blend
-		# takes over, so the two agree instead of leaving a gap.
-		if h > 92.0:
-			_rej_height += 1
-			continue
-		# 0.52 -> 0.78. At 0.52 the field skipped roughly 27 degrees of slope, which
-		# is most of a hilly valley - the grass stopped wherever the ground started
-		# to rise, and the hillsides above it were bare. 0.78 (~38 degrees) still
-		# keeps blades off cliffs and scree.
-		if _terrain.get_slope_at(x, z) > 0.78:
-			_rej_slope += 1
-			continue
-		# Exclude actual water, not a circle around it. The old blanket
-		# exclusion (lake_radius * 0.82 = 75 m from the lake centre) also
-		# swallowed the spawn glade - the player starts 66 m from the centre,
-		# so the entire meadow around them was silently rejected and the field
-		# came out at a few thousand blades instead of tens of thousands.
-		if _terrain.is_underwater(x, z):
-			_rej_water += 1
-			continue
-		# Keep a small dry margin around the shoreline so blades do not poke
-		# through the water surface.
-		if h < SEA_MARGIN:
-			_rej_water += 1
-			continue
-		# Outer blades of a tuft are shorter and lean outward; the tallest blades
-		# are at the centre. This is what stops a tuft reading as a cylinder of
-		# identical quad cards.
-		var centre_bias := 1.0 - clampf(rad / maxf(tuft_radius, 0.001), 0.0, 1.0)
-		# Knee height on a 1.8 m character: a card is 0.69 m tall, so the scale
-		# range puts the top of a tuft between 0.35 and 0.62 m.
-		var s := rng.randf_range(0.86, 1.22) * height_scale * (0.88 + centre_bias * 0.22)
-		var lean := (1.0 - centre_bias) * 0.22
-		var basis := Basis(Vector3.UP, ang + rng.randf_range(-0.5, 0.5))
-		basis = basis * Basis(Vector3(cos(ang), 0.0, sin(ang)), lean)
-		# Near-square. The card used to be stretched 1.45x sideways because it was
-		# a cheap wide quad; it is now a painted clump, and stretching a clump
-		# reads as a smear.
-		basis = basis.scaled(Vector3(s * 1.06, s, s * 1.06))
-		# The card's origin is at its root, so it goes straight on the ground. The
-		# 4 cm sink hides the seam where the lowest blades meet the terrain.
-		made.append(Transform3D(basis, Vector3(x, h - 0.02, z)))
+	#   * Independent uniform random points, which is a Poisson process: clumpy by
+	#     nature, with patches of bare ground between clumps that no amount of
+	#     instance count removes (it only shrinks them).
+	#   * Tuft centres with 3-7 cards clustered on each, which multiplies that
+	#     clumpiness on purpose. It was the right call at 2.2 cards/m2, where the
+	#     job was to make a sparse scatter look intentional; at 9 cards/m2 the job
+	#     is the opposite - cover the ground evenly - and clustering makes the
+	#     coverage worse while *also* throwing away most of the cards, because a
+	#     tuft whose centre lands in water loses all of its cards instead of one.
+	#
+	# A jittered grid is the standard answer: one candidate per cell, displaced by
+	# less than half a cell, which covers the ground evenly and still has no
+	# visible rows. Each card is independent, so a rejection costs one card.
+	var per_side := maxi(1, int(ceil(sqrt(float(count)))))
+	var cell := CHUNK_SIZE / float(per_side)
+	for gz in range(per_side):
+		for gx in range(per_side):
+			_tried += 1
+			var x := origin_x + (float(gx) + rng.randf()) * cell
+			var z := origin_z + (float(gz) + rng.randf()) * cell
+			# surface_height_at(), not get_height_at(): the grass has to sit on the
+			# bumpy mesh the camera actually sees, not on the smooth analytic field
+			# the collision uses. Those differ by up to the sagitta of a 3 m triangle,
+			# which is exactly enough for a tuft to hover with air under it.
+			var h: float = _terrain.surface_height_at(x, z) if _terrain.has_method("surface_height_at") \
+				else _terrain.get_height_at(x, z)
+			# Grass grows on gentle ground above the shoreline, not on cliffs and
+			# not on the high rock/snow bands. 92 m is where the terrain shader's
+			# own rock blend takes over, so the two agree instead of leaving a gap.
+			if h > 92.0:
+				_rej_height += 1
+				continue
+			# 0.78 (~38 degrees) keeps blades off cliffs and scree without
+			# stopping the meadow wherever the ground starts to rise.
+			if _terrain.get_slope_at(x, z) > 0.78:
+				_rej_slope += 1
+				continue
+			# Actual water, not a circle around it, plus a dry margin so blades do
+			# not poke through the surface.
+			if _terrain.is_underwater(x, z) or h < SEA_MARGIN:
+				_rej_water += 1
+				continue
+			# Every card is the same size and the same kind of card, so the only
+			# variation is height, yaw and a small tilt. No per-cluster bias: at
+			# this density the field is read as a surface, and any per-cluster
+			# structure in it reads as polka dots.
+			var s2 := rng.randf_range(0.80, 1.20) * height_scale
+			var yaw := rng.randf() * TAU
+			var tilt := rng.randf_range(-0.10, 0.10)
+			var basis := Basis(Vector3.UP, yaw)
+			basis = basis * Basis(Vector3(cos(yaw), 0.0, sin(yaw)), tilt)
+			basis = basis.scaled(Vector3(s2, s2, s2))
+			# The card's origin is at its root, so it goes straight on the ground.
+			# The 2 cm sink hides the seam where the lowest blades meet the terrain.
+			made.append(Transform3D(basis, Vector3(x, h - 0.02, z)))
 	if made.is_empty():
 		return
 	multimesh.instance_count = made.size()
@@ -427,14 +409,14 @@ func chunk_count() -> int:
 
 
 func diagnostics() -> String:
-	# The tier keys were hard-coded 2600/1300/520 - numbers from an older density
-	# curve that no longer exist. `_tier_counts` is keyed by the actual per-chunk
-	# instance count, so it reported 0/0/0 on a field of 276,811 blades. A
-	# diagnostic that always reads zero is worse than none: it looks like the
-	# blades are not being placed at all.
+	# `_tier_counts` used to hold one key per density constant, written by the
+	# builder. When the constants changed the keys were stale and this reported
+	# 0/0/0 on a field of 276,811 blades - a diagnostic that always reads zero is
+	# worse than none, because it looks like nothing is being placed.
 	#
-	# Count live chunks by tier instead, derived from the same constants the
-	# builder uses, so this cannot drift again.
+	# The live count is the MultiMeshes themselves now, so it cannot drift: the
+	# tier a chunk belongs to is derived from its position, and its card count is
+	# read off the instance buffer rather than remembered from a constant.
 	var near := 0
 	var mid := 0
 	var far := 0
@@ -447,9 +429,7 @@ func diagnostics() -> String:
 			mid += 1
 		else:
 			far += 1
-	var placed := 0
-	for v in _tier_counts.values():
-		placed += int(v)
+	var placed := blade_count()
 	return "tried=%d placed=%d chunks=%d water=%d height=%d slope=%d tiers(near/mid/far)=%d/%d/%d" % [
 		_tried, placed, _chunks.size(), _rej_water, _rej_height, _rej_slope,
 		near, mid, far]

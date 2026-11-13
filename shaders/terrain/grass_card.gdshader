@@ -26,8 +26,8 @@ render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 // look like a golf course. Green sits near 120 degrees with blue held equal to
 // red, because a warm sun plus a warm grade multiplies blue by ~0.4 and a
 // blue-poor green lands on a pure lime.
-uniform vec4 grass_color : source_color = vec4(0.125, 0.255, 0.125, 1.0);
-uniform vec4 grass_tip : source_color = vec4(0.285, 0.430, 0.215, 1.0);
+uniform vec4 grass_color : source_color = vec4(0.108, 0.196, 0.100, 1.0);
+uniform vec4 grass_tip : source_color = vec4(0.255, 0.375, 0.190, 1.0);
 // How much of the painted sheet's own luminance survives into the lit colour.
 //
 // The sheet is drawn near-white on purpose: it carries the *shape* of the tuft -
@@ -141,7 +141,7 @@ void fragment() {
 	// Cheap per-tuft value variation, so the field is not one surface. Centred a
 	// little above 1.0: a range biased low is why the grass once read as wet mud
 	// next to the terrain.
-	col *= 0.94 + v_tint * 0.30;
+	col *= 0.86 + v_tint * 0.26;
 	// The painted sheet's own light and shade, as a *factor* on the calibrated
 	// albedo rather than as a colour mixed into it.
 	//

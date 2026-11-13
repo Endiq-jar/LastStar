@@ -52,30 +52,52 @@ static func model_of(spec: Dictionary) -> ArrayMesh:
 ## can resolve them.
 static func species() -> Array:
 	return [
-		{"name": "border_grass", "model": "grass_2", "density": 0.55,
-			"hmin": 0.60, "hmax": 1.05, "wind": 0.24, "tint": Color(0.96, 1.03, 0.92),
-			"slope": 0.42, "radius": 4},
+		# Border grass is a detail layer now, not ground cover.
+		#
+		# At 0.55/m2 across a 104 m radius that is ~18 000 instances of a 64
+		# triangle tuft - 1.2 M triangles, a quarter of the whole frame - spent
+		# re-covering ground the painted carpet already covers twice as densely.
+		# It also *fights* the carpet visually: the pack's tuft is a bright
+		# saturated green sprig and the carpet is a soft pale one, so the meadow
+		# came out as acid-green shrubs standing in pale grass. A tenth of the
+		# density keeps the ragged field edge it was added for.
+		{"name": "border_grass", "model": "grass_2", "density": 0.055,
+			"hmin": 0.60, "hmax": 1.05, "wind": 0.24, "tint": Color(0.88, 0.96, 0.88),
+			"slope": 0.42, "radius": 3},
 		{"name": "flowers", "model": "flowers", "density": 0.14,
 			"hmin": 0.35, "hmax": 0.70, "wind": 0.20, "tint": Color(1.0, 1.0, 1.0),
 			"slope": 0.38, "radius": 3},
-		{"name": "bush", "model": "bush_1", "density": 0.030,
-			"hmin": 0.70, "hmax": 1.35, "wind": 0.10, "tint": Color(1.0, 1.0, 1.0),
-			"slope": 0.45, "radius": 4, "casts_shadow": true},
-		{"name": "plants", "model": "plant_3", "density": 0.12,
+		# Bushes are accents, not ground cover.
+		#
+		# At 0.030/m2 over a 104 m radius that is ~1000 bushes inside a single
+		# view, all of them the same 1.24 m model at a similar scale, and the
+		# meadow stops being a meadow: the frame the probe captured is a hedge
+		# with grass in the gaps. A third of the count and a wider scale range
+		# reads as scrub scattered through grassland, which is what the hillside
+		# is supposed to be.
+		{"name": "bush", "model": "bush_1", "density": 0.010,
+			"hmin": 0.55, "hmax": 1.45, "wind": 0.10, "tint": Color(1.0, 1.0, 1.0),
+			"slope": 0.45, "radius": 3, "casts_shadow": true},
+		{"name": "plants", "model": "plant_3", "density": 0.070,
 			"hmin": 0.55, "hmax": 1.10, "wind": 0.16, "tint": Color(1.0, 1.02, 0.98),
 			"slope": 0.40, "radius": 3},
-		{"name": "ferns", "model": "plant_1", "density": 0.10,
+		{"name": "ferns", "model": "plant_1", "density": 0.050,
 			"hmin": 0.90, "hmax": 1.60, "wind": 0.18, "tint": Color(1.04, 1.02, 0.96),
 			"slope": 0.50, "radius": 2},
 		{"name": "pebbles", "model": "rock_1", "density": 0.24,
-			"hmin": 0.20, "hmax": 0.50, "wind": 0.0, "tint": Color(1.0, 1.0, 1.0),
+			"hmin": 0.20, "hmax": 0.50, "wind": 0.0, "tint": Color(0.62, 0.64, 0.68),
 			"slope": 0.70, "radius": 2},
 		# Boulders. Absent entirely before this: the only stones in the world were
 		# 12-26 cm pebbles and the ruin architecture, so the meadow had no
 		# mid-scale rock at all and read as a bare carpet. 1.5-3.0 on a 0.78 m
 		# rock puts them between the player's chest and twice her height,
 		# which is the size that shapes a hillside's silhouette.
+		# Tinted well below the pack's own Rock. The palette colour is converted
+		# for a lit surface, and the foliage shader then adds a shadow fill to
+		# every fragment - on a pale grey that lands at near-white, which against
+		# a green meadow reads as a painted slab rather than as stone. 0.62 puts
+		# the lit faces in the same value band as the terrain's rock band.
 		{"name": "rocks", "model": "rock_4", "density": 0.010,
-			"hmin": 1.50, "hmax": 3.00, "wind": 0.0, "tint": Color(1.0, 1.0, 1.0),
-			"slope": 0.85, "radius": 3},
+			"hmin": 1.50, "hmax": 3.00, "wind": 0.0, "tint": Color(0.62, 0.64, 0.68),
+			"slope": 0.85, "radius": 2},
 	]

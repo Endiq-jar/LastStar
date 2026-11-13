@@ -48,3 +48,8 @@ Thumbs.db
 # Python bytecode (tools/ has helper scripts linted in CI)
 __pycache__/
 *.pyc
+
+# Scratch previews: texture and frame crops used while tuning art. They are
+# drawn from the committed sources and never referenced by the game.
+_*.png
+_*_preview.png
