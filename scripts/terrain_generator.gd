@@ -652,12 +652,22 @@ func census() -> String:
 	for key in _near:
 		var node: MeshInstance3D = _near[key]
 		if is_instance_valid(node) and node.mesh != null:
-			near_tris += (node.mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+			near_tris += _surface_triangle_count(node.mesh)
 	var mid_tris := 0
 	for key in _mid:
 		var node: MeshInstance3D = _mid[key]
 		if is_instance_valid(node) and node.mesh != null:
-			mid_tris += (node.mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+			mid_tris += _surface_triangle_count(node.mesh)
 	return "near=%d tiles/%d tris mid=%d tiles/%d tris far=%dm cells near_window=%.0fm" % [
 		_near.size(), near_tris, _mid.size(), mid_tris,
 		int(FAR_CELL), _near_window_half() * 2.0]
+
+
+func _surface_triangle_count(mesh: Mesh) -> int:
+	## SurfaceTool tiles are unindexed, but imported meshes may be indexed.
+	var arrays := mesh.surface_get_arrays(0)
+	var indices = arrays[Mesh.ARRAY_INDEX]
+	if indices != null:
+		return int(indices.size() / 3)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	return int(vertices.size() / 3)
