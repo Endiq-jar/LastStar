@@ -200,11 +200,65 @@ def scan(path):
     return problems
 
 
+# Methods the engine declares `static` in Godot 4. Calling one on an instance is
+# a compile error, not a warning - "Cannot call a static function on an instance"
+# - and because world.gd preloads grass_field.gd, a single such call made world.gd
+# fail to compile and the game report "Nonexistent function 'setup' in base
+# 'Node3D'", three layers away from the actual mistake.
+#
+# Neither gdparse nor this file's scope analysis models staticness, and the
+# headless boot only catches it after a full CI cycle. Keeping the list short and
+# explicit is deliberate: these are the ones this project actually reaches for,
+# and guessing at the whole engine API would produce false positives faster than
+# it caught anything.
+# Only methods that are static on EVERY class that owns the name, because this
+# check sees the call and not the receiver's type. `instantiate` is a legitimate
+# instance method of PackedScene, `load` of ConfigFile, `get_image` of
+# Texture2D - flagging those is worse than not checking at all, since a gate that
+# cries wolf gets switched off.
+STATIC_METHODS = {
+    "load_from_file": "Image.load_from_file(path)",
+    "create_empty": "Image.create_empty(width, height, mipmaps, format)",
+}
+
+
+def check_static_calls(path):
+    """Report `SomeClass.method(...)` calls to engine methods that are static.
+
+    Deliberately only flags the pattern `<Expression>.<static_name>(`, where the
+    receiver is an identifier or a call result - not a file-scope method of this
+    script, which the scope pass already knows about.
+    """
+    problems = []
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for i, line in enumerate(fh, 1):
+            code = line.split("#", 1)[0]
+            for name, how in STATIC_METHODS.items():
+                # Instance-style call: something.identifier.name( - i.e. a dot
+                # before it. `Image.new()` and `Vector3(...)` have no dot and are
+                # fine; `img.load_from_file(...)` is the bug.
+                import re as _re
+                for m in _re.finditer(r"\b([A-Za-z_]\w*)\.%s\s*\(" % _re.escape(name), code):
+                    recv = m.group(1)
+                    # Builtin value types (Vector2/3, Color, Rect2...) are structs
+                    # whose converts this cannot tell apart; only flag engine
+                    # resource/media classes, which is where the mistake happens.
+                    if recv[0].isupper() and recv not in ("Vector2", "Vector3", "Vector4",
+                                                          "Color", "Rect2", "Transform3D",
+                                                          "Basis", "Quaternion", "AABB"):
+                        continue
+                    problems.append((i, "%s.%s" % (recv, name),
+                                     "%s - %s is static, call it on the class"
+                                     % (code.strip(), how)))
+    return problems
+
+
 def main():
     bad = 0
     for path in sys.argv[1:]:
         probs = scan(path)
         probs.extend(check_const_dict(path))
+        probs.extend(check_static_calls(path))
         # Collapse duplicates of the same name in the same file.
         seen = set()
         for line_no, name, text in probs:

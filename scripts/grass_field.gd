@@ -499,10 +499,14 @@ func card_report() -> String:
 ## same code answers for a .webp, a .png or anything else Godot can decode, and
 ## it does not care what the importer did to the texture.
 func _alpha_from_source() -> String:
-	var img := Image.new()
-	var err := img.load_from_file("res://assets/grass/tuft.webp")
-	if err != OK:
-		return "SOURCE-UNREADABLE (error %d)" % err
+	# Static, not a method on an instance: Image.load_from_file() is declared
+	# static in Godot 4, and calling it on an instance is a compile error - which
+	# here is not a local failure, because world.gd preloads this script and
+	# cannot compile if it does not. That surfaced as "Nonexistent function
+	# 'setup' in base 'Node3D'", three layers away from the actual mistake.
+	var img := Image.load_from_file("res://assets/grass/tuft.webp")
+	if img == null or img.is_empty():
+		return "SOURCE-UNREADABLE"
 	return _alpha_down_column(img)
 
 
