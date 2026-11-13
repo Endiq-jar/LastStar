@@ -492,7 +492,7 @@ func _slot_style(has_spell: bool, ready_now: bool = true) -> StyleBoxFlat:
 func _tex(name: String) -> Texture2D:
 	if name == "":
 		return null
-	var path := ICON_DIR + name + ".png"
+	var path := ICON_DIR + name + ".webp"
 	if ResourceLoader.exists(path):
 		return load(path) as Texture2D
 	return null

@@ -234,7 +234,16 @@ func _run() -> void:
 		# The card's alpha is what cuts the blade shape out of the quad. If it is
 		# missing the meadow draws as plain green rectangles, which looks like a
 		# shader bug but is a texture-import one.
-		_log("INFO", "GRASS_CARD %s" % str(gf.call("card_report")))
+		#
+		# `has_method` first: this line printed `GRASS_CARD ` with nothing after
+		# it for two builds, because gf.call() on a name the script does not have
+		# returns null and "%s" % null is the empty string. A diagnostic that
+		# silently reports nothing is worse than no diagnostic - it looked like
+		# the card had been checked and was fine.
+		if gf.has_method("card_report"):
+			_log("INFO", "GRASS_CARD %s" % str(gf.call("card_report")))
+		else:
+			_log("FAIL", "GrassField has no card_report() - the card cannot be checked")
 
 	# --- environment dressing ----------------------------------------------
 	# Logs and pebbles are what stop the grass reading as a flat painted
@@ -264,7 +273,7 @@ func _run() -> void:
 
 	# --- terrain textures ---------------------------------------------------
 	for tex_name in ["meadow", "rock", "sand", "macro"]:
-		var path := "res://textures/terrain/%s.png" % tex_name
+		var path := "res://textures/terrain/%s.webp" % tex_name
 		_log("INFO" if ResourceLoader.exists(path) else "FAIL",
 			"terrain texture %s %s" % [tex_name, "loaded" if ResourceLoader.exists(path) else "MISSING"])
 

@@ -36,8 +36,8 @@ produces an installable APK on every push.
 | **Water** | One surface at sea level over the whole map, because a sea in the south-east, a lake, a carved river and six ponds are all the same water table. The terrain carves the beds; wherever it falls below the waterline there is water, so a coastline needs no special case |
 | **World dressing** | Scattered trees, pines, dead trees, bushes, ferns, flowers, pebbles and boulders from the Ultimate Stylized Nature Pack, batched into MultiMeshes and occluded per entity; wind arches, glowing crystal clusters, campfires and bone-cloth banners at the shrines |
 | **Day / night** | Sun angle, colour and ambient light drift over time; campfire and crystal lights carry the night |
-| **Environment (rendered)** | ![wide](docs/render_wide.png) ![gameplay](docs/render_world.png) |
-| **Character (rendered, front)** | ![front](docs/render_player.png) |
+| **Environment (rendered)** | ![wide](docs/render_wide.webp) ![gameplay](docs/render_world.webp) |
+| **Character (rendered, front)** | ![front](docs/render_player.webp) |
 | **Grass** | The painted carpet is back: two crossed alpha-cut cards a tuft, **4 triangles an instance** against the 3D tuft's 64, on a jittered grid at 9.2 cards/m² near the player and thinning with distance (6 200 / 2 600 / 460 per 26 m chunk). ~95 000 cards and 0.59 M triangles for the whole meadow. **No wind** — the shader has no `TIME` in it. What it does do is not draw: behind-camera collapse, a clearing around the character, distance fade and a dissolve at the streaming edge |
 | **Mobile UI** | Touch joystick + right-side camera drag + on-screen action buttons, plus a **Quality** toggle (Balanced / Performance / High) |
 

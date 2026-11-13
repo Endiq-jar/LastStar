@@ -11,7 +11,7 @@ extends Node3D
 ##   far   (70 - 130 m) sparse, cheap - reads as distant meadow texture
 ##
 ## The tuft is a painted card again: two crossed alpha-cut quads, 4 triangles an
-## instance, drawn from assets/grass/tuft.png (tools/gen_textures.py redraws it).
+## instance, drawn from assets/grass/tuft.webp (hand-painted; see below).
 ##
 ## It spent a while as real geometry from the nature pack, at 64 triangles a
 ## tuft. That looked right and cost the earth: the meadow is stamped tens of
@@ -140,7 +140,7 @@ func _build_resources() -> void:
 		return
 	_material = ShaderMaterial.new()
 	_material.shader = shader
-	var sheet := load("res://assets/grass/tuft.png")
+	var sheet := load("res://assets/grass/tuft.webp")
 	# Log what the import produced, at load time.
 	#
 	# A card whose alpha did not survive importing draws as a plain rectangle, and
@@ -162,7 +162,8 @@ func _build_resources() -> void:
 	if sheet is Texture2D:
 		_material.set_shader_parameter("blade_tex", sheet)
 	else:
-		push_warning("LastStar: assets/grass/tuft.png missing - run tools/gen_textures.py --grass-atlas")
+		push_warning("LastStar: assets/grass/tuft.webp missing - it is hand-painted and committed; "
+			+ "restore it from git, the generator does not draw it")
 	_material.set_shader_parameter("card_height", CARD_HEIGHT)
 
 

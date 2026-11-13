@@ -356,7 +356,7 @@ func _round_button(text: String, size: Vector2) -> Button:
 func _icon_texture(icon_name: String) -> Texture2D:
 	if icon_name == "":
 		return null
-	var path := "res://icons/actions/%s.png" % icon_name
+	var path := "res://icons/actions/%s.webp" % icon_name
 	if ResourceLoader.exists(path):
 		return load(path) as Texture2D
 	return null

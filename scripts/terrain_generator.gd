@@ -616,10 +616,10 @@ func _make_noise_tex(seed_v: int, freq: float, size: int, as_normal: bool = fals
 func _terrain_material() -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = load("res://shaders/terrain/terrain_anime.gdshader")
-	m.set_shader_parameter("meadow_tex", _load_tex("res://textures/terrain/meadow.png"))
-	m.set_shader_parameter("rock_tex", _load_tex("res://textures/terrain/rock.png"))
-	m.set_shader_parameter("sand_tex", _load_tex("res://textures/terrain/sand.png"))
-	m.set_shader_parameter("macro_tex", _load_tex("res://textures/terrain/macro.png"))
+	m.set_shader_parameter("meadow_tex", _load_tex("res://textures/terrain/meadow.webp"))
+	m.set_shader_parameter("rock_tex", _load_tex("res://textures/terrain/rock.webp"))
+	m.set_shader_parameter("sand_tex", _load_tex("res://textures/terrain/sand.webp"))
+	m.set_shader_parameter("macro_tex", _load_tex("res://textures/terrain/macro.webp"))
 	m.set_shader_parameter("water_level", SEA_LEVEL)
 	# The mountains reach ~210 m now, not the old rim's ~130, so the rock and snow
 	# bands move up with them or every peak would come out entirely white.

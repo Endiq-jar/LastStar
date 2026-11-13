@@ -794,7 +794,7 @@ func _stone_material() -> StandardMaterial3D:
 	m.albedo_color = Color(0.60, 0.62, 0.66)
 	m.roughness = 0.92
 	m.metallic = 0.0
-	var tex := _load_stone_tex("res://textures/terrain/rock.png")
+	var tex := _load_stone_tex("res://textures/terrain/rock.webp")
 	if tex != null:
 		m.albedo_texture = tex
 		m.uv1_triplanar = true

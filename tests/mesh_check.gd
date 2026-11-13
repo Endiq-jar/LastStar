@@ -339,9 +339,9 @@ func _ready() -> void:
 	print("MESH_CHECK surface textures")
 	# The environment's own pngs are gone with the texture pipeline; what is
 	# left is the terrain's painted ground.
-	for path in ["res://textures/terrain/rock.png",
-			"res://textures/terrain/meadow.png",
-			"res://textures/terrain/sand.png"]:
+	for path in ["res://textures/terrain/rock.webp",
+			"res://textures/terrain/meadow.webp",
+			"res://textures/terrain/sand.webp"]:
 		if not ResourceLoader.exists(path):
 			failures.append("missing surface texture %s" % path)
 			continue

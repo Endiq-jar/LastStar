@@ -685,7 +685,7 @@ def generate_all():
 
 ## The meadow's tuft is NOT generated here.
 ##
-## assets/grass/tuft.png is the hand-painted tuft that shipped with the old
+## assets/grass/tuft.webp is the hand-painted tuft that shipped with the old
 ## carpet, kept verbatim (it came from icons/grass/tuft.png at c7b415f). Three
 ## attempts to redraw it procedurally all landed somewhere the owner did not want,
 ## and the file he wanted was always that one, so this script no longer writes
@@ -699,12 +699,12 @@ def generate_all():
 ## draw_tuft() and gen_grass() below are kept as a record of how that card was
 ## drawn, not as something that runs.
 def generate_grass_atlas(out_dir="assets/grass"):
-    card = os.path.join(out_dir, "tuft.png")
+    card = os.path.join(out_dir, "tuft.webp")
     if os.path.exists(card):
-        print("%s (hand-painted, kept as-is)" % card)
+        print("%s (hand-painted and losslessly encoded, kept as-is)" % card)
     else:
-        print("%s is missing: restore it with "
-              "`git show c7b415f:icons/grass/tuft.png`" % card)
+        print("%s is missing: it is committed art, restore it with "
+              "`git checkout -- %s`" % (card, card))
     return []
 
 
