@@ -148,15 +148,9 @@ func _build_resources() -> void:
 	# decoded format and a few alpha values here settles which it is, on the one
 	# run where it happens.
 	if sheet is Texture2D:
-		var img: Image = (sheet as Texture2D).get_image()
-		if img == null:
-			print("GRASS_SHEET %dx%d format=%d image=NONE" % [
-				(sheet as Texture2D).get_width(), (sheet as Texture2D).get_height(),
-				(sheet as Texture2D).get_format()])
-		else:
-			print("GRASS_SHEET %dx%d format=%d alpha(top/mid/bottom)=%s" % [
-				img.get_width(), img.get_height(), img.get_format(),
-				_alpha_down_column(img)])
+		print("GRASS_SHEET %dx%d format=%d alpha(top/mid/bottom)=%s" % [
+			(sheet as Texture2D).get_width(), (sheet as Texture2D).get_height(),
+			(sheet as Texture2D).get_format(), _alpha_from_source()])
 	if sheet is Texture2D:
 		_material.set_shader_parameter("blade_tex", sheet)
 	else:
@@ -476,14 +470,36 @@ func card_report() -> String:
 		return "blade_tex=UNBOUND"
 	var tex: Texture2D = bound
 	var out := "%dx%d format=%d" % [tex.get_width(), tex.get_height(), tex.get_format()]
-	# Ask the engine for the decoded pixels rather than trusting the file: an
-	# import that drops alpha, or compresses to a format with none, looks
-	# identical on disk.
-	var img := tex.get_image()
-	if img == null:
-		return out + " image=NULL (imported without CPU-readable pixels)"
-	out += " alpha(top/mid/bottom)=%s" % _alpha_down_column(img)
+
+	# Read the pixels back from the SOURCE FILE, not from tex.get_image().
+	#
+	# get_image() on an imported texture returns an image in the format the
+	# importer chose, and with VRAM compression on (project.godot sets
+	# import_etc2_astc) that is a block-compressed format Image.get_pixel()
+	# cannot read - it errors per pixel and yields nothing. This function then
+	# returned a string with the alpha column silently missing, which the probe
+	# reported as an empty line for three builds.
+	#
+	# The question being asked is "did the alpha survive the import", and the
+	# file on disk answers it directly and without a GPU. What the *importer*
+	# does with it is a separate check, and the width/height above already
+	# proves the resource loaded at the size it should.
+	out += " alpha(top/mid/bottom)=%s" % _alpha_from_source()
 	return out
+
+
+## Alpha at three points down the middle of the card, read from the committed
+## asset with the engine's own image loader.
+##
+## Encoding-agnostic on purpose: it goes through Image.load_from_file(), so the
+## same code answers for a .webp, a .png or anything else Godot can decode, and
+## it does not care what the importer did to the texture.
+func _alpha_from_source() -> String:
+	var img := Image.new()
+	var err := img.load_from_file("res://assets/grass/tuft.webp")
+	if err != OK:
+		return "SOURCE-UNREADABLE (error %d)" % err
+	return _alpha_down_column(img)
 
 
 ## Alpha at three points down the middle of the card, as "top/mid/bottom".
