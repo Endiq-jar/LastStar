@@ -36,7 +36,7 @@ uniform vec4 grass_tip : source_color = vec4(0.255, 0.375, 0.190, 1.0);
 // that used to be here gave one flat lime for every blade; multiplying it by a
 // pale sheet gives the same green with the tuft's own light and shade in it,
 // which is what makes a field of four-triangle cards read as grass.
-uniform float sheet_shading : hint_range(0.0, 1.0) = 0.78;
+uniform float sheet_shading : hint_range(0.0, 1.0) = 0.62;
 // The dry variant, halved in weight below: a meadow of one flat green looks
 // synthetic, but too much of this is what gave the field its straw cast.
 uniform vec4 dry_color : source_color = vec4(0.335, 0.345, 0.180, 1.0);
@@ -141,7 +141,7 @@ void fragment() {
 	// Cheap per-tuft value variation, so the field is not one surface. Centred a
 	// little above 1.0: a range biased low is why the grass once read as wet mud
 	// next to the terrain.
-	col *= 0.86 + v_tint * 0.26;
+	col *= 0.80 + v_tint * 0.24;
 	// The painted sheet's own light and shade, as a *factor* on the calibrated
 	// albedo rather than as a colour mixed into it.
 	//
@@ -156,7 +156,7 @@ void fragment() {
 	// Clamped: the brightest blade faces come back at 0.8-0.9 and a 1.55x gain
 	// would push them past 1.0, where the albedo clips and the highlight is a
 	// flat white blob instead of a lit blade.
-	sheet = clamp(mix(1.0, sheet * 1.55, sheet_shading), 0.55, 1.28);
+	sheet = clamp(mix(1.0, sheet * 1.35, sheet_shading), 0.58, 1.10);
 	col *= sheet;
 
 	// --- distance fade ---------------------------------------------------
