@@ -167,6 +167,18 @@ void fragment() {
 	if (tex.a < alpha_cut || tex.r < 0.35) {
 		discard;
 	}
+	// TEMPORARY DIAGNOSTIC - remove before this is finished.
+	// Red if the UVs are wrong, blue if the sheet arrived without alpha.
+	if (UV.x < 0.02 || UV.x > 0.98 || UV.y < 0.02 || UV.y > 0.98) {
+		ALBEDO = vec3(1.0, 0.0, 0.0);
+		EMISSION = vec3(1.0, 0.0, 0.0);
+		return;
+	}
+	if (tex.a > 0.99 && tex.r > 0.99) {
+		ALBEDO = vec3(0.0, 0.0, 1.0);
+		EMISSION = vec3(0.0, 0.0, 1.0);
+		return;
+	}
 
 	// Root-to-tip gradient. Dark at the base anchors the tuft in the soil,
 	// brighter at the tip catches the sky. Narrowed from what it was: a wide
