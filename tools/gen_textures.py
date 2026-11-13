@@ -68,9 +68,10 @@ def blade(draw, x, base_y, length, width, lean, col, tip_col, rim=(18, 46, 26)):
         t = i / steps
         y = base_y - length * t
         dx = lean * (t ** 1.7) * length
-        # Wide for the lower third, then tapering to a point. A linear taper is
-        # a triangle, and a field of triangles reads as thorns.
-        w = 0.5 * width * (1.0 - t ** 1.15) + 0.35
+        # Taper: fat at the root, a point at the tip, but held wide through the
+        # lower half. A linear taper is a triangle, and a field of triangles reads
+        # as thorns; a taper too gradual reads as a ribbon.
+        w = 0.5 * width * (1.0 - t ** 1.45) + 0.30
         pts.append((x + dx, y, w))
     poly = [(p[0] - p[2], p[1]) for p in pts] + \
            [(p[0] + p[2], p[1]) for p in reversed(pts)]
@@ -80,7 +81,7 @@ def blade(draw, x, base_y, length, width, lean, col, tip_col, rim=(18, 46, 26)):
     # colour shift, not an outline, so it costs the blade no width at all.
     shade_poly = [(p[0] - p[2], p[1]) for p in pts] + \
                  [(p[0] - p[2] * 0.15, p[1]) for p in reversed(pts)]
-    draw.polygon(shade_poly, fill=tuple(shade(col, 0.88)[:3]) + (255,))
+    draw.polygon(shade_poly, fill=tuple(shade(col, 0.94)[:3]) + (255,))
     # The tip catches light.
     tip = pts[-1]
     if tip[2] > 0.8:
@@ -108,12 +109,6 @@ PALE_GREENS = [
     (250, 250, 242), (206, 208, 200),
 ]
 
-# Ground cover for the bottom of the card. Without it a tuft has a row of bare
-# blade roots sitting on the terrain, which at 0.4 m from the camera reads as
-# sticks in dirt; with it the card has a base that merges with the ground plane.
-THATCH = (176, 164, 136)
-
-
 def draw_tuft(draw, cx, cy, scale, rng, palette=None):
     """A dense, wide fan of blades from one root: the reference tuft's shape.
 
@@ -128,30 +123,47 @@ def draw_tuft(draw, cx, cy, scale, rng, palette=None):
     (22-34) that the gaps between them close.
     """
     palette = palette or PALE_GREENS
-    # A few clods of thatch at the base, then the blades rising out of them.
-    # Deliberately sparse: a solid bar along the bottom edge is a stripe of sand
-    # at the foot of every card, and the meadow tiles into a plaid.
-    base_r = scale * 0.24
-    for _ in range(4):
-        ox = rng.uniform(-base_r, base_r)
-        r = rng.uniform(base_r * 0.28, base_r * 0.50)
-        draw.ellipse([cx + ox - r, cy - r * 0.32,
-                      cx + ox + r, cy + r * 0.28],
-                     fill=tuple(shade(THATCH, rng.uniform(0.70, 0.92))) + (255,))
+    # A solid bank of blades at the base, before the tall fan.
+    #
+    # This is the difference between the reference and every version drawn here.
+    # Measured band coverage, top to bottom:
+    #
+    #     reference   0%  5%  19%  37%  63%  86%  99%  96%
+    #     this, before  0%  1%   6%  21%  52%  73%  82%  72%
+    #
+    # The bottom two bands are the tell. A tuft of real grass is opaque at ground
+    # level - you cannot see between the blades - and a fan of long blades leaving
+    # one point is mostly gaps down there. So the base is drawn as its own layer:
+    # short wide blades at every angle, filling the lower third solid.
+    n_base = rng.randint(7, 10)
+    for i in range(n_base):
+        t = i / max(n_base - 1, 1)
+        lean = (t - 0.5) * 2.0 * rng.uniform(0.65, 1.15)
+        length = scale * rng.uniform(0.14, 0.34)
+        width = scale * rng.uniform(0.085, 0.150)
+        col = rng.choice(palette)
+        blade(draw, cx + lean * scale * 0.22, cy, length, width, lean,
+              shade(col, 0.88), lerp(col, (255, 255, 246), 0.30))
 
-    n = rng.randint(24, 34)
+    n = rng.randint(12, 17)
     for i in range(n):
         t = i / max(n - 1, 1)
         edge = abs(t - 0.5) * 2.0
         # The lean reaches about 0.55 of the card's half-width at the extremes,
         # not the 0.52 the hairlines had - the blades are four times wider now,
         # so the same lean spreads the silhouette much further.
-        lean = (t - 0.5) * 2.0 * rng.uniform(0.42, 0.95) * (0.55 + edge * 0.75)
+        lean = (t - 0.5) * 2.0 * rng.uniform(0.30, 0.80) * (0.55 + edge * 0.70)
         # Outer blades shorter, and never past 0.94 of the sheet: a blade that
         # runs off the top of the card is a blade with its tip cut off, and at
         # instance scale that reads as a flat-topped hedge.
-        length = scale * rng.uniform(0.55, 0.94) * (1.0 - 0.22 * edge * edge)
-        width = scale * rng.uniform(0.085, 0.165)
+        length = scale * rng.uniform(0.70, 1.02) * (1.0 - 0.16 * edge * edge)
+        # 0.030-0.055 of the sheet, i.e. 8-14 px on a 256 px card at the ROOT,
+        # tapering to a point. Measured off the reference tuft in bands: its
+        # individual blades are 3-6 px at the tips and 8-15 px where several have
+        # merged, so the blades themselves are narrow and the *clump* is dense.
+        # An earlier pass mistook the merged figure for the blade width and drew
+        # 20 px ribbons.
+        width = scale * rng.uniform(0.075, 0.135)
         # Brightened after the value ramp: the shade band and the tip both pull
         # the mean down, and the sheet's mean luminance is what the shader
         # multiplies the meadow's albedo by. The tuft this replaces measures
