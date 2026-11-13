@@ -157,11 +157,26 @@ func _build_resources() -> void:
 ## Two quads crossed at right angles, origin at the root, UV.y running from the
 ## soil to the tip.
 ##
-## Normals are all straight up rather than the quad's own normal. A vertical card
-## lit by its own normal is edge-on to the sun half the time, so half the meadow
-## goes dark depending on which way a tuft happens to be turned; an up normal
-## lights grass the way it lights the ground it grows out of, which is what every
-## stylised meadow does and what makes the field read as one surface.
+## Normals are the quad's own - horizontal, pointing out of the card - and not
+## straight up.
+##
+## Up normals were a mistake worth recording, because the reasoning sounded
+## right: a vertical card lit by its own normal is edge-on to the sun half the
+## time, so half the meadow goes dark depending on which way a tuft is turned,
+## whereas an up normal lights grass the way it lights the ground and makes the
+## field read as one surface.
+##
+## What it actually did was make the meadow *brighter*, uniformly, and the sun on
+## this map is why. It sits 0.74 above the horizon, so a vertical card facing the
+## light gets N.L = 1.00 while an up-facing one gets 0.74. Every card was being
+## handed the maximum the key light can give, which is what turned the field into
+## flat lime-green sheets in front of the camera - three quarters of the frame's
+## contrast between one blade and the next is that dot product, and it had been
+## constant across the whole meadow.
+##
+## The old painted grass this replaces used the quad's own normal, and its cards
+## are crossed for exactly this reason: the pair always presents a face to the
+## light, so a tuft is lit without all of it being lit the same.
 func _build_tuft_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -169,19 +184,20 @@ func _build_tuft_mesh() -> ArrayMesh:
 	for i in range(2):
 		var ang := float(i) * PI * 0.5
 		var edge := Vector3(cos(ang), 0.0, sin(ang)) * half
-		_add_quad(st, -edge, edge)
+		# The quad's own outward normal: perpendicular to the card and horizontal.
+		_add_quad(st, -edge, edge, Vector3(-sin(ang), 0.0, cos(ang)))
 	st.index()
 	return st.commit()
 
 
-func _add_quad(st: SurfaceTool, a: Vector3, b: Vector3) -> void:
+func _add_quad(st: SurfaceTool, a: Vector3, b: Vector3, normal: Vector3) -> void:
 	var up := Vector3(0.0, CARD_HEIGHT, 0.0)
 	var verts := PackedVector3Array([a, b, b + up, a, b + up, a + up])
 	var uvs := PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1),
 		Vector2(0, 0), Vector2(1, 1), Vector2(0, 1)])
 	for i in range(6):
 		st.set_uv(uvs[i])
-		st.set_normal(Vector3.UP)
+		st.set_normal(normal)
 		st.add_vertex(verts[i])
 
 
