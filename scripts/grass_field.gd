@@ -31,8 +31,8 @@ extends Node3D
 ## The painted tuft. Twice as wide as it is tall in practice: a meadow needs the
 ## footprint more than it needs the height, and a card that is taller than it is
 ## wide reads as a reedy clump when the same sheet is stamped everywhere.
-const CARD_WIDTH := 0.78
-const CARD_HEIGHT := 0.52
+const CARD_WIDTH := 0.88
+const CARD_HEIGHT := 0.50
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
 ## Radius, in chunks. 5 * 26 = 130 m, which with the shader's dissolve put a

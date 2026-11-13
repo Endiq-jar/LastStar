@@ -57,10 +57,10 @@ FILL_MIN = 0.03
 FILL_MAX = 0.55
 
 # The multiplier the painted card contributes, after the shader's own gain and
-# clamp. The sheet is drawn near-white (see tools/gen_textures.py), so 1.10 is a
-# lit blade face and 0.58 is the dark rim between two blades - the full range a
+# clamp. The sheet is drawn near-white (see tools/gen_textures.py), so 1.30 is a
+# lit blade face and 0.62 is the dark rim between two blades - the full range a
 # pixel of the meadow can take.
-SHEET_SWEEP = [1.10, 1.0, 0.58]
+SHEET_SWEEP = [1.30, 1.00, 0.62]
 
 # Albedo range swept. Stylised painted ground and grass both live here.
 ALBEDOS = [0.05, 0.08, 0.12, 0.16, 0.20, 0.26, 0.32, 0.40, 0.50]

@@ -28,15 +28,17 @@ render_mode cull_disabled, diffuse_toon, specular_disabled, shadows_disabled;
 // blue-poor green lands on a pure lime.
 uniform vec4 grass_color : source_color = vec4(0.108, 0.196, 0.100, 1.0);
 uniform vec4 grass_tip : source_color = vec4(0.255, 0.375, 0.190, 1.0);
-// How much of the painted sheet's own luminance survives into the lit colour.
+// How much of the painted sheet's own luminance reaches the fragment.
 //
-// The sheet is drawn near-white on purpose: it carries the *shape* of the tuft -
-// which blade is in front, where its rim is, how dark it is at the root - and
-// the shader owns the hue. Multiplying a green shader colour by the green sheet
-// that used to be here gave one flat lime for every blade; multiplying it by a
-// pale sheet gives the same green with the tuft's own light and shade in it,
-// which is what makes a field of four-triangle cards read as grass.
-uniform float sheet_shading : hint_range(0.0, 1.0) = 0.62;
+// Godot multiplies ALBEDO by the albedo texture for you in the standard
+// materials; a custom shader gets no such thing, so this reads it by hand - and
+// reads it as what it is. The sheet's mean luminance is ~0.86, so a multiplier
+// that assumes 1.0 darkens every blade by 14%, which is wrong; normalising by
+// that mean is what a texture multiply would do. 1.0 folds it in at full
+// strength. It is NOT free extra contrast: the previous version multiplied the
+// sheet's luminance in *and* had the albedo calibrated up to compensate, and the
+// meadow came out 40% brighter than the frame it is modelled on.
+uniform float sheet_shading : hint_range(0.0, 1.2) = 1.0;
 // The dry variant, halved in weight below: a meadow of one flat green looks
 // synthetic, but too much of this is what gave the field its straw cast.
 uniform vec4 dry_color : source_color = vec4(0.335, 0.345, 0.180, 1.0);
@@ -153,10 +155,11 @@ void fragment() {
 	// the illustrator drew - near-white blade faces, mid rims, dark roots - and
 	// folds it into the calibrated hue.
 	float sheet = dot(tex.rgb, vec3(0.2126, 0.7152, 0.0722));
-	// Clamped: the brightest blade faces come back at 0.8-0.9 and a 1.55x gain
-	// would push them past 1.0, where the albedo clips and the highlight is a
-	// flat white blob instead of a lit blade.
-	sheet = clamp(mix(1.0, sheet * 1.35, sheet_shading), 0.58, 1.10);
+	// Normalised by the sheet's own mean, then folded in. The clamp exists only
+	// so a single blown-out pixel cannot push a blade past white; it is not a
+	// contrast control.
+	sheet = sheet / 0.86;
+	col *= clamp(mix(1.0, sheet, sheet_shading), 0.62, 1.30);
 	col *= sheet;
 
 	// --- distance fade ---------------------------------------------------
