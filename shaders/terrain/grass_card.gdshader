@@ -156,7 +156,7 @@ void fragment() {
 	// Clamped: the brightest blade faces come back at 0.8-0.9 and a 1.55x gain
 	// would push them past 1.0, where the albedo clips and the highlight is a
 	// flat white blob instead of a lit blade.
-	sheet = clampf(mix(1.0, sheet * 1.55, sheet_shading), 0.55, 1.28);
+	sheet = clamp(mix(1.0, sheet * 1.55, sheet_shading), 0.55, 1.28);
 	col *= sheet;
 
 	// --- distance fade ---------------------------------------------------

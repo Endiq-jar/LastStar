@@ -20,6 +20,11 @@ in it without noticing.
     that silently white-materials the surface, and it cost a CI cycle.
   * `discard` and `return` are the two things an early exit is made of, so the
     check looks for both rather than just the one that has bitten so far.
+  * GDScript's own built-ins are not GLSL's. `clampf`, `minf`, `absf`, `lerpf`
+    and the rest exist in GDScript and do not exist in the shader language -
+    Godot rejects the whole program with "No matching function found for:
+    'clampf'" and white-materials the surface. That exact line shipped once and
+    cost a CI cycle. A table rather than a rule, because the names are arbitrary.
 
 Exit code 1 if anything is found, so it can gate locally as well as in CI.
 """
@@ -38,6 +43,27 @@ FRAGMENT_ONLY = (
     "MAIN_CAM_INV_VIEW_MATRIX",
     "VIEW",
 )
+
+# GDScript built-ins that do not exist in the shader language, with the GLSL
+# spelling to use instead. Every one of these is a function that exists in
+# GDScript and has a near-identical GLSL counterpart, which is exactly why it is
+# easy to type the wrong one without noticing.
+GDScript_ONLY = {
+    "clampf": "clamp",
+    "clampi": "clamp",
+    "minf": "min",
+    "maxf": "max",
+    "absf": "abs",
+    "lerpf": "mix",
+    "snappedf": "floor(x / step + 0.5) * step",
+    "roundf": "round",
+    "floorf": "floor",
+    "ceilf": "ceil",
+    "signf": "sign",
+    "sqrt_approx": "sqrt",
+    "deg_to_rad": "radians",
+    "rad_to_deg": "degrees",
+}
 
 problems: list[str] = []
 
@@ -60,6 +86,15 @@ def check(path: pathlib.Path) -> None:
             problems.append(f"{path}:{number}: 'func' is GDScript, not GLSL")
         if re.search(r"\bvar\s+\w+\s*:", code):
             problems.append(f"{path}:{number}: 'var' is GDScript, not GLSL")
+        for gd, gl in GDScript_ONLY.items():
+            # A call, not a substring: `round` must not fire on a local named
+            # `rounding`, and `max` inside `maxf` must not fire on the GLSL one.
+            if re.search(r"\b%s\s*\(" % re.escape(gd), code):
+                problems.append(
+                    f"{path}:{number}: '{gd}()' is GDScript, not GLSL - use "
+                    f"'{gl}' (the shader compiler rejects the whole program and "
+                    f"draws the surface white)"
+                )
         # No early exits from a vertex()/fragment() body. Godot's shader
         # language has no statement-level `return` there: the compiler rejects
         # the whole program and the material falls back to white, which reads
