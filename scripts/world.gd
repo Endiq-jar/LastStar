@@ -398,7 +398,7 @@ func _setup_environment() -> void:
 	# pale mint no matter how the light energies were tuned. A muted, slightly
 	# warm ambient keeps grass green and lets the sun do the colouring.
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_energy = 1.35
+	env.ambient_light_energy = 1.45
 	env.ambient_light_color = Color(0.57, 0.66, 0.82)
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	# Sky ambient alone can dip to near-black once the sun is low; this floor
@@ -406,7 +406,7 @@ func _setup_environment() -> void:
 	env.ambient_light_sky_contribution = 0.45
 
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.02
+	env.tonemap_exposure = 1.08
 	env.tonemap_white = 2.4
 
 	env.fog_enabled = true
@@ -566,7 +566,7 @@ func _update_time_of_day() -> void:
 	# every hill sat at rgb(0,38,0) - near black, which is what made the terrain
 	# read as a dark green felt wedge rather than grass in shade. Shade in a
 	# stylised world is a colour, not an absence of one.
-	env.ambient_light_energy = lerpf(1.35, 1.15, warmth)
+	env.ambient_light_energy = lerpf(1.45, 1.27, warmth)
 
 	# --- fog ---------------------------------------------------------------
 	# Fog carries the sun's colour, which is what makes distant hills read as
@@ -612,31 +612,15 @@ func _update_time_of_day() -> void:
 
 
 func _grade_env(env: Environment, warmth: float = 0.5) -> void:
-	## The one and only place the colour grade is written.
-	##
-	## Contrast pulls the frame together and the grade warms slightly as the sun
-	## drops, but saturation stays close to 1.0. Pushing it up - which is the
-	## obvious "make it pop" move, and was what this did - clips the most
-	## saturated surface in the frame (the meadow) while leaving everything else
-	## untouched, so the greens go neon and the rock does not change at all. Any
-	## extra saturation has to come from the albedo, which this project already
-	## has plenty of.
+	## One shared grade for the 3D world, characters, water and sky on every
+	## quality tier and throughout the day. A modest contrast keeps bright
+	## highlights and shaded grass readable while the palette becomes livelier.
 	if env == null:
 		return
 	env.adjustment_enabled = true
-	# Raised to give the "more saturated" look, but the ceiling is deliberate.
-	#
-	# The old warning - that global saturation clips the most saturated surface in
-	# the frame while leaving everything else alone - is still true and is why this
-	# is 1.24 and not 1.45. The excess saturation the user is asking for comes from
-	# the albedo (the greens were moved to a true green hue, and the rock now has
-	# real texture instead of flat grey), so the grade only has to finish the job.
-	# Pushed further, the meadow clips to a single flat green and the rock does not
-	# move at all - the specific failure the previous comment was written about.
-	env.adjustment_saturation = lerpf(1.14, 1.22, warmth)
-	env.adjustment_contrast = lerpf(1.10, 1.15, warmth)
-	env.adjustment_brightness = lerpf(1.0, 1.02, warmth)
-
+	env.adjustment_saturation = lerpf(1.30, 1.36, warmth)
+	env.adjustment_contrast = lerpf(1.06, 1.10, warmth)
+	env.adjustment_brightness = lerpf(1.08, 1.10, warmth)
 
 
 func _build_lake() -> void:

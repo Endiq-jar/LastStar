@@ -444,6 +444,9 @@ func _run() -> void:
 		_log("INFO", "environment bg_mode=%d ambient=%d glow=%s fog=%s" % [
 			env.background_mode, env.ambient_light_source,
 			str(env.glow_enabled), str(env.fog_enabled)])
+		_log("INFO" if env.adjustment_enabled and env.adjustment_saturation >= 1.29 and env.adjustment_brightness >= 1.07 else "FAIL",
+			"vivid grade: saturation=%.2f brightness=%.2f exposure=%.2f" % [
+				env.adjustment_saturation, env.adjustment_brightness, env.tonemap_exposure])
 
 	var terrain := world.get_node_or_null("Terrain")
 	var meshes := 0
