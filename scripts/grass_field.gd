@@ -147,10 +147,16 @@ func _build_resources() -> void:
 	# that is indistinguishable from a shader fault in a screenshot. Printing the
 	# decoded format and a few alpha values here settles which it is, on the one
 	# run where it happens.
+	# Only the two things every Texture2D is guaranteed to answer: size, and the
+	# pixels of the file behind it. There is deliberately no get_format() here -
+	# that method lives on Image, not on CompressedTexture2D, which is what this
+	# .webp actually imports as, and asking for it was a runtime error that failed
+	# the boot step. A texture's storage format is also the importer's business,
+	# not this diagnostic's: what matters is whether the card cuts out.
 	if sheet is Texture2D:
-		print("GRASS_SHEET %dx%d format=%d alpha(top/mid/bottom)=%s" % [
+		print("GRASS_SHEET %dx%d alpha(top/mid/bottom)=%s" % [
 			(sheet as Texture2D).get_width(), (sheet as Texture2D).get_height(),
-			(sheet as Texture2D).get_format(), _alpha_from_source()])
+			_alpha_from_source()])
 	if sheet is Texture2D:
 		_material.set_shader_parameter("blade_tex", sheet)
 	else:
@@ -469,7 +475,8 @@ func card_report() -> String:
 	if not (bound is Texture2D):
 		return "blade_tex=UNBOUND"
 	var tex: Texture2D = bound
-	var out := "%dx%d format=%d" % [tex.get_width(), tex.get_height(), tex.get_format()]
+	var out := "%dx%d (%s)" % [tex.get_width(), tex.get_height(),
+		tex.get_class()]
 
 	# Read the pixels back from the SOURCE FILE, not from tex.get_image().
 	#
