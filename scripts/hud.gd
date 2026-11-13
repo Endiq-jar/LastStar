@@ -4,6 +4,7 @@ extends CanvasLayer
 ## and the victory banner.
 
 const TOUCH := preload("res://scripts/touch_controls.gd")
+const PerformanceMonitor := preload("res://scripts/performance/performance_monitor.gd")
 ## Loaded at runtime rather than preloaded: a preload that fails to resolve
 ## reports only "could not resolve script" against *this* file, which hides the
 ## real error inside the wheel. load() keeps the failure local and survivable -
@@ -23,12 +24,15 @@ var _skill_button: Button
 var _burst_button: Button
 var _pause_panel: PanelContainer
 var _quality_btn: Button
+var _perf_monitor: Control
 var _toast_tween: Tween
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build()
+	_perf_monitor = PerformanceMonitor.new()
+	add_child(_perf_monitor)
 	Game.sigils_changed.connect(_on_sigils_changed)
 	Game.stats_changed.connect(_refresh_stats)
 	Game.character_changed.connect(_on_character_changed)
@@ -244,6 +248,9 @@ func _build() -> void:
 	_quality_btn = _round_button("Quality: Balanced", Vector2(300, 44))
 	_quality_btn.pressed.connect(_cycle_quality)
 	pv.add_child(_quality_btn)
+	var monitor_btn := _round_button("Performance monitor (F3)", Vector2(300, 44))
+	monitor_btn.pressed.connect(_toggle_perf_monitor)
+	pv.add_child(monitor_btn)
 	var repair := _round_button("Repair view (if the world is black)", Vector2(300, 44))
 	repair.pressed.connect(_repair_view)
 	pv.add_child(repair)
@@ -448,12 +455,21 @@ func _resume() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
+		_toggle_perf_monitor()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("pause") and not Game.has_won:
 		if _pause_panel.visible:
 			_resume()
 		else:
 			_pause()
 		get_viewport().set_input_as_handled()
+
+
+func _toggle_perf_monitor() -> void:
+	if _perf_monitor != null:
+		_perf_monitor.visible = not _perf_monitor.visible
 
 
 func _repair_view() -> void:

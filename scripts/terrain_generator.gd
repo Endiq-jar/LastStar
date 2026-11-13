@@ -100,6 +100,8 @@ var _mid_center := Vector2i(999999, 999999)
 var _built_at := Vector2(1e9, 1e9)
 var _collide_at := Vector2(1e9, 1e9)
 var _player: Node3D
+## Timing of the latest main-thread chunk build, exposed to the debug overlay.
+var last_chunk_ms := 0.0
 
 
 func _ready() -> void:
@@ -383,13 +385,27 @@ func _queue_mid_over_window() -> void:
 
 
 func _drain_queue() -> void:
+	# Reorder only pending work, not the resident window or collision patch.
+	# A short velocity lookahead builds tiles in the direction of travel first.
+	if _player is CharacterBody3D and not _pending_near.is_empty():
+		var p := _player.global_position
+		var v: Vector3 = (_player as CharacterBody3D).velocity
+		var ahead := Vector2(p.x, p.z) + Vector2(v.x, v.z).limit_length(25.0) * 2.0
+		_pending_near.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+			var pa := (Vector2(a) + Vector2(0.5, 0.5)) * NEAR_TILE
+			var pb := (Vector2(b) + Vector2(0.5, 0.5)) * NEAR_TILE
+			return pa.distance_squared_to(ahead) < pb.distance_squared_to(ahead))
 	var built := 0
 	while built < NEAR_BUILDS_PER_FRAME and not _pending_near.is_empty():
+		var started := Time.get_ticks_usec()
 		_build_near(_pending_near.pop_front())
+		last_chunk_ms = float(Time.get_ticks_usec() - started) / 1000.0
 		built += 1
 	built = 0
 	while built < MID_BUILDS_PER_FRAME and not _pending_mid.is_empty():
+		var started := Time.get_ticks_usec()
 		_build_mid(_pending_mid.pop_front())
+		last_chunk_ms = float(Time.get_ticks_usec() - started) / 1000.0
 		built += 1
 
 

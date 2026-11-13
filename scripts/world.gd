@@ -43,6 +43,10 @@ var _perf_frames := 0
 var _perf_warmup := 45
 var _perf_accum := 0.0
 var _perf_done := false
+## Hysteresis and a bounded range prevent rapid resolution oscillation.
+var _dynamic_time := 0.0
+var _dynamic_frames := 0
+var _dynamic_scale := 0.9
 ## Countdown of frames to wait before sampling the framebuffer once.
 var _grass_field: Node3D
 ## Async occluder that decides which entities are actually on screen.
@@ -293,13 +297,16 @@ func apply_quality() -> void:
 	# which is the version pinned in project.godot, so this is safe on the
 	# GLES3 path the phone build uses. It is a no-op rather than an error on any
 	# driver that refuses it.
+	_dynamic_time = 0.0
+	_dynamic_frames = 0
 	match tier:
 		1:
-			_set_3d_scale(0.75)
+			_dynamic_scale = 0.75
 		0:
-			_set_3d_scale(0.9)
+			_dynamic_scale = 0.9
 		_:
-			_set_3d_scale(1.0)
+			_dynamic_scale = 1.0
+	_set_3d_scale(_dynamic_scale)
 
 	if env == null:
 		return
@@ -493,6 +500,8 @@ func _process(delta: float) -> void:
 		if _render_check_countdown <= 0:
 			_check_rendered_frame()
 
+	_update_dynamic_resolution(delta)
+
 	# Sample frame time; decide once we have enough real frames.
 	if not _perf_done and _perf_frames < 400:
 		_perf_frames += 1
@@ -500,6 +509,37 @@ func _process(delta: float) -> void:
 			_perf_accum += delta
 			if _perf_frames >= _perf_warmup + 60:
 				_autotune_performance()
+
+
+func _update_dynamic_resolution(delta: float) -> void:
+	## Balanced/Performance aim for 30 fps. Evaluate two seconds at a time;
+	## use separate thresholds so the scale does not flicker back and forth.
+	## High stays fixed at full resolution. This cannot cure CPU-bound stalls.
+	if Game.quality_tier == 2 or not _perf_done or delta <= 0.0:
+		return
+	_dynamic_time += minf(delta, 0.25)
+	_dynamic_frames += 1
+	if _dynamic_time < 2.0:
+		return
+	var avg := _dynamic_time / float(_dynamic_frames)
+	_dynamic_time = 0.0
+	_dynamic_frames = 0
+	var next := _next_dynamic_scale(Game.quality_tier, _dynamic_scale, avg)
+	if not is_equal_approx(next, _dynamic_scale):
+		_dynamic_scale = next
+		_set_3d_scale(next)
+
+
+func _next_dynamic_scale(tier: int, current: float, avg: float) -> float:
+	if tier == 2:
+		return current
+	var ceiling := 0.75 if tier == 1 else 0.9
+	var floor_scale := 0.60 if tier == 1 else 0.65
+	if avg > 0.040:
+		return maxf(floor_scale, current - 0.05)
+	if avg < 0.028:
+		return minf(ceiling, current + 0.05)
+	return current
 
 
 func _set_beauty_time(t: float) -> void:

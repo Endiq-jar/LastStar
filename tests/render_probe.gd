@@ -127,6 +127,21 @@ func _run() -> void:
 	for i in range(15):
 		await get_tree().process_frame
 
+	# Resolution controller must reduce load when slow, recover when fast, and
+	# leave High alone. This tests its hysteresis without depending on CI FPS.
+	var slow: float = world.call("_next_dynamic_scale", 0, 0.9, 0.05)
+	var fast: float = world.call("_next_dynamic_scale", 0, 0.8, 0.02)
+	var stable: float = world.call("_next_dynamic_scale", 0, 0.8, 0.033)
+	var high: float = world.call("_next_dynamic_scale", 2, 1.0, 0.05)
+	_log("INFO" if is_equal_approx(slow, 0.85) and is_equal_approx(fast, 0.85) and is_equal_approx(stable, 0.8) and is_equal_approx(high, 1.0) else "FAIL",
+		"dynamic resolution slow=%.2f fast=%.2f stable=%.2f high=%.2f" % [slow, fast, stable, high])
+	var monitor := world.get_node_or_null("HUD/PerformanceMonitor")
+	if monitor == null:
+		_log("FAIL", "performance monitor missing")
+	else:
+		monitor.call("_refresh_text", 0.016)
+		_log("INFO", "performance monitor metrics available")
+
 	# --- structural checks ------------------------------------------------
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:

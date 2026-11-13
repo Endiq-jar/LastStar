@@ -222,3 +222,28 @@ Open the pause menu and press **Quality**, or edit `Game.quality_tier` (0 Balanc
 * **Rendering techniques** (toon ramp, SSR-free stylized water, MultiMesh wind grass) are original
   GDScript/GLSL written for this project.
 * Inspired by *Genshin Impact* (© HoYoverse). No HoYoverse assets are included or required.
+
+### Performance and streaming
+
+Terrain already streams near and mid tiles around the player with a separate
+local collision patch; grass and other repeated vegetation use chunked
+MultiMeshes. Pending near-terrain tiles are prioritized in the direction of
+travel. Tile generation is still on the main thread, not background loading.
+
+Balanced and Performance dynamically adjust the 3D resolution toward 30 FPS
+within bounded ranges; High stays at full resolution. The HUD stays sharp. This
+can help a GPU-bound device but is not a replacement for profiling CPU stalls.
+The existing quality control also adjusts vegetation and shadow distance.
+
+Open the performance monitor with **F3** or the pause menu. It reports engine
+FPS, frame time, a rolling 1% low after 100 samples, process and physics times,
+draws, triangles, visible enemies, active physics objects, Godot's static
+memory and video/texture memory estimates, 3D scale and the last streamed terrain
+chunk's build time. GPU time, device temperature, and shader compilation time
+are marked unavailable rather than guessed. Engine memory is not total device
+RAM. Use the Android and Godot profilers for device-level measurements.
+
+This is not a five-level model LOD or a full world-partition/asset-streaming
+system: billboard impostors, asynchronous resource/texture streaming, thermal
+management, per-option graphics controls and pooled combat effects remain future
+work. The grass cards stay static; the existing foliage shader has its own wind.
