@@ -7,6 +7,12 @@ extends RefCounted
 
 const TOON_SHADER := preload("res://shaders/character/anime_toon.gdshader")
 const OUTLINE_SHADER := preload("res://shaders/character/outline.gdshader")
+const BoneCloth := preload("res://scripts/bone_cloth.gd")
+
+## Sun-bleached linen. Every piece of cloth in the world is tinted towards this
+## colour, so the character's cape and hem read as cut from the same bolt as the
+## banners hanging in the ruins.
+const BONE_LINEN := Color(0.78, 0.75, 0.66)
 
 
 static func _toon(color: Color, rim: float = 0.35) -> ShaderMaterial:
@@ -114,11 +120,18 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	var hair_tip_col: Color = data["hair_tip"]
 	var hair_tip := _toon(hair_tip_col, 0.6)
 	var outfit_col: Color = data["outfit"]
+	if Game.outfit_style == 1:
+		outfit_col = outfit_col.lerp(Color(0.20, 0.36, 0.62), 0.65)
+	elif Game.outfit_style == 2:
+		outfit_col = outfit_col.lerp(Color(0.58, 0.28, 0.36), 0.65)
 	var outfit := _toon(outfit_col)
 	var accent_col: Color = data["outfit_accent"]
 	var accent := _toon(accent_col, 0.45)
 	var cape_col: Color = data["cape"]
-	var cape_mat := _toon(cape_col, 0.7)
+	# Bone cloth: the cape keeps each character's own hue, pulled towards the
+	# bone-linen the banners, drapes and carpets are cut from.
+	var cape_mat := _toon(cape_col.lerp(BONE_LINEN, 0.45), 0.55)
+	var bone_cloth_mat := _toon(BONE_LINEN, 0.4)
 	var eye_col: Color = data["eye"]
 	var eye := _glow(eye_col, 1.1)
 	var element_col: Color = data["color"]
@@ -165,10 +178,17 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	belt.bottom_radius = 0.21
 	belt.height = 0.06
 	_no_shadow(_add(torso, belt, _toon(Color(0.09, 0.08, 0.10)), Vector3(0, 0.99, 0)))
+	var cloth_panels: Array[Node3D] = []
 	for side in [-1.0, 1.0]:
+		var cloth_pivot := Node3D.new()
+		cloth_pivot.position = Vector3(0.10 * side, 0.91, -0.26)
+		torso.add_child(cloth_pivot)
+		cloth_panels.append(cloth_pivot)
 		var panel := BoxMesh.new()
 		panel.size = Vector3(0.12, 0.34, 0.03)
-		var p := _no_shadow(_add(torso, panel, accent, Vector3(0.10 * side, 0.74, -0.26)))
+		# The hanging panels are cloth, so they are bone cloth rather than accent
+		# trim: the outfit's metal stays metal, its cloth is linen.
+		var p := _no_shadow(_add(cloth_pivot, panel, bone_cloth_mat, Vector3(0, -0.17, 0)))
 		p.rotation_degrees = Vector3(8.0, 0.0, 3.0 * side)
 
 	# --- head -------------------------------------------------------------
@@ -327,6 +347,36 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	# shell visible - a solid black rectangle hanging down her back.
 	cape_mi.rotation_degrees = Vector3(-6, 0, 0)
 
+	# Bone cloth on the character as well: a bone clasp at the shoulder and a
+	# skull charm at the hip, modelled by the same Quaternius bone pieces the
+	# banners are trimmed with. Small on purpose - they are jewellery, not armour.
+	var clasp := BoneCloth.make("bones", BoneCloth.BONE_TINT, 0.055)
+	if clasp != null:
+		clasp.position = Vector3(0.0, 1.36, 0.17)
+		torso.add_child(clasp)
+	var charm := BoneCloth.make("skull", BoneCloth.BONE_TINT, 0.09)
+	if charm != null:
+		charm.position = Vector3(0.13, 0.86, -0.21)
+		charm.rotation_degrees = Vector3(0, 28, 10)
+		torso.add_child(charm)
+
+	# Light articulated backpack. It follows the torso and gently lags behind
+	# movement; only one small set of meshes is created for the equipped pack.
+	var backpack := Node3D.new()
+	backpack.name = "Backpack"
+	backpack.position = Vector3(0, 1.32, 0.28)
+	backpack.visible = Game.equipped_backpack > 0
+	torso.add_child(backpack)
+	var bag := BoxMesh.new()
+	bag.size = Vector3(0.34, 0.40, 0.20)
+	_body(_add(backpack, bag, _toon(Color(0.33, 0.24, 0.20)), Vector3(0, -0.19, 0.05)))
+	var flap := BoxMesh.new()
+	flap.size = Vector3(0.37, 0.10, 0.23)
+	_no_shadow(_add(backpack, flap, _toon(Color(0.48, 0.35, 0.25)), Vector3(0, -0.04, 0.06)))
+	var clasp_mesh := BoxMesh.new()
+	clasp_mesh.size = Vector3(0.06, 0.08, 0.025)
+	_no_shadow(_add(backpack, clasp_mesh, _toon(Color(0.75, 0.59, 0.27)), Vector3(0, -0.11, 0.175)))
+
 	var wings := Node3D.new()
 	wings.name = "Wings"
 	wings.position = Vector3(0, 1.30, 0.16)
@@ -369,6 +419,9 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		"leg_l": legs[0],
 		"leg_r": legs[1],
 		"cape": cape_mi,
+		"cape_root": cape_root,
+		"cloth_panels": cloth_panels,
+		"backpack": backpack,
 		"wings": wings,
 		"weapon": weapon_anchor,
 		"glow": glow,

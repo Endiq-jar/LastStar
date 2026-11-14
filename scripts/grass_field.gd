@@ -10,22 +10,47 @@ extends Node3D
 ##   mid   (26 - 70 m)  half density, slightly taller so bare ground never shows
 ##   far   (70 - 130 m) sparse, cheap - reads as distant meadow texture
 ##
-## Chunks are recycled as the player walks, so walking 500 m never grows the
-## instance count. Everything is one draw call per chunk.
+## The tuft is a painted card again: one upright camera-facing alpha-cut quad, 2 triangles an
+## instance, drawn from assets/grass/tuft.webp (hand-painted; see below).
+##
+## It spent a while as real geometry from the nature pack, at 64 triangles a
+## tuft. That looked right and cost the earth: the meadow is stamped tens of
+## thousands of times, so it alone was ~1.9M of the frame's 4.4M triangles. The
+## card is 16x cheaper for a silhouette the eye reads the same way past about
+## 15 m, which is where almost all of the field is. The 3D tuft is still in
+## NaturePack.clump() if a close-up ever wants it.
+##
+## There is no wind, at the owner's request: the shader has no TIME in it and the
+## blades do not move. What the shader does keep is everything about *not*
+## drawing - the behind-camera collapse, the clearing around the character, the
+## distance fade, the dissolve at the streaming edge.
+##
+## Chunks are recycled as the player walks, so walking 5 km never grows the
+## instance count. One draw call per chunk.
+
+## The painted tuft, at the proportions that card is drawn at.
+##
+## The sheet is a 1:1 tuft - a fountain about as wide as it is tall - so the card
+## is close to square. Stretching it wide squashed the blades into ribbons;
+## stretching it tall made it a reedy clump.
+##
+## This is the old painted grass's own quad: it was BLADE_W 0.62 by BLADE_H 0.56,
+## scaled 1.15 across and 1.30 up, so 0.713 x 0.728 m. The same paint at the same
+## proportions lands on the same silhouette, which is the whole point of using the
+## old card. The field is denser now than it was then, so this is 0.71 x 0.73
+## rather than the 1.3 m footprint that read as gaps between tufts.
+const CARD_WIDTH := 0.52
+const CARD_HEIGHT := 0.54
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
-## Radius, in chunks. 5 * 26 = 130 m, which with the shader's dissolve put a
-## visible arc of bare terrain at the edge of the meadow. Raised to 7 (182 m) so
-## the field runs past the point where blades stop being resolvable.
-const VIEW_CHUNKS := 7
-## Instances per 26 m chunk. Near chunks were 3400 - about five tufts per square
-## metre - drawn as 2.1 m quads, which left visible gaps between them and read as
-## blotches of green on bare ground rather than a carpet. Roughly doubled to close
-## that up. The far tiers stay cheap because each tuft there covers more screen
-## area.
-const BLADES_NEAR := 14000        ## instances in a chunk adjacent to the player
-const BLADES_MID := 5200
-const BLADES_FAR := 1500
+## Radius in chunks (156 m). Near chunks are prioritised and the outer ring
+## uses fewer instances so it remains affordable on mobile.
+const VIEW_CHUNKS := 6
+## Instances per 26 m chunk before quality scaling. One two-triangle
+## camera-facing card per tuft; density decreases with distance.
+const BLADES_NEAR := 4500        ## instances in a chunk adjacent to the player
+const BLADES_MID := 1800
+const BLADES_FAR := 300
 ## Hard cap on live chunks. Must be at least (2*VIEW_CHUNKS+1)^2 or the field
 ## silently stops growing: the cap was written for a radius of 5 and stayed at 81
 ## when the radius became 7, which needs 225. Without this the outer ring would
@@ -36,14 +61,9 @@ const MAX_CHUNKS := 225
 ## every shore; 0.9 keeps blades out of the water but lets the meadow reach it.
 const SEA_MARGIN := 0.9
 
-## Two crossed quads per tuft, so a tuft has volume from every angle.
-## Tuft footprint and height in metres. The height matters more than it looks:
-## the player is 1.8 m tall and the camera sits 4.2 m back at 2 m up, so a 0.78 m
-## blade with a 1.2 scale multiplier in the mid ring grew to roughly the
-## character's chest and hid her completely. Meadow grass in this style sits
-## around knee height.
-const BLADE_W := 0.62
-const BLADE_H := 0.56
+## Tuft height matters more than it looks: the player is 1.8 m tall and the
+## camera sits 4.2 m back at 2 m up, so a tuft that reaches her chest hides her
+## completely. The scale range in _build_chunk keeps the meadow at knee height.
 
 signal chunk_built(count: int)
 
@@ -54,7 +74,9 @@ var _pending: Array[Vector2i] = []
 var _blade_mesh: Mesh
 var _material: ShaderMaterial
 var _last_center := Vector2i(9999, 9999)
-var _build_budget := 3             ## chunks built per frame, to avoid hitches
+var _last_camera_forward := Vector2.ZERO
+var _camera_check := 0.0
+var _build_budget := 1             ## chunks built per frame, to avoid hitches
 ## Multiplies every tier's instance count. This is the real density control.
 ##
 ## set_density_scale() used to write _build_budget and nothing else, so the
@@ -69,7 +91,6 @@ var _rej_water := 0
 var _rej_height := 0
 var _rej_slope := 0
 var _tried := 0
-var _tier_counts := {2600: 0, 1300: 0, 520: 0}
 
 
 func setup(terrain: Node, player: Node3D) -> void:
@@ -77,43 +98,73 @@ func setup(terrain: Node, player: Node3D) -> void:
 	_player = player
 	name = "GrassField"
 	_build_resources()
-	_refresh(true)
+	_refresh(false)
 
 
 func _build_resources() -> void:
-	# One textured quad per tuft, standing UPRIGHT. The blade cluster lives in the
-	# texture's alpha channel, so a single plane draws a full tuft, and the shader
-	# uses cull_disabled so the plane is visible from both faces.
-	#
-	# QuadMesh defaults to FACE_Z (upright). This was set to FACE_Y, which lays
-	# the quad FLAT - so every tuft was a horizontal decal lying on the hillside
-	# and the grass rendered as elongated blotches smeared across the ground.
-	# That is the blotchy-patch artefact this file spent several revisions
-	# chasing: it was never density or colour. Each instance gets a random yaw
-	# (see _build_chunk), so the planes do not all face the same way.
-	var quad := QuadMesh.new()
-	# Roughly square in aspect: a tuft's silhouette is a fan of blades as tall as
-	# it is wide, and a wide short quad read as a leaf on the ground rather than as
-	# grass. (This was 3.4x the width for 1.15x the height, i.e. twice as wide as
-	# tall.)
-	quad.size = Vector2(BLADE_W * 1.15, BLADE_H * 1.30)
-	quad.orientation = PlaneMesh.FACE_Z
-	_blade_mesh = quad
+	_blade_mesh = _build_tuft_mesh()
+	if _blade_mesh == null:
+		push_warning("LastStar: could not build the grass card - the meadow will be empty")
+		return
 
-	_material = ShaderMaterial.new()
-	var shader := load("res://shaders/terrain/grass_sway.gdshader")
-	if shader != null:
-		_material.shader = shader
-		var tex := load("res://icons/grass/tuft.png")
-		if tex != null:
-			_material.set_shader_parameter("blade_tex", tex)
-		else:
-			push_warning("LastStar: grass tuft texture missing - blades will be solid")
-	else:
+	var shader := load("res://shaders/terrain/grass_card.gdshader")
+	if shader == null:
 		push_warning("LastStar: grass shader missing - grass will look flat")
+		return
+	_material = ShaderMaterial.new()
+	_material.shader = shader
+	var sheet := load("res://assets/grass/tuft.webp")
+	# Log what the import produced, at load time.
+	#
+	# A card whose alpha did not survive importing draws as a plain rectangle, and
+	# that is indistinguishable from a shader fault in a screenshot. Printing the
+	# decoded format and a few alpha values here settles which it is, on the one
+	# run where it happens.
+	# Only the two things every Texture2D is guaranteed to answer: size, and the
+	# pixels of the file behind it. There is deliberately no get_format() here -
+	# that method lives on Image, not on CompressedTexture2D, which is what this
+	# .webp actually imports as, and asking for it was a runtime error that failed
+	# the boot step. A texture's storage format is also the importer's business,
+	# not this diagnostic's: what matters is whether the card cuts out.
+	if sheet is Texture2D:
+		print("GRASS_SHEET %dx%d alpha(top/mid/bottom)=%s" % [
+			(sheet as Texture2D).get_width(), (sheet as Texture2D).get_height(),
+			_alpha_from_source()])
+	if sheet is Texture2D:
+		_material.set_shader_parameter("blade_tex", sheet)
+	else:
+		push_warning("LastStar: assets/grass/tuft.webp missing - it is hand-painted and committed; "
+			+ "restore it from git, the generator does not draw it")
+	_material.set_shader_parameter("card_height", CARD_HEIGHT)
 
 
-func _process(_delta: float) -> void:
+## A single camera-facing card with its origin at the root. The vertical
+## texture coordinate follows the image: V=0 at the tips and V=1 at the base.
+func _build_tuft_mesh() -> ArrayMesh:
+	# One upright card: the shader turns it towards the camera around the Y
+	# axis. This avoids visible crossed planes and halves the triangle count.
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var half := CARD_WIDTH * 0.5
+	_add_quad(st, Vector3(-half, 0.0, 0.0), Vector3(half, 0.0, 0.0), Vector3.FORWARD)
+	st.index()
+	return st.commit()
+
+
+func _add_quad(st: SurfaceTool, a: Vector3, b: Vector3, normal: Vector3) -> void:
+	var up := Vector3(0.0, CARD_HEIGHT, 0.0)
+	var verts := PackedVector3Array([a, b, b + up, a, b + up, a + up])
+	# Images have their top row at V=0. The painted tuft's roots are at the
+	# bottom of the image, so ground vertices must sample V=1, not V=0.
+	var uvs := PackedVector2Array([Vector2(0, 1), Vector2(1, 1), Vector2(1, 0),
+		Vector2(0, 1), Vector2(1, 0), Vector2(0, 0)])
+	for i in range(6):
+		st.set_uv(uvs[i])
+		st.set_normal(normal)
+		st.add_vertex(verts[i])
+
+
+func _process(delta: float) -> void:
 	if _player == null or _terrain == null:
 		return
 	# Push the camera position for the near-blade cull. The shader cannot read a
@@ -125,6 +176,16 @@ func _process(_delta: float) -> void:
 	if center != _last_center:
 		_last_center = center
 		_queue_around(center)
+	# Chunks previously skipped behind the camera need a retry when turning.
+	_camera_check += delta
+	if _camera_check >= 0.5:
+		_camera_check = 0.0
+		var cam := get_viewport().get_camera_3d()
+		if cam != null:
+			var direction := Vector2(-cam.global_basis.z.x, -cam.global_basis.z.z).normalized()
+			if _last_camera_forward == Vector2.ZERO or direction.dot(_last_camera_forward) < 0.92:
+				_last_camera_forward = direction
+				_queue_around(center)
 	# Build a few chunks per frame so streaming never causes a visible hitch.
 	var built := 0
 	while built < _build_budget and not _pending.is_empty():
@@ -153,24 +214,31 @@ func _chunk_of(p: Vector3) -> Vector2i:
 	return Vector2i(floori(p.x / CHUNK_SIZE), floori(p.z / CHUNK_SIZE))
 
 
+func _tier_for_chunk(key: Vector2i, center: Vector2i) -> int:
+	var dist := Vector2(key - center).length()
+	return 0 if dist <= 1.5 else (1 if dist <= 3.0 else 2)
+
+
 func _queue_around(center: Vector2i) -> void:
+	# A chunk's density is selected when it is built. When the player moves,
+	# replace batches that crossed a density boundary, including far -> near.
+	for key in _chunks.keys():
+		var d: Vector2i = key - center
+		var node: MultiMeshInstance3D = _chunks[key]
+		if Vector2(d).length() > float(VIEW_CHUNKS) + 1.5 or int(node.get_meta("grass_tier", -1)) != _tier_for_chunk(key, center):
+			if is_instance_valid(node):
+				node.queue_free()
+			_chunks.erase(key)
 	_pending.clear()
 	for dz in range(-VIEW_CHUNKS, VIEW_CHUNKS + 1):
 		for dx in range(-VIEW_CHUNKS, VIEW_CHUNKS + 1):
 			var key := center + Vector2i(dx, dz)
-			# Circular view so corners do not double the work.
 			if Vector2(dx, dz).length() > float(VIEW_CHUNKS) + 0.25:
 				continue
-			if not _chunks.has(key):
+			if not _chunks.has(key) and not _behind_camera(key):
 				_pending.append(key)
-	# Drop chunks that fell out of range. Anything still queued stays queued.
-	for key in _chunks.keys():
-		var d: Vector2i = key - center
-		if Vector2(d).length() > float(VIEW_CHUNKS) + 1.5:
-			var node: MultiMeshInstance3D = _chunks[key]
-			if is_instance_valid(node):
-				node.queue_free()
-			_chunks.erase(key)
+	_pending.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return (a - center).length_squared() < (b - center).length_squared())
 
 
 ## True when a chunk lies entirely behind the camera and so cannot draw.
@@ -195,12 +263,12 @@ func _behind_camera(key: Vector2i) -> bool:
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return false
-	var fwd := -cam.global_basis.z
-	var c := Vector3((float(key.x) + 0.5) * CHUNK_SIZE, 0.0,
+	var fwd := Vector2(-cam.global_basis.z.x, -cam.global_basis.z.z).normalized()
+	var c := Vector2((float(key.x) + 0.5) * CHUNK_SIZE,
 		(float(key.y) + 0.5) * CHUNK_SIZE)
 	# Half-diagonal of a chunk, so the test covers every corner of it.
 	var reach := CHUNK_SIZE * 0.7072
-	return (c - cam.global_position).dot(fwd) < -(reach + SIGHT_CULL_MARGIN)
+	return (c - Vector2(cam.global_position.x, cam.global_position.z)).dot(fwd) < -(reach + SIGHT_CULL_MARGIN)
 
 
 func _build_chunk(key: Vector2i) -> void:
@@ -215,6 +283,7 @@ func _build_chunk(key: Vector2i) -> void:
 	var center := _chunk_of(_player.global_position) if _player != null else _last_center
 	var d := key - center
 	var dist := Vector2(d).length()
+	var tier := _tier_for_chunk(key, center)
 	var count := BLADES_FAR
 	if dist <= 1.5:
 		count = BLADES_NEAR
@@ -234,96 +303,74 @@ func _build_chunk(key: Vector2i) -> void:
 	var made: Array[Transform3D] = []
 	var origin_x := float(key.x) * CHUNK_SIZE
 	var origin_z := float(key.y) * CHUNK_SIZE
-	# Taller blades further away hide the reduced density.
-	# Taller further out hides the reduced density without turning the mid ring
-	# into reeds.
-	var height_scale := 1.0 + clampf(float(dist) * 0.045, 0.0, 0.22)
+	# Taller blades further away hide the reduced density without turning the
+	# mid ring into reeds.
+	# Capped lower than it was (0.22 -> 0.14): the far tiers are down to 220
+	# cards a chunk, and stretching those by a fifth was the last version's way
+	# of hiding it, which turns the outer ring into reeds.
+	var height_scale := 1.0 + clampf(float(dist) * 0.030, 0.0, 0.14)
 	count = maxi(1, int(round(float(count) * _density)))
-	_tier_counts[count] = int(_tier_counts.get(count, 0)) + 1
-	# Placement runs in tufts, not independent blades.
+	# Placement is a jittered grid, not random points and not tufts.
 	#
-	# Every blade was an independent uniform random point, which is the definition
-	# of a statistically flat carpet: no clumping, no gaps, no scale between a
-	# single blade and the whole chunk. Real grass grows in tufts, and at the
-	# distances this field is seen the tuft is the unit the eye reads - a blade is
-	# sub-pixel past about 15 m.
+	# Two earlier versions of this loop, and why both were wrong at carpet density:
 	#
-	# So each iteration drops a tuft centre on the noise field and then places a
-	# small cluster of blades around it. The total blade count is unchanged, so
-	# this costs nothing; what changes is that density now varies at 1 m scale as
-	# well as at the 40 m scale of the existing _noise patches.
-	var tuft_size := 3 + int(rng.randf() * 5.0)
-	var tuft_radius := 0.16 + rng.randf() * 0.30
-	var cx := origin_x + rng.randf() * CHUNK_SIZE
-	var cz := origin_z + rng.randf() * CHUNK_SIZE
-	var in_tuft := 0
-	for i in range(count):
-		_tried += 1
-		# Start a new tuft once this one is full, or immediately on the first blade.
-		# A tuft whose centre lands on rejected ground simply places nothing, which
-		# is correct - a tuft on a cliff is not grass.
-		if in_tuft >= tuft_size:
-			in_tuft = 0
-			tuft_size = 3 + int(rng.randf() * 5.0)
-			tuft_radius = 0.16 + rng.randf() * 0.30
-			cx = origin_x + rng.randf() * CHUNK_SIZE
-			cz = origin_z + rng.randf() * CHUNK_SIZE
-		in_tuft += 1
-		# Offset within the tuft, denser toward the centre: a tuft is a bundle
-		# rising from one root, not a disc of grass cut with a cookie cutter.
-		var ang := rng.randf() * TAU
-		var rad := tuft_radius * pow(rng.randf(), 0.65)
-		var x := cx + cos(ang) * rad
-		var z := cz + sin(ang) * rad
-		# surface_height_at(), not get_height_at(): the grass has to sit on the
-		# bumpy mesh the camera actually sees, not on the smooth analytic field
-		# the collision uses. Those differ by up to the sagitta of a 3 m triangle,
-		# which is exactly enough for a tuft to hover with air under it.
-		var h: float = _terrain.surface_height_at(x, z) if _terrain.has_method("surface_height_at") \
-			else _terrain.get_height_at(x, z)
-		# Grass grows on gentle ground above the shoreline, not on cliffs,
-		# not underwater and not on the high rock/snow bands.
-		# 58 -> 92 m. The old ceiling stopped grass well below the rock and snow
-		# bands, so every hill above the valley floor was bare terrain - the
-		# single largest reason the world read as "a meadow patch surrounded by
-		# empty mountains". 92 m is where the terrain shader's own rock blend
-		# takes over, so the two agree instead of leaving a gap.
-		if h > 92.0:
-			_rej_height += 1
-			continue
-		# 0.52 -> 0.78. At 0.52 the field skipped roughly 27 degrees of slope, which
-		# is most of a hilly valley - the grass stopped wherever the ground started
-		# to rise, and the hillsides above it were bare. 0.78 (~38 degrees) still
-		# keeps blades off cliffs and scree.
-		if _terrain.get_slope_at(x, z) > 0.78:
-			_rej_slope += 1
-			continue
-		# Exclude actual water, not a circle around it. The old blanket
-		# exclusion (lake_radius * 0.82 = 75 m from the lake centre) also
-		# swallowed the spawn glade - the player starts 66 m from the centre,
-		# so the entire meadow around them was silently rejected and the field
-		# came out at a few thousand blades instead of tens of thousands.
-		if _terrain.is_underwater(x, z):
-			_rej_water += 1
-			continue
-		# Keep a small dry margin around the shoreline so blades do not poke
-		# through the water surface.
-		if h < SEA_MARGIN:
-			_rej_water += 1
-			continue
-		# Outer blades of a tuft are shorter and lean outward; the tallest blades
-		# are at the centre. This is what stops a tuft reading as a cylinder of
-		# identical quad cards.
-		var centre_bias := 1.0 - clampf(rad / maxf(tuft_radius, 0.001), 0.0, 1.0)
-		var s := rng.randf_range(0.70, 1.42) * height_scale * (0.82 + centre_bias * 0.38)
-		var lean := (1.0 - centre_bias) * 0.22
-		var basis := Basis(Vector3.UP, ang + rng.randf_range(-0.5, 0.5))
-		basis = basis * Basis(Vector3(cos(ang), 0.0, sin(ang)), lean)
-		basis = basis.scaled(Vector3(s, s, s))
-		# The quad is centred on its origin, so it has to be lifted by half its
-		# height (times the instance scale) or the bottom half sinks into the
-		# ground and the tuft reads as half a blade.
-		made.append(Transform3D(basis, Vector3(x, h + BLADE_H * 1.30 * 0.5 * s - 0.06, z)))
+	#   * Independent uniform random points, which is a Poisson process: clumpy by
+	#     nature, with patches of bare ground between clumps that no amount of
+	#     instance count removes (it only shrinks them).
+	#   * Tuft centres with 3-7 cards clustered on each, which multiplies that
+	#     clumpiness on purpose. It was the right call at 2.2 cards/m2, where the
+	#     job was to make a sparse scatter look intentional; at 9 cards/m2 the job
+	#     is the opposite - cover the ground evenly - and clustering makes the
+	#     coverage worse while *also* throwing away most of the cards, because a
+	#     tuft whose centre lands in water loses all of its cards instead of one.
+	#
+	# A jittered grid is the standard answer: one candidate per cell, displaced by
+	# less than half a cell, which covers the ground evenly and still has no
+	# visible rows. Each card is independent, so a rejection costs one card.
+	var per_side := maxi(1, int(ceil(sqrt(float(count)))))
+	var cell := CHUNK_SIZE / float(per_side)
+	for gz in range(per_side):
+		for gx in range(per_side):
+			_tried += 1
+			var x := origin_x + (float(gx) + rng.randf()) * cell
+			var z := origin_z + (float(gz) + rng.randf()) * cell
+			if _terrain.has_method("is_path") and _terrain.is_path(x, z):
+				continue
+			# surface_height_at(), not get_height_at(): the grass has to sit on the
+			# bumpy mesh the camera actually sees, not on the smooth analytic field
+			# the collision uses. Those differ by up to the sagitta of a 3 m triangle,
+			# which is exactly enough for a tuft to hover with air under it.
+			var h: float = _terrain.surface_height_at(x, z) if _terrain.has_method("surface_height_at") \
+				else _terrain.get_height_at(x, z)
+			# Grass grows on gentle ground above the shoreline, not on cliffs and
+			# not on the high rock/snow bands. 92 m is where the terrain shader's
+			# own rock blend takes over, so the two agree instead of leaving a gap.
+			if h > 92.0:
+				_rej_height += 1
+				continue
+			# 0.78 (~38 degrees) keeps blades off cliffs and scree without
+			# stopping the meadow wherever the ground starts to rise.
+			if _terrain.get_slope_at(x, z) > 0.78:
+				_rej_slope += 1
+				continue
+			# Actual water, not a circle around it, plus a dry margin so blades do
+			# not poke through the surface.
+			if _terrain.is_underwater(x, z) or h < SEA_MARGIN:
+				_rej_water += 1
+				continue
+			# Every card is the same size and the same kind of card, so the only
+			# variation is height, yaw and a small tilt. No per-cluster bias: at
+			# this density the field is read as a surface, and any per-cluster
+			# structure in it reads as polka dots.
+			var s2 := rng.randf_range(0.80, 1.20) * height_scale
+			var yaw := rng.randf() * TAU
+			var tilt := rng.randf_range(-0.10, 0.10)
+			var basis := Basis(Vector3.UP, yaw)
+			basis = basis * Basis(Vector3(cos(yaw), 0.0, sin(yaw)), tilt)
+			basis = basis.scaled(Vector3(s2, s2, s2))
+			# The card's origin is at its root, so it goes straight on the ground.
+			# The 2 cm sink hides the seam where the lowest blades meet the terrain.
+			made.append(Transform3D(basis, Vector3(x, h - 0.02, z)))
 	if made.is_empty():
 		return
 	multimesh.instance_count = made.size()
@@ -333,6 +380,7 @@ func _build_chunk(key: Vector2i) -> void:
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "Grass_%d_%d" % [key.x, key.y]
 	mmi.multimesh = multimesh
+	mmi.set_meta("grass_tier", tier)
 	if _material != null:
 		_push_view_params()
 		mmi.material_override = _material
@@ -386,15 +434,88 @@ func chunk_count() -> int:
 	return _chunks.size()
 
 
-func diagnostics() -> String:
-	# The tier keys were hard-coded 2600/1300/520 - numbers from an older density
-	# curve that no longer exist. `_tier_counts` is keyed by the actual per-chunk
-	# instance count, so it reported 0/0/0 on a field of 276,811 blades. A
-	# diagnostic that always reads zero is worse than none: it looks like the
-	# blades are not being placed at all.
+## What the meadow's card actually is once the engine has imported it.
+##
+## Written after a frame in which every card drew as a plain green rectangle:
+## alpha-scissor had stopped cutting anything out, and there is no way to tell
+## from a screenshot whether the texture failed to import, arrived without an
+## alpha channel, or was never bound to the sampler at all. This reports all
+## three, because they have completely different fixes.
+func card_report() -> String:
+	if _material == null:
+		return "material=NULL"
+	var bound = _material.get_shader_parameter("blade_tex")
+	if not (bound is Texture2D):
+		return "blade_tex=UNBOUND"
+	var tex: Texture2D = bound
+	var out := "%dx%d (%s)" % [tex.get_width(), tex.get_height(),
+		tex.get_class()]
+
+	# Read the pixels back from the SOURCE FILE, not from tex.get_image().
 	#
-	# Count live chunks by tier instead, derived from the same constants the
-	# builder uses, so this cannot drift again.
+	# get_image() on an imported texture returns an image in the format the
+	# importer chose, and with VRAM compression on (project.godot sets
+	# import_etc2_astc) that is a block-compressed format Image.get_pixel()
+	# cannot read - it errors per pixel and yields nothing. This function then
+	# returned a string with the alpha column silently missing, which the probe
+	# reported as an empty line for three builds.
+	#
+	# The question being asked is "did the alpha survive the import", and the
+	# file on disk answers it directly and without a GPU. What the *importer*
+	# does with it is a separate check, and the width/height above already
+	# proves the resource loaded at the size it should.
+	var alpha_col := _alpha_from_source()
+	# Never return just the size line: a report with fields silently missing is
+	# what made this useless for three builds.
+	if alpha_col.is_empty():
+		return out + " alpha=UNREADABLE"
+	return out + " alpha(top/mid/bottom)=%s" % alpha_col
+
+
+## Alpha at three points down the middle of the card, read from the committed
+## asset with the engine's own image loader.
+##
+## Encoding-agnostic on purpose: it goes through Image.load_from_file(), so the
+## same code answers for a .webp, a .png or anything else Godot can decode, and
+## it does not care what the importer did to the texture.
+func _alpha_from_source() -> String:
+	# Static, not a method on an instance: Image.load_from_file() is declared
+	# static in Godot 4, and calling it on an instance is a compile error - which
+	# here is not a local failure, because world.gd preloads this script and
+	# cannot compile if it does not. That surfaced as "Nonexistent function
+	# 'setup' in base 'Node3D'", three layers away from the actual mistake.
+	var img := Image.load_from_file("res://assets/grass/tuft.webp")
+	if img == null or img.is_empty():
+		return "SOURCE-UNREADABLE"
+	return _alpha_down_column(img)
+
+
+## Alpha at three points down the middle of the card, as "top/mid/bottom".
+##
+## The rows are fractions of the image, not pixel numbers. They were 8/128/248,
+## which was right for a 256 px sheet and an out-of-bounds read the moment the
+## card was re-encoded 226 px tall - and get_pixel() on an out-of-range row is a
+## hard error that fails the boot step, so a *diagnostic* took the build down.
+## Anything that indexes into a texture has to derive its indices from the image.
+func _alpha_down_column(img: Image) -> String:
+	var h := img.get_height()
+	var x := img.get_width() / 2
+	var samples: Array[String] = []
+	for frac in [0.03, 0.5, 0.97]:
+		var y := clampi(int(frac * float(h)), 0, h - 1)
+		samples.append("%.2f" % img.get_pixel(x, y).a)
+	return "/".join(samples)
+
+
+func diagnostics() -> String:
+	# `_tier_counts` used to hold one key per density constant, written by the
+	# builder. When the constants changed the keys were stale and this reported
+	# 0/0/0 on a field of 276,811 blades - a diagnostic that always reads zero is
+	# worse than none, because it looks like nothing is being placed.
+	#
+	# The live count is the MultiMeshes themselves now, so it cannot drift: the
+	# tier a chunk belongs to is derived from its position, and its card count is
+	# read off the instance buffer rather than remembered from a constant.
 	var near := 0
 	var mid := 0
 	var far := 0
@@ -407,9 +528,7 @@ func diagnostics() -> String:
 			mid += 1
 		else:
 			far += 1
-	var placed := 0
-	for v in _tier_counts.values():
-		placed += int(v)
+	var placed := blade_count()
 	return "tried=%d placed=%d chunks=%d water=%d height=%d slope=%d tiers(near/mid/far)=%d/%d/%d" % [
 		_tried, placed, _chunks.size(), _rej_water, _rej_height, _rej_slope,
 		near, mid, far]
@@ -441,16 +560,15 @@ func focus_at(point: Vector3) -> void:
 
 
 func set_density_scale(scale: float) -> void:
-	## Used by the quality tuner: 1.0 = full, 0.65 = Balanced, 0.35 = Performance.
-	##
-	## Only affects chunks built AFTER the call, so existing geometry is rebuilt
-	## by dropping the ring and streaming it again - otherwise the player would
-	## see the density change only once they had walked far enough to cycle every
-	## chunk, which at 26 m chunks and 130 m of view is well over a minute.
-	_build_budget = maxi(2, int(round(4.0 * scale)))
+	## Rebuild existing chunks gradually when the quality setting changes.
 	visible = scale > 0.01
 	if is_equal_approx(scale, _density):
 		return
 	_density = scale
 	if _player != null:
-		_last_center = Vector2i(9999, 9999)
+		for node in _chunks.values():
+			if is_instance_valid(node):
+				node.queue_free()
+		_chunks.clear()
+		_last_center = _chunk_of(_player.global_position)
+		_queue_around(_last_center)

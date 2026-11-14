@@ -36,7 +36,7 @@ import sys
 # plus the sweep variable that stands in for "albedo".
 SURFACES = [
     ("shaders/terrain/terrain_anime.gdshader", ["col", "patch"]),
-    ("shaders/terrain/grass_sway.gdshader", ["base", "col", "t", "v_tint"]),
+    ("shaders/terrain/grass_card.gdshader", ["base", "col", "t", "v_tint"]),
 ]
 
 # Any two surfaces' fills must stay within this factor of each other. A factor
@@ -189,6 +189,11 @@ def analyse(path, verbose):
         return None
     env = uniforms(src)
     # Replay local scalars in declaration order so they see each other.
+    # The grass card used to multiply `col` by the painted sheet's luminance
+    # before it reached EMISSION, and this gate had to model that or it read the
+    # meadow's fill as if the sheet were 1.0. The card is now the old hand-painted
+    # stencil: flat white, 0.85-0.95, read for its alpha and nothing else. There is
+    # no sheet term in the shader any more, so there is none to sweep.
     for name, sub in locals_before(src, expr):
         try:
             env[name] = evaluate(sub, env, {"col": 1.0, "base": 1.0,
@@ -200,7 +205,7 @@ def analyse(path, verbose):
     for alb in ALBEDOS:
         # Sweep the shading variables across their meaningful range so the
         # fill is checked everywhere it matters, not only at one midpoint.
-        for patch in (0.0, 0.5, 1.0):
+        for patch_i, patch in enumerate((0.0, 0.5, 1.0)):
             sweep = {k: alb for k in ("col", "base")}
             sweep["patch"] = patch
             sweep["t"] = 0.5

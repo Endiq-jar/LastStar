@@ -11,8 +11,10 @@ all rendered with a mobile-friendly renderer and shipped through an automatic CI
 produces an installable APK on every push.
 
 > **This is an original, fan-inspired project.** It contains **no Genshin Impact assets** — no
-> characters, models, textures, audio or data. Everything you see is generated procedurally in
-> GDScript (meshes, materials, textures, sound effects) or is permissively licensed code.
+> characters, models, textures, audio or data. Much of the project is generated procedurally in
+> GDScript (characters, props, terrain, sky, sound effects) or is a **CC0 public-domain** art
+> asset from Quaternius' stylized packs — the valley's trees, grass, plants and rocks and the
+> cloth the world is dressed in. Every file and its licence is listed in `CREDITS.md`.
 > "Genshin Impact" is a trademark of HoYoverse; this project is not affiliated with them.
 
 ![style](https://img.shields.io/badge/renderer-Mobile%20(Vulkan)-5ac8fa) ![engine](https://img.shields.io/badge/Godot-4.3-478cbf) ![license](https://img.shields.io/badge/license-MIT-green)
@@ -24,18 +26,19 @@ produces an installable APK on every push.
 | System | Details |
 |---|---|
 | **Renderer** | OpenGL ES 3.0 (Compatibility) — runs on every Android device since 2013, including PowerVR GPUs like the Helio P95 where the Vulkan path black-screens |
-| **Anime terrain** | 900 m procedural valley, 144² heightfield, custom `terrain_anime` shader: painterly banded meadow, slope-aware rock, wet shoreline and snow caps |
+| **Anime terrain** | A **10 km** procedural world, streamed in three layers around the player (96 m tiles at 4 m, 672 m tiles at 32 m, one coarse shell over the whole map), custom `terrain_anime` shader: painterly banded meadow, slope-aware rock, wet shoreline and snow caps. Mountains stand 2–3.2 km out; a concave collision patch follows the player instead of a shape over the map |
 | **Cel shading** | `anime_toon.gdshader` — world-space two-band ramp, cool tinted shadows, a small cool rim + inverted-hull outline pass. No specular lobe: on near-black cloth it only ever painted grey patches, so the ramp and the outline carry the form |
 | **Party of three** | Sora (Anemo, sword), Ember (Pyro, catalyst), Volt (Electro, bow). Switch instantly with **T** or the portrait row |
 | **Traversal** | Sprint with stamina, double jump, **gliding** with wind wings, plunge attack from a dive |
 | **Combat** | 3-hit melee combo, elemental skill (E) with cooldown, elemental burst (Q) that spends energy, damage numbers, hit flashes, shockwaves |
 | **Enemies** | Elemental slimes that hop at you and take **reaction multipliers** (same element resisted, opposite empowered) |
 | **Progression** | 12 star sigils to recover, waypoint statues that heal the party and set your respawn, quest tracker, victory banner |
-| **World dressing** | Lake with stylized wave shader, wind arches, glowing crystal formations, campfires, rolling clouds, 3 700+ instanced trees/rocks/flowers and a 2 600-blade swooshing grass carpet |
+| **Water** | One surface at sea level over the whole map, because a sea in the south-east, a lake, a carved river and six ponds are all the same water table. The terrain carves the beds; wherever it falls below the waterline there is water, so a coastline needs no special case |
+| **World dressing** | Scattered trees, pines, dead trees, bushes, ferns, flowers, pebbles and boulders from the Ultimate Stylized Nature Pack, batched into MultiMeshes and occluded per entity; wind arches, glowing crystal clusters, campfires and bone-cloth banners at the shrines |
 | **Day / night** | Sun angle, colour and ambient light drift over time; campfire and crystal lights carry the night |
-| **Environment (rendered)** | ![wide](docs/render_wide.png) ![gameplay](docs/render_world.png) |
-| **Character (rendered, front)** | ![front](docs/render_player.png) |
-| **Grass** | A streaming meadow over the whole valley: 26 m chunks rebuilt around the player out to 130 m, density falling off with distance (9,000 / 3,600 / 1,100 blades per chunk), ~80,000 instances at full quality. Wind-waved, per-instance colour variation, root-to-tip gradient and faked subsurface scattering |
+| **Environment (rendered)** | ![wide](docs/render_wide.webp) ![gameplay](docs/render_world.webp) |
+| **Character (rendered, front)** | ![front](docs/render_player.webp) |
+| **Grass** | The original hand-painted tuft is drawn on a single upright, camera-facing alpha-cut card, **2 triangles per instance**. Its UVs put the roots on the ground and the tips at the top. The field streams in chunks, refreshes density as you travel, thins with distance, and has **no wind animation**. A winding yellow-soil path is kept clear of grass. The meadow ground texture is solid `#7FBF5A`; lighting and terrain variation affect its displayed color |
 | **Mobile UI** | Touch joystick + right-side camera drag + on-screen action buttons, plus a **Quality** toggle (Balanced / Performance / High) |
 
 ### Controls
@@ -94,8 +97,43 @@ The game is written so it **cannot** show a black screen with only the HUD:
   demand, and quality tiers are reversible and remembered in `user://video.cfg`.
 * an automatic tuner samples real frame time on startup and drops to the
   Performance tier on weak hardware, and vegetation beyond ~190 m is culled.
+* **`performance/entity_culler.gd`** decides which enemies, sigils and waypoints
+  the terrain, walls and ceilings actually leave visible, on a `WorkerThreadPool`
+  task rather than on the main thread. Hidden entities are skipped by the
+  renderer and lose their AI, animation and sparkle ticks until they are in
+  sight again. It is not a frustum test: a sight line is path-traced against a
+  baked height grid and the structural AABBs, so a slime behind a ridge, a ruin
+  wall or a pavilion roof is not drawn, while one glimpsed through the gap
+  between two pillars is.
+* **every texture is WebP** — 5.2 MB of PNG became 569 KB, and the APK went
+  from 29.0 MB to 25.7 MB. The meadow's card is encoded *losslessly* (it is a
+  1-bit stencil whose edge the shader scissors on, and the lossless encode is
+  verified bit-exact against it); the icons are 256 px for an 84 px control; the
+  terrain maps are 256 px because neighbouring pixels differ by 0.3/255 — they
+  are smooth gradients that were stored at four times the resolution they
+  contain. `docs/` is excluded from the export: it is 4 MB of README screenshots
+  that was being packed into the APK.
 * the world bootstrap contains **no coroutines and no GPU readbacks** — both
   could wedge the main loop on software/GL drivers.
+* **the environment is one CC0 art pack** — every tree, blade of grass, bush,
+  flower, rock, log and stump is a model from Quaternius' *Ultimate Stylized
+  Nature Pack* (`assets/nature/`, twenty-one `.glb` files), consumed by
+  `scripts/nature_pack.gd`, which bakes each model's material colours into
+  vertex colours so a whole species can be drawn as one MultiMesh with one
+  material. The painted vegetation atlases are gone. The
+  meadow's tuft is the pack's grass decimated to its tallest 36 blades, because
+  a 100-blade tuft at meadow density is tens of millions of triangles.
+  The per-instance tint is a function of world position rather than a custom
+  data buffer: on the Compatibility renderer a MultiMesh with custom data on
+  loses the mesh's vertex colours, and every prop drawn that way came out a
+  black silhouette of itself. `tests/render_probe.gd` measures both the frame's
+  near-black fraction and the colour of a plain mesh against the same mesh in a
+  MultiMesh, so the regression cannot come back quietly.
+* **bone cloth** — the cloth the world is dressed in (ruin-gate banners, shelter
+  drapes, the altar carpet, waypoint totems, and the player's cape hem and
+  charms) is built from six CC0-1.0 Quaternius models in `assets/cloth/`,
+  re-materialled to the toon ramp by `scripts/bone_cloth.gd`. Sources and licences
+  are listed in `assets/cloth/README.md`.
 
 CI enforces all of it: `tests/render_probe.tscn` actually renders the world under
 Xvfb, screenshots the framebuffer and measures mean luminance, non-black coverage
@@ -156,6 +194,7 @@ scripts/
   player.gd                Movement, glide, combat, party switching, touch camera
   slime.gd                 Enemy AI + elemental reactions
   sigil.gd / waypoint_statue.gd
+  performance/entity_culler.gd  Async path-traced occlusion culling + tick gating
   hud.gd / touch_controls.gd
   fx.gd                    Tweened procedural VFX
 shaders/
@@ -183,3 +222,66 @@ Open the pause menu and press **Quality**, or edit `Game.quality_tier` (0 Balanc
 * **Rendering techniques** (toon ramp, SSR-free stylized water, MultiMesh wind grass) are original
   GDScript/GLSL written for this project.
 * Inspired by *Genshin Impact* (© HoYoverse). No HoYoverse assets are included or required.
+
+### Performance and streaming
+
+Terrain already streams near and mid tiles around the player with a separate
+local collision patch; grass and other repeated vegetation use chunked
+MultiMeshes. Pending near-terrain tiles are prioritized in the direction of
+travel. Tile generation is still on the main thread, not background loading.
+
+Balanced and Performance dynamically adjust the 3D resolution toward 30 FPS
+within bounded ranges; High stays at full resolution. The HUD stays sharp. This
+can help a GPU-bound device but is not a replacement for profiling CPU stalls.
+The existing quality control also adjusts vegetation and shadow distance.
+
+Open the performance monitor with **F3** or the pause menu. It reports engine
+FPS, frame time, a rolling 1% low after 100 samples, process and physics times,
+draws, triangles, visible enemies, active physics objects, Godot's static
+memory and video/texture memory estimates, 3D scale and the last streamed terrain
+chunk's build time. GPU time, device temperature, and shader compilation time
+are marked unavailable rather than guessed. Engine memory is not total device
+RAM. Use the Android and Godot profilers for device-level measurements.
+
+This is not a five-level model LOD or a full world-partition/asset-streaming
+system: billboard impostors, asynchronous resource/texture streaming, thermal
+management, per-option graphics controls and pooled combat effects remain future
+work. The grass cards stay static; the existing foliage shader has its own wind.
+
+### Home, story and inventory
+
+Home has Play, Wardrobe, Profile, Settings and Shop. During play, use the bottom
+Inventory and Journal buttons; the map has been removed. Story sigils, slime
+count, activated waypoints and the last respawn checkpoint persist locally.
+Starting Play resumes those objectives; it restores health and starts the player
+at the entrance, while the saved waypoint remains the respawn checkpoint.
+
+Inventory starts with 10 slots, with an icon for each potion or treasure. Select
+an item to use or drop it; dropped items remain in the world and are saved until
+picked up. Sort by item type or name. Purchase backpacks in the home shop with
+coins earned in play and equip them in Wardrobe for 5 or 10 additional slots.
+You cannot equip a smaller backpack if your inventory would exceed its capacity.
+Backpacks are visible on the character; Wardrobe also offers three outfit colour
+styles. The cape, hanging panels and backpack have lightweight motion-following
+articulation, not full physical cloth collision or a skinned cloth simulation.
+
+Settings provide graphics quality, master/ambience/effects audio levels, camera
+sensitivity and keyboard rebinding for movement, jump, sprint, skill, burst and
+party switching. These settings save locally. Touch layout, mouse bindings and
+individual graphics features are not customizable yet; there is no music track.
+Coins, supplies, levels, story progress, wardrobe and dropped items are saved in
+`user://collection.cfg`. Wishes and the shop use only in-game currency.
+
+### Elaris story and Wander slice
+
+Talk to Star Guard Ilyra near the starting shore using F or the Talk button.
+Choose a dialogue response and accept the first main quest; a side quest becomes
+available afterwards. Recover a sigil and defeat three slimes, then return to
+Ilyra to learn Stone Bulwark and Arc Lance. Long-press a spell slot in the
+Wander to equip learned spells. Learned spells, slot assignments, mastery XP,
+quest choices and completion are saved locally.
+
+`docs/Resources.txt` is the full design brief. This is an initial Godot
+implementation, not the complete 14-settlement, 190-quest, 100-spell game.
+Spell crafting, companions, dungeons, bosses, the wider story and controller
+support remain to be developed; the current settlement is not a full Ashvale.

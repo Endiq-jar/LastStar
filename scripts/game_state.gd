@@ -16,6 +16,7 @@ signal game_won()
 signal respawned()
 ## Emitted when the player casts a Wander spell. player.gd performs the effect.
 signal spell_cast(id: String, data: Dictionary)
+signal collection_changed()
 
 const TOTAL_SIGILS := 12
 const MAX_STAMINA := 100.0
@@ -99,6 +100,7 @@ var party_index: int = 0
 var health: Array[float] = []
 var energy: float = 0.0
 var stamina: float = MAX_STAMINA
+var shield_points: float = 0.0
 
 var sigils_collected: int = 0
 var slimes_defeated: int = 0
@@ -124,6 +126,9 @@ const QUALITY_NAMES := ["Balanced", "Performance", "High"]
 
 ## Shared world facts used by water, enemies and weather systems.
 var water_level: float = 1.2
+## Metres across the whole world. The terrain publishes this at startup so the
+## map, the water surface and the compass agree on where the edge is.
+var world_size: float = 10000.0
 var lake_center: Vector2 = Vector2(48.0, 52.0)
 var lake_radius: float = 92.0
 
@@ -135,11 +140,40 @@ var wander: Wander
 var touch_move: Vector2 = Vector2.ZERO
 var touch_active: bool = false
 
+## Offline collection persists independently of a single expedition.
+const COLLECTION_FILE := "user://collection.cfg"
+const WISH_ITEMS := ["Moonstone", "Starflower", "Sunshard", "Stormglass"]
+var coins := 150
+var starlight := 30
+var potions := 2
+var character_levels: Array[int] = [1, 1, 1]
+var collectibles: Dictionary = {}
+var wish_count := 0
+var sigils_seen: Dictionary = {}
+var story_complete := false
+# First playable story slice, independent from the older sigil victory.
+var guard_story: Dictionary = {}
+var wander_levels: Dictionary = {}
+var wander_slots: Array = []
+var outfit_style := 0
+var camera_sensitivity := 1.0
+const REBIND_ACTIONS := ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "skill", "burst", "party_next"]
+var _default_keys: Dictionary = {}
+var dropped_items: Dictionary = {}
+var next_drop_id := 1
+const BACKPACK_NAMES := ["No backpack", "Trail backpack", "Explorer backpack"]
+const BACKPACK_BONUS := [0, 5, 10]
+const BACKPACK_PRICES := [0, 100, 250]
+var owned_backpacks: Array[int] = [0]
+var equipped_backpack := 0
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	load_quality()
+	_setup_settings()
 	reset_run()
+	load_collection()
 
 
 func reset_run() -> void:
@@ -149,10 +183,13 @@ func reset_run() -> void:
 		health.append(float(c["max_hp"]))
 	energy = 25.0
 	stamina = MAX_STAMINA
+	shield_points = 0.0
 	sigils_collected = 0
 	slimes_defeated = 0
 	waypoints_activated = 0
 	waypoints_seen.clear()
+	sigils_seen.clear()
+	story_complete = false
 	last_waypoint_name = "Starlit Shore"
 	has_checkpoint = false
 	checkpoint = Vector3.ZERO
@@ -201,7 +238,14 @@ func heal(amount: float) -> void:
 
 
 func damage(amount: float) -> void:
-	set_hp(current_hp() - amount)
+	var remaining := maxf(0.0, amount)
+	if shield_points > 0.0:
+		var absorbed := minf(shield_points, remaining)
+		shield_points -= absorbed
+		remaining -= absorbed
+		if absorbed > 0.0:
+			toast.emit("Bulwark absorbed %.0f damage" % absorbed)
+	set_hp(current_hp() - remaining)
 
 
 func add_stamina(amount: float) -> void:
@@ -228,7 +272,7 @@ func spend_energy(amount: float) -> bool:
 
 
 func attack_power() -> float:
-	return float(character()["attack"])
+	return float(character()["attack"]) * (1.0 + 0.12 * float(character_levels[party_index] - 1))
 
 
 func switch_character(index: int) -> void:
@@ -258,10 +302,18 @@ func _on_party_down() -> void:
 	emit_signal("stats_changed")
 
 
-func collect_sigil() -> void:
-	if has_won:
+func collect_sigil(sigil_id: String = "") -> void:
+	if has_won or (sigil_id != "" and sigils_seen.has(sigil_id)):
 		return
-	sigils_collected += 1
+	if sigil_id != "":
+		sigils_seen[sigil_id] = true
+	sigils_collected = mini(TOTAL_SIGILS, sigils_collected + 1)
+	coins += 20
+	starlight += 5
+	if sigils_collected >= TOTAL_SIGILS:
+		story_complete = true
+	save_collection()
+	collection_changed.emit()
 	add_energy(14.0)
 	sigils_changed.emit(sigils_collected, TOTAL_SIGILS)
 	_refresh_quest()
@@ -274,6 +326,9 @@ func collect_sigil() -> void:
 
 func register_slime() -> void:
 	slimes_defeated += 1
+	coins += 5
+	save_collection()
+	collection_changed.emit()
 	add_energy(6.0)
 	_refresh_quest()
 
@@ -282,9 +337,12 @@ func activate_waypoint(statue_name: String, pos: Vector3) -> void:
 	if not waypoints_seen.has(statue_name):
 		waypoints_seen[statue_name] = true
 		waypoints_activated += 1
+		coins += 15
+		collection_changed.emit()
 	last_waypoint_name = statue_name
 	checkpoint = pos
 	has_checkpoint = true
+	save_collection()
 	for i in range(health.size()):
 		health[i] = float(PARTY[i]["max_hp"])
 	stamina = MAX_STAMINA
@@ -295,7 +353,9 @@ func activate_waypoint(statue_name: String, pos: Vector3) -> void:
 
 
 func _refresh_quest() -> void:
-	if has_won:
+	if story_complete:
+		quest_text = "Every star sigil is home. The valley remembers your name."
+		quest_changed.emit(quest_text)
 		return
 	var parts: PackedStringArray = PackedStringArray()
 	var left := TOTAL_SIGILS - sigils_collected
@@ -322,6 +382,7 @@ func set_paused(paused: bool) -> void:
 
 func start_game() -> void:
 	reset_run()
+	load_collection()
 	pending_unpause = true
 	get_tree().change_scene_to_file(WORLD_PATH)
 
@@ -331,6 +392,335 @@ func quit_to_menu() -> void:
 	is_paused = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().change_scene_to_file(MENU_PATH)
+
+
+func save_collection() -> bool:
+	var cfg := ConfigFile.new()
+	cfg.set_value("collection", "coins", coins)
+	cfg.set_value("collection", "starlight", starlight)
+	cfg.set_value("collection", "potions", potions)
+	cfg.set_value("collection", "levels", character_levels)
+	cfg.set_value("collection", "items", collectibles)
+	cfg.set_value("collection", "wishes", wish_count)
+	cfg.set_value("collection", "owned_backpacks", owned_backpacks)
+	cfg.set_value("collection", "equipped_backpack", equipped_backpack)
+	cfg.set_value("collection", "outfit_style", outfit_style)
+	cfg.set_value("story", "sigils_seen", sigils_seen)
+	cfg.set_value("story", "sigils_collected", sigils_collected)
+	cfg.set_value("story", "slimes_defeated", slimes_defeated)
+	cfg.set_value("story", "waypoints_seen", waypoints_seen)
+	cfg.set_value("story", "last_waypoint", last_waypoint_name)
+	cfg.set_value("story", "has_checkpoint", has_checkpoint)
+	cfg.set_value("story", "checkpoint", checkpoint)
+	cfg.set_value("story", "complete", story_complete)
+	cfg.set_value("story", "guard_story", guard_story)
+	cfg.set_value("wander", "levels", wander_levels)
+	cfg.set_value("wander", "slots", wander_slots)
+	cfg.set_value("story", "dropped_items", dropped_items)
+	cfg.set_value("story", "next_drop_id", next_drop_id)
+	var err := cfg.save(COLLECTION_FILE)
+	if err != OK:
+		push_warning("LastStar: could not save the offline collection (%d)" % err)
+	return err == OK
+
+
+func load_collection() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(COLLECTION_FILE) != OK:
+		return
+	var saved_sigils = cfg.get_value("story", "sigils_seen", {})
+	sigils_seen = saved_sigils if saved_sigils is Dictionary else {}
+	sigils_collected = clampi(int(cfg.get_value("story", "sigils_collected", 0)), 0, TOTAL_SIGILS)
+	slimes_defeated = maxi(0, int(cfg.get_value("story", "slimes_defeated", 0)))
+	var saved_waypoints = cfg.get_value("story", "waypoints_seen", {})
+	waypoints_seen = saved_waypoints if saved_waypoints is Dictionary else {}
+	waypoints_activated = waypoints_seen.size()
+	last_waypoint_name = str(cfg.get_value("story", "last_waypoint", "Starlit Shore"))
+	var saved_checkpoint = cfg.get_value("story", "checkpoint", Vector3.ZERO)
+	checkpoint = saved_checkpoint if saved_checkpoint is Vector3 else Vector3.ZERO
+	has_checkpoint = bool(cfg.get_value("story", "has_checkpoint", false)) and saved_checkpoint is Vector3
+	story_complete = bool(cfg.get_value("story", "complete", false))
+	var story_data = cfg.get_value("story", "guard_story", {})
+	guard_story = story_data if story_data is Dictionary else {}
+	var levels_data = cfg.get_value("wander", "levels", {})
+	wander_levels = levels_data if levels_data is Dictionary else {}
+	var slots_data = cfg.get_value("wander", "slots", [])
+	wander_slots = slots_data if slots_data is Array else []
+	var saved_drops = cfg.get_value("story", "dropped_items", {})
+	dropped_items = saved_drops if saved_drops is Dictionary else {}
+	next_drop_id = maxi(1, int(cfg.get_value("story", "next_drop_id", 1)))
+	_refresh_quest()
+	sigils_changed.emit(sigils_collected, TOTAL_SIGILS)
+	coins = maxi(0, int(cfg.get_value("collection", "coins", 150)))
+	starlight = maxi(0, int(cfg.get_value("collection", "starlight", 30)))
+	potions = maxi(0, int(cfg.get_value("collection", "potions", 2)))
+	wish_count = maxi(0, int(cfg.get_value("collection", "wishes", 0)))
+	outfit_style = clampi(int(cfg.get_value("collection", "outfit_style", 0)), 0, 2)
+	owned_backpacks = [0]
+	var saved_packs = cfg.get_value("collection", "owned_backpacks", [0])
+	if saved_packs is Array:
+		for pack in saved_packs:
+			var index := int(pack)
+			if index > 0 and index < BACKPACK_NAMES.size() and not owned_backpacks.has(index):
+				owned_backpacks.append(index)
+	equipped_backpack = int(cfg.get_value("collection", "equipped_backpack", 0))
+	if not owned_backpacks.has(equipped_backpack):
+		equipped_backpack = 0
+	var levels = cfg.get_value("collection", "levels", [1, 1, 1])
+	if levels is Array and levels.size() == PARTY.size():
+		for i in range(PARTY.size()):
+			character_levels[i] = clampi(int(levels[i]), 1, 10)
+	var saved_items = cfg.get_value("collection", "items", {})
+	if saved_items is Dictionary:
+		collectibles = saved_items
+	collection_changed.emit()
+
+
+func save_wander() -> void:
+	if wander == null:
+		return
+	wander_levels = wander.levels.duplicate(true)
+	wander_slots = wander.slots.duplicate()
+	save_collection()
+
+
+func guard_accept(quest: String, answer: String = "") -> bool:
+	if not ["seal", "hollow"].has(quest) or bool(guard_story.get(quest + "_accepted", false)):
+		return false
+	guard_story[quest + "_accepted"] = true
+	if quest == "seal" and ["duty", "curiosity"].has(answer):
+		guard_story["answer"] = answer
+	save_collection()
+	quest_changed.emit(quest_text)
+	collection_changed.emit()
+	return true
+
+
+func guard_can_complete(quest: String) -> bool:
+	if not bool(guard_story.get(quest + "_accepted", false)) or bool(guard_story.get(quest + "_done", false)):
+		return false
+	return (quest == "seal" and sigils_collected >= 1) or (quest == "hollow" and slimes_defeated >= 3)
+
+
+func guard_complete(quest: String) -> bool:
+	if not guard_can_complete(quest) or wander == null:
+		return false
+	guard_story[quest + "_done"] = true
+	var reward := "stone_bulwark" if quest == "seal" else "arc_lance"
+	# Set completion before learn emits its save signal: the reward and quest
+	# completion are then persisted together, with no repeatable reward window.
+	wander.learn(reward)
+	save_wander()
+	collection_changed.emit()
+	toast.emit("Wander discovery: %s" % wander.spell(reward)["name"])
+	return true
+
+
+func inventory_capacity() -> int:
+	return 10 + int(BACKPACK_BONUS[equipped_backpack])
+
+
+func inventory_used() -> int:
+	var total := potions
+	for item in WISH_ITEMS:
+		total += maxi(0, int(collectibles.get(item, 0)))
+	return total
+
+
+func set_outfit_style(index: int) -> void:
+	outfit_style = clampi(index, 0, 2)
+	save_collection()
+	collection_changed.emit()
+	character_changed.emit(party_index)
+
+
+func buy_backpack(index: int) -> bool:
+	if index <= 0 or index >= BACKPACK_NAMES.size() or owned_backpacks.has(index) or coins < BACKPACK_PRICES[index]:
+		return false
+	coins -= int(BACKPACK_PRICES[index])
+	owned_backpacks.append(index)
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func equip_backpack(index: int) -> bool:
+	if not owned_backpacks.has(index) or index < 0 or index >= BACKPACK_NAMES.size():
+		return false
+	if inventory_used() > 10 + int(BACKPACK_BONUS[index]):
+		return false
+	equipped_backpack = index
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func drop_item(item: String, position: Vector3) -> String:
+	if item == "Potion":
+		if potions <= 0:
+			return ""
+		potions -= 1
+	elif WISH_ITEMS.has(item) and int(collectibles.get(item, 0)) > 0:
+		collectibles[item] = int(collectibles[item]) - 1
+		if collectibles[item] <= 0:
+			collectibles.erase(item)
+	else:
+		return ""
+	var id := str(next_drop_id)
+	next_drop_id += 1
+	dropped_items[id] = {"item": item, "position": position}
+	save_collection()
+	collection_changed.emit()
+	return id
+
+
+func recover_drop(id: String) -> bool:
+	if not dropped_items.has(id) or inventory_used() >= inventory_capacity():
+		return false
+	var item := str(dropped_items[id].get("item", ""))
+	if item == "Potion":
+		potions += 1
+	elif WISH_ITEMS.has(item):
+		collectibles[item] = int(collectibles.get(item, 0)) + 1
+	else:
+		return false
+	dropped_items.erase(id)
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func buy_potion() -> bool:
+	if coins < 25 or inventory_used() >= inventory_capacity():
+		return false
+	coins -= 25
+	potions += 1
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func use_potion() -> bool:
+	if potions <= 0 or current_hp() >= max_hp():
+		return false
+	potions -= 1
+	heal(300.0)
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func upgrade_character(index: int) -> bool:
+	if index < 0 or index >= PARTY.size() or character_levels[index] >= 10:
+		return false
+	var cost := character_levels[index] * 50
+	if coins < cost:
+		return false
+	coins -= cost
+	character_levels[index] += 1
+	save_collection()
+	collection_changed.emit()
+	stats_changed.emit()
+	return true
+
+
+func make_wish() -> String:
+	if starlight < 30 or inventory_used() >= inventory_capacity():
+		return ""
+	starlight -= 30
+	var item: String = WISH_ITEMS[randi_range(0, WISH_ITEMS.size() - 1)]
+	collectibles[item] = int(collectibles.get(item, 0)) + 1
+	wish_count += 1
+	save_collection()
+	collection_changed.emit()
+	return item
+
+
+func _setup_settings() -> void:
+	for bus in ["Ambience", "SFX"]:
+		if AudioServer.get_bus_index(bus) < 0:
+			AudioServer.add_bus()
+			AudioServer.set_bus_name(AudioServer.bus_count - 1, bus)
+			AudioServer.set_bus_send(AudioServer.bus_count - 1, "Master")
+	for action in REBIND_ACTIONS:
+		for event in InputMap.action_get_events(action):
+			if event is InputEventKey:
+				_default_keys[action] = event.physical_keycode
+				break
+	var cfg := ConfigFile.new()
+	if cfg.load("user://settings.cfg") != OK:
+		return
+	for bus in ["Master", "Ambience", "SFX"]:
+		set_bus_level(bus, float(cfg.get_value("audio", bus, 1.0)), false)
+	camera_sensitivity = clampf(float(cfg.get_value("controls", "sensitivity", 1.0)), 0.25, 2.0)
+	for action in REBIND_ACTIONS:
+		var key := int(cfg.get_value("keys", action, 0))
+		if key > 0:
+			_apply_key(action, key)
+
+
+func set_bus_level(bus: String, value: float, persist: bool = true) -> void:
+	if not ["Master", "Ambience", "SFX"].has(bus):
+		return
+	var index := AudioServer.get_bus_index(bus)
+	if index < 0:
+		return
+	AudioServer.set_bus_volume_db(index, linear_to_db(clampf(value, 0.0, 1.0)))
+	AudioServer.set_bus_mute(index, value <= 0.001)
+	if persist:
+		save_settings()
+
+
+func set_sensitivity(value: float) -> void:
+	camera_sensitivity = clampf(value, 0.25, 2.0)
+	save_settings()
+
+
+func key_for_action(action: String) -> int:
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey:
+			return int(event.physical_keycode)
+	return 0
+
+
+func rebind_action(action: String, key: int) -> bool:
+	if not REBIND_ACTIONS.has(action) or key <= 0 or key in [KEY_ESCAPE, KEY_J, KEY_F3]:
+		return false
+	for other in REBIND_ACTIONS:
+		if other != action and key_for_action(other) == key:
+			return false
+	_apply_key(action, key)
+	save_settings()
+	return true
+
+
+func _apply_key(action: String, key: int) -> void:
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey:
+			InputMap.action_erase_event(action, event)
+	var binding := InputEventKey.new()
+	binding.physical_keycode = key as Key
+	InputMap.action_add_event(action, binding)
+
+
+func reset_keys() -> void:
+	for action in REBIND_ACTIONS:
+		if _default_keys.has(action):
+			_apply_key(action, int(_default_keys[action]))
+	save_settings()
+
+
+func save_settings() -> void:
+	var cfg := ConfigFile.new()
+	for bus in ["Master", "Ambience", "SFX"]:
+		var index := AudioServer.get_bus_index(bus)
+		if index >= 0:
+			cfg.set_value("audio", bus, 0.0 if AudioServer.is_bus_mute(index) else db_to_linear(AudioServer.get_bus_volume_db(index)))
+	cfg.set_value("controls", "sensitivity", camera_sensitivity)
+	for action in REBIND_ACTIONS:
+		cfg.set_value("keys", action, key_for_action(action))
+	if cfg.save("user://settings.cfg") != OK:
+		push_warning("LastStar: could not save settings")
 
 
 func quality_name() -> String:
@@ -369,6 +759,7 @@ func boot_direct() -> void:
 	## Called by the world when it is the very first scene (the Android app
 	## opens straight into gameplay, no title screen).
 	reset_run()
+	load_collection()
 	pending_unpause = true
 
 

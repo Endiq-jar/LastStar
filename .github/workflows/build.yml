@@ -223,6 +223,11 @@ jobs:
           tail -25 /tmp/structure.log | while IFS= read -r line; do
             echo "::notice::$line"
           done
+          # Culling and cost numbers, surfaced as their own annotations: they
+          # are measurements, and the annotation channel is the only part of a
+          # step log that is reliably readable from a review context.
+          grep -E "^PROBE_INFO: (ENTITY_CULL|PERF census)" /tmp/structure.log | head -4 \
+            | while IFS= read -r line; do echo "::notice title=measurement::$line"; done || true
           grep -E "^PROBE_" /tmp/structure.log || {
             # The probe scene itself failed to load or compile. Surface the
             # reason here instead of "produced no result", which says nothing
@@ -298,7 +303,7 @@ jobs:
           # validate a renderer our players never run.
           set +e
           timeout -k 10 240 xvfb-run -a --server-args="-screen 0 1280x720x24" \
-            /opt/godot/godot --path . --rendering-method gl_compatibility \
+            /opt/godot/godot --path . --audio-driver Dummy --rendering-method gl_compatibility \
             --rendering-driver opengl3 --resolution 1280x720 \
             res://tests/render_probe.tscn -- --out=/tmp/probe \
             > /tmp/probe.log 2>&1
@@ -360,7 +365,7 @@ jobs:
               echo "::error title=in-game::$line"
             done
             tail -25 /tmp/probe.log
-            echo "::error::Render probe FAILED - the 3D view is not drawing (see the render-probe artifact)"
+            echo "::error::Render probe FAILED - see the individual PROBE_FAIL messages and render-probe artifact"
             exit 1
           fi
           echo "Render probe passed."
@@ -401,7 +406,7 @@ jobs:
           # Annotations are capped at ~24 per check run, so only the lines that
           # actually diagnose something are emitted. The full log is uploaded as
           # an artifact for anything else.
-          grep -E "PROBE_(FAIL|WARN)|alt view|side view|TOON_MAT|PLAYER_TREE|PLAYER_MESHES|PART |MESH_Y|character is|player chest" \
+          grep -E "PROBE_(FAIL|WARN)|ENTITY_CULL|alt view|side view|TOON_MAT|PLAYER_TREE|PLAYER_MESHES|PART |MESH_Y|character is|player chest" \
             /tmp/probe.log | head -14 \
             | while IFS= read -r line; do echo "::notice title=probe::$line"; done
           grep -E "PROBE_INFO: (size=|alt view)" /tmp/probe.log | \
@@ -439,6 +444,11 @@ jobs:
           cp /tmp/probe/world.png /tmp/shots_out/world.png 2>/dev/null || true
           cp /tmp/probe/world_alt.png /tmp/shots_out/world_alt.png 2>/dev/null || true
           cp /tmp/probe/world_wide.png /tmp/shots_out/world_wide.png 2>/dev/null || true
+          cp /tmp/probe/title.png /tmp/shots_out/title.png 2>/dev/null || true
+          cp /tmp/probe/pause.png /tmp/shots_out/pause.png 2>/dev/null || true
+          cp /tmp/probe/adventure.png /tmp/shots_out/adventure.png 2>/dev/null || true
+          # Publish all UI states captured by the probe, including scrolled pages.
+          cp /tmp/probe/home_*.png /tmp/probe/game_*.png /tmp/probe/spell_*.png /tmp/probe/performance.png /tmp/probe/touch_controls_simulated.png /tmp/probe/victory.png /tmp/probe/equipped_backpack.png /tmp/shots_out/ 2>/dev/null || true
           cp /tmp/probe/world_side.png /tmp/shots_out/world_side.png 2>/dev/null || true
           cp /tmp/probe/player.png /tmp/shots_out/player.png 2>/dev/null || true
           cp /tmp/probe/player_flat.png /tmp/shots_out/player_flat.png 2>/dev/null || true

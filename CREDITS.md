@@ -44,6 +44,27 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Third-party art assets
+
+The game is otherwise procedural (terrain, characters, VFX and UI are generated
+in code), with the exceptions listed below:
+
+* **Nature models** — *Ultimate Stylized Nature Pack* by
+  **[Quaternius](https://quaternius.com)**, CC0-1.0 (public domain). Twenty-one
+  `.glb` files in `assets/nature/` are the valley's entire environment: seven
+  tree species, grass, bushes, plants, flowers, four rocks, a fallen log and a
+  stump. They replace the painted pngs that used to carry the vegetation.
+  Per-file source paths and sizes are in
+  [`assets/nature/README.md`](assets/nature/README.md).
+* **Bone cloth models** — *Modular Dungeons Pack*, *Modular Dungeon Pack* and
+  *Ultimate House Interior Pack* by **[Quaternius](https://quaternius.com)**,
+  CC0-1.0 (public domain). Six `.glb` files in `assets/cloth/` provide the cloth
+  banners, drape, carpet, bones and skull used to dress the ruin gates, camp
+  shelters, spawn altar, waypoints and the player's charms. Per-file source URLs
+  and the exact upstream paths are in [`assets/cloth/README.md`](assets/cloth/README.md).
+  CC0 requires no attribution; it is recorded here because a binary in the tree
+  should never have an unknown origin.
+
 ## Engine & tooling
 
 * **Godot Engine 4.3** — MIT License, © Godot Engine contributors.
@@ -55,4 +76,10 @@ SOFTWARE.
 *Genshin Impact* is a trademark of HoYoverse / miHoYo. LastStar is an independent,
 fan-inspired project. It ships **no** HoYoverse assets (no models, textures, audio, story text
 or data of any kind) and is not affiliated with or endorsed by HoYoverse.
-All characters (Sora, Ember, Volt) and all art are original and procedurally generated.
+All characters (Sora, Ember, Volt) are original. The title illustration is AI-generated; third-party CC0 assets are credited above.
+
+## Title artwork
+
+`assets/ui/celestial_title.webp` is an AI-generated illustration created for
+LastStar's title screen. It is a decorative background, not a depiction of a
+playable location currently in the game.

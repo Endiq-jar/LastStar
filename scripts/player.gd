@@ -112,6 +112,7 @@ func _ready() -> void:
 	Game.respawned.connect(_on_respawn)
 	Game.spell_cast.connect(_on_spell_cast)
 	Game.character_changed.connect(_on_character_changed)
+	Game.collection_changed.connect(_update_equipment)
 	Game.game_won.connect(_on_game_won)
 	if not Game.is_mobile():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -120,7 +121,9 @@ func _ready() -> void:
 
 func _make_wander() -> void:
 	wander = Wander.new()
+	wander.restore(Game.wander_levels, Game.wander_slots)
 	Game.wander = wander
+	wander.progress_changed.connect(Game.save_wander)
 
 
 func _build_rig() -> void:
@@ -254,7 +257,9 @@ func _build_camera() -> void:
 	# cropping the landscape.
 	_camera.fov = 54.0
 	_camera.near = 0.05
-	_camera.far = 900.0
+	# Long enough to see the far ridge (3.2 km) and the far shell behind it. The
+	# streamed tiles only reach 4.7 km, so this is where the world stops anyway.
+	_camera.far = 4200.0
 	_camera.current = true
 	_spring.add_child(_camera)
 
@@ -403,6 +408,12 @@ func _apply_rig_colors() -> void:
 	element_id = int(data["element_id"])
 
 
+func _update_equipment() -> void:
+	var pack := _rig_part("backpack")
+	if pack != null:
+		pack.visible = Game.equipped_backpack > 0
+
+
 func _on_character_changed(_index: int) -> void:
 	_apply_rig_colors()
 
@@ -499,8 +510,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
 		if drag.position.x > get_viewport().get_visible_rect().size.x * 0.40:
-			_target_yaw -= drag.relative.x * MOUSE_SENS * STICK_SENS
-			_target_pitch -= drag.relative.y * MOUSE_SENS * STICK_SENS
+			_target_yaw -= drag.relative.x * MOUSE_SENS * STICK_SENS * Game.camera_sensitivity
+			_target_pitch -= drag.relative.y * MOUSE_SENS * STICK_SENS * Game.camera_sensitivity
 			_target_pitch = clampf(_target_pitch, -1.15, 0.62)
 
 
@@ -509,18 +520,43 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		_target_yaw -= event.relative.x * MOUSE_SENS
-		_target_pitch -= event.relative.y * MOUSE_SENS
+		_target_yaw -= event.relative.x * MOUSE_SENS * Game.camera_sensitivity
+		_target_pitch -= event.relative.y * MOUSE_SENS * Game.camera_sensitivity
 		_target_pitch = clampf(_target_pitch, -1.15, 0.62)
 
 	if event.is_action_pressed("party_next"):
 		Game.next_character()
-	if event.is_action_pressed("attack"):
-		_do_attack()
+	if _is_world_attack_input(event):
+		combat_action("attack")
 	if event.is_action_pressed("skill"):
-		_do_skill()
+		combat_action("skill")
 	if event.is_action_pressed("burst"):
-		_do_burst()
+		combat_action("burst")
+
+
+func _is_world_attack_input(event: InputEvent) -> bool:
+	# Godot converts a finger tap into a left mouse click for the UI. That
+	# synthetic click must not also trigger a world attack on every touch.
+	if event is InputEventMouseButton and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return false
+	return event.is_action_pressed("attack")
+
+
+func combat_action(action: String) -> void:
+	if Game.is_paused or Game.has_won:
+		return
+	match action:
+		"attack":
+			if _gliding:
+				_gliding = false
+				_diving = true
+				velocity.y = -30.0
+			else:
+				_do_attack()
+		"skill":
+			_do_skill()
+		"burst":
+			_do_burst()
 
 
 func _physics_process(delta: float) -> void:
@@ -576,12 +612,6 @@ func _physics_process(delta: float) -> void:
 	# Hold jump in the air to open the wings.
 	if not on_floor and not _gliding and Input.is_action_pressed("jump") and velocity.y < -3.0 and not _double_jump_used:
 		_gliding = true
-
-	# Plunge: attack while falling from a glide.
-	if _gliding and Input.is_action_just_pressed("attack"):
-		_gliding = false
-		_diving = true
-		velocity.y = -30.0
 
 	if _diving and on_floor:
 		_diving = false
@@ -651,6 +681,19 @@ func _update_animation(delta: float, speed: float, on_floor: bool, sprinting: bo
 	var leg_r := _rig_part("leg_r")
 	var torso := _rig_part("torso")
 	var wings := _rig_part("wings")
+	# Cheap joint-like secondary motion on hanging cloth and backpack. This is
+	# intentionally not a collision-based cloth simulation.
+	var follow := 1.0 - exp(-7.0 * delta)
+	var swing_target := clampf(speed * 0.045 + absf(velocity.y) * 0.012, 0.0, 0.45)
+	var cape_root := _rig_part("cape_root")
+	if cape_root != null:
+		cape_root.rotation.x = lerpf(cape_root.rotation.x, -swing_target, follow)
+	var pack := _rig_part("backpack")
+	if pack != null:
+		pack.rotation.x = lerpf(pack.rotation.x, -swing_target * 0.35, follow)
+	for panel in rig.get("cloth_panels", []):
+		if is_instance_valid(panel):
+			panel.rotation.x = lerpf(panel.rotation.x, swing_target * 0.35, follow)
 
 	if torso == null or arm_l == null or arm_r == null or leg_l == null or leg_r == null:
 		return
@@ -824,6 +867,12 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 
 	FX.element_burst(get_parent(), origin + forward * 1.4, color, element)
 	FX.ring_burst(get_parent(), origin, color, 1.4)
+
+	# Defensive mastery produces an actual damage-absorbing shield.
+	if id == "stone_bulwark":
+		Game.shield_points = maxf(Game.shield_points, 120.0 * mastery)
+		Game.toast.emit("Stone Bulwark: %.0f shield" % Game.shield_points)
+		return
 
 	# Spatial spells relocate the caster instead of dealing damage.
 	if id == "tide_step":

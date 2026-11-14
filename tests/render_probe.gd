@@ -23,6 +23,23 @@ var _transcript := PackedStringArray()
 var _out_dir := ""
 
 
+## Exclusive upper bound for `for i in range(lo, _sample_end(n, step), step)`.
+##
+## Every sampling loop in this file picks a stride as a fraction of the image
+## (`w / 200`) and then walks `range(0, w, step)`. The stride almost never divides
+## the dimension, so the last iteration lands at or past the edge and the
+## following get_pixel() is a hard error - Image.get_pixel does not clamp, and an
+## out-of-range read takes the whole probe down. That is not hypothetical: the
+## grass diagnostic in scripts/grass_field.gd read row 248 of a 226 px card and
+## failed the boot step.
+##
+## Walking back to the last index the stride actually reaches keeps the sample
+## count identical and stops losing a whole probe to a rounding error.
+func _sample_end(n: int, step: int) -> int:
+	step = maxi(1, step)
+	return maxi(0, n - (n % step))
+
+
 func _log(kind: String, msg: String) -> void:
 	var line := "PROBE_%s: %s" % [kind, msg]
 	print(line)
@@ -69,6 +86,7 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	_out_dir = out_dir
 
+	_test_white_blob_detection()
 	print("PROBE_BEGIN godot=%s renderer=%s driver=%s" % [
 		Engine.get_version_info().string,
 		ProjectSettings.get_setting("rendering/renderer/rendering_method"),
@@ -87,6 +105,13 @@ func _run() -> void:
 	var world := packed.instantiate()
 	get_tree().root.add_child(world)
 
+	# Calling the tuner before sampling must not disable the later measurement.
+	world.call("_autotune_performance")
+	if bool(world.get("_perf_done")):
+		_log("FAIL", "performance tuner stopped before collecting frames")
+	else:
+		_log("INFO", "performance tuner waits for frame samples")
+
 	# Let _ready() chains, vegetation (one frame await) and tweens settle.
 	# Bounded by a wall-clock guard as well as a frame count: `process_frame`
 	# stops arriving if the main loop is blocked, which would hang the job.
@@ -102,6 +127,21 @@ func _run() -> void:
 	await get_tree().create_timer(0.6).timeout
 	for i in range(15):
 		await get_tree().process_frame
+
+	# Resolution controller must reduce load when slow, recover when fast, and
+	# leave High alone. This tests its hysteresis without depending on CI FPS.
+	var slow: float = world.call("_next_dynamic_scale", 0, 0.9, 0.05)
+	var fast: float = world.call("_next_dynamic_scale", 0, 0.8, 0.02)
+	var stable: float = world.call("_next_dynamic_scale", 0, 0.8, 0.033)
+	var high: float = world.call("_next_dynamic_scale", 2, 1.0, 0.05)
+	_log("INFO" if is_equal_approx(slow, 0.85) and is_equal_approx(fast, 0.85) and is_equal_approx(stable, 0.8) and is_equal_approx(high, 1.0) else "FAIL",
+		"dynamic resolution slow=%.2f fast=%.2f stable=%.2f high=%.2f" % [slow, fast, stable, high])
+	var monitor := world.get_node_or_null("HUD/PerformanceMonitor")
+	if monitor == null:
+		_log("FAIL", "performance monitor missing")
+	else:
+		monitor.call("_refresh_text", 0.016)
+		_log("INFO", "performance monitor metrics available")
 
 	# --- structural checks ------------------------------------------------
 	var cam := get_viewport().get_camera_3d()
@@ -119,6 +159,16 @@ func _run() -> void:
 			RenderingServer.get_video_adapter_name(), runtime_method])
 
 	var players := get_tree().get_nodes_in_group("player")
+	if players.size() == 1:
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = true
+		click.device = InputEvent.DEVICE_ID_EMULATION
+		var emulated: bool = players[0].call("_is_world_attack_input", click)
+		click.device = 0
+		var physical: bool = players[0].call("_is_world_attack_input", click)
+		_log("INFO" if not emulated and physical else "FAIL",
+			"attack input: touch-emulated=%s physical-mouse=%s" % [str(emulated), str(physical)])
 	_log("INFO" if players.size() == 1 else "FAIL",
 		"player nodes in group = %d" % players.size())
 	# Measure the sole-to-ground gap HERE, immediately, because the annotation
@@ -164,9 +214,10 @@ func _run() -> void:
 	var tmesh: MeshInstance3D = null
 	var terrain_node := world.get_node_or_null("Terrain")
 	if terrain_node != null:
-		for c in terrain_node.get_children():
-			if c is MeshInstance3D and (c as MeshInstance3D).mesh != null:
-				tmesh = c as MeshInstance3D
+		for c in terrain_node.find_children("*", "MeshInstance3D", true, false):
+			var tmi2 := c as MeshInstance3D
+			if tmi2.mesh != null and tmi2.name.begins_with("Near"):
+				tmesh = tmi2
 				break
 	if tmesh == null or tmesh.mesh == null:
 		_log("FAIL", "Terrain has no mesh tile - nothing to look at")
@@ -174,18 +225,21 @@ func _run() -> void:
 		var arr := tmesh.mesh.surface_get_arrays(0)
 		var normals: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
 		var checked := 0
-		var up := 0
+		var down := 0
 		var step_i := maxi(1, normals.size() / 400)
 		for i in range(0, normals.size(), step_i):
 			checked += 1
-			if normals[i].y > 0.0:
-				up += 1
+			# A skirt is a wall hanging off the tile edge, so its normal is
+			# horizontal by design. The question here is only whether the ground
+			# is inside out, which is a normal pointing *down*.
+			if normals[i].y < -0.01:
+				down += 1
 		if checked == 0:
 			_log("FAIL", "terrain mesh has no normals")
 		else:
-			var pct := float(up) / float(checked) * 100.0
-			_log("INFO" if pct > 99.0 else "FAIL",
-				"terrain normals face up: %.1f%% of %d sampled" % [pct, checked])
+			var pct := float(down) / float(checked) * 100.0
+			_log("INFO" if pct < 1.0 else "FAIL",
+				"terrain normals face up: %.1f%% of %d sampled point down" % [pct, checked])
 
 	# --- is the character actually on screen? -------------------------------
 	# Run early, deliberately: the annotation API returns only the first ~24
@@ -209,6 +263,17 @@ func _run() -> void:
 	if cam:
 		_dump_frustum(cam, world)
 
+	# --- async entity occlusion culling ------------------------------------
+	# Pure CPU, so this gates headlessly too - and it has to, because the
+	# structural probe is the job that always runs.
+	await _check_entity_culling(world)
+
+	# --- bone cloth --------------------------------------------------------
+	_check_bone_cloth(world)
+
+	# --- nature pack -------------------------------------------------------
+	_check_nature_pack(world)
+
 	# Compact one-liner so the grass totals survive the annotation cap: the API
 	# returns only the first ~24 annotations, and the detailed grass report runs
 	# later in the log than that.
@@ -216,6 +281,22 @@ func _run() -> void:
 	if gf != null:
 		_log("INFO", "GRASS_SUMMARY blades=%d chunks=%d diag=%s" % [
 			gf.call("blade_count"), gf.call("chunk_count"), str(gf.call("diagnostics"))])
+		# The card's alpha is what cuts the blade shape out of the quad. If it is
+		# missing the meadow draws as plain green rectangles, which looks like a
+		# shader bug but is a texture-import one.
+		#
+		# This line printed `PROBE_INFO: GRASS_CARD ` - with nothing after it -
+		# on every build, and an empty diagnostic is worse than none: it looks
+		# like the card was checked and passed. Rather than guess why, the three
+		# ways it can be blank are now told apart and two of them are failures.
+		if not gf.has_method("card_report"):
+			_log("FAIL", "GrassField has no card_report() - the card was never checked")
+		else:
+			var report: String = str(gf.call("card_report"))
+			if report.is_empty():
+				_log("FAIL", "card_report() returned an empty string - the card was not reported")
+			else:
+				_log("INFO", "GRASS_CARD %s" % report)
 
 	# --- environment dressing ----------------------------------------------
 	# Logs and pebbles are what stop the grass reading as a flat painted
@@ -244,8 +325,8 @@ func _run() -> void:
 		_log("INFO", "scatter: %d log batch(es), %d pebbles" % [log_nodes.size(), peb_n])
 
 	# --- terrain textures ---------------------------------------------------
-	for tex_name in ["meadow", "rock", "sand", "macro"]:
-		var path := "res://textures/terrain/%s.png" % tex_name
+	for tex_name in ["meadow", "rock", "sand", "macro", "path"]:
+		var path := "res://textures/terrain/%s.webp" % tex_name
 		_log("INFO" if ResourceLoader.exists(path) else "FAIL",
 			"terrain texture %s %s" % [tex_name, "loaded" if ResourceLoader.exists(path) else "MISSING"])
 
@@ -276,10 +357,41 @@ func _run() -> void:
 		_log("INFO", "grass chunks populated=%d/%d, largest=%d" % [
 			populated, chunks, nearest])
 		_log("INFO", "grass diagnostics: %s" % str(grass.call("diagnostics")))
-		# Density gate: the meadow must actually be a meadow. A slope/height
-		# bug once cut this to 5% of intent and nothing noticed.
-		if blades < 30000:
-			_log("FAIL", "grass is far too sparse (%d blades, expected >30000)" % blades)
+		# Simulate a far batch becoming near after travel. It must be removed
+		# and queued again rather than remaining permanently sparse.
+		var live_chunks: Dictionary = grass.get("_chunks")
+		var center: Vector2i = grass.get("_last_center")
+		var checked_tier := false
+		for key in live_chunks.keys():
+			if int(grass.call("_tier_for_chunk", key, center)) == 0:
+				var chunk: Node = live_chunks[key]
+				chunk.set_meta("grass_tier", 2)
+				grass.call("_queue_around", center)
+				checked_tier = not live_chunks.has(key)
+				break
+		_log("INFO" if checked_tier else "FAIL", "grass density upgrades when a far chunk becomes near: %s" % str(checked_tier))
+		# A quality change must retire the old dense batches rather than merely
+		# changing the budget for future chunks. Restore the original setting
+		# afterwards; subsequent frames stream the ring back in.
+		var old_density: float = float(grass.get("_density"))
+		grass.call("set_density_scale", 0.2 if old_density > 0.3 else 0.65)
+		if int(grass.call("chunk_count")) != 0:
+			_log("FAIL", "grass quality change left old chunks alive")
+		else:
+			_log("INFO", "grass quality change queues a fresh density")
+		grass.call("set_density_scale", old_density)
+		for i in range(45):
+			await get_tree().process_frame
+
+		# Density gate: the meadow must actually be a meadow. A slope/height bug
+		# once cut this to 5% of intent and nothing noticed.
+		#
+		# Performance mode deliberately builds fewer cards, and the ring is
+		# streamed over multiple frames rather than generated in one startup hitch.
+		if blades < 2000:
+			_log("FAIL", "grass is far too sparse (%d cards near the player, expected >2000)" % blades)
+
+	_check_world_scale(world)
 
 	# --- spellbook / spell wheel -------------------------------------------
 	var w: Wander = Game.wander
@@ -371,8 +483,16 @@ func _run() -> void:
 		_log("INFO", "environment bg_mode=%d ambient=%d glow=%s fog=%s" % [
 			env.background_mode, env.ambient_light_source,
 			str(env.glow_enabled), str(env.fog_enabled)])
+		_log("INFO" if env.adjustment_enabled and env.adjustment_saturation >= 1.29 and env.adjustment_brightness >= 1.07 else "FAIL",
+			"vivid grade: saturation=%.2f brightness=%.2f exposure=%.2f" % [
+				env.adjustment_saturation, env.adjustment_brightness, env.tonemap_exposure])
 
 	var terrain := world.get_node_or_null("Terrain")
+	if terrain != null and terrain.has_method("is_path"):
+		var path_ok := bool(terrain.call("is_path", 18.0, 0.0)) and not bool(terrain.call("is_path", 30.0, 0.0))
+		_log("INFO" if path_ok else "FAIL", "yellow path placement matches the meadow clearing: %s" % str(path_ok))
+	else:
+		_log("FAIL", "terrain path placement missing")
 	var meshes := 0
 	if terrain:
 		meshes = terrain.find_children("*", "MeshInstance3D", true, false).size()
@@ -384,11 +504,183 @@ func _run() -> void:
 			"sun visible=%s energy=%.2f rot=%s" % [
 				str(sun.visible), sun.light_energy, str(sun.rotation_degrees)])
 
+	# Pause menu controls and overlay must still work after restyling.
+	var hud := world.get_node_or_null("HUD")
+	if hud == null:
+		_log("FAIL", "HUD missing")
+	else:
+		hud.call("_pause")
+		var dimmer := hud.get_node_or_null("Root/PauseDimmer") as ColorRect
+		var paused_ok := Game.is_paused and dimmer != null and dimmer.visible
+		hud.call("_resume")
+		_log("INFO" if paused_ok and not Game.is_paused and dimmer != null and not dimmer.visible else "FAIL",
+			"celestial pause overlay and resume: %s" % str(paused_ok and not Game.is_paused))
+
+	# Exercise all offline screens and the transaction/save boundaries.
+	var menu := world.get_node_or_null("HUD/Root/AdventureMenu")
+	if menu == null:
+		_log("FAIL", "adventure menu missing")
+	else:
+		menu.call("open_menu", "Character")
+		var screens_ok: bool = menu.visible and Game.is_paused
+		for page in ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story"]:
+			menu.call("_select", page)
+			var body: VBoxContainer = menu.get("_body")
+			if body == null or body.get_child_count() == 0:
+				screens_ok = false
+		menu.call("close_menu")
+		_log("INFO" if screens_ok and not Game.is_paused else "FAIL", "offline adventure screens and close: %s" % str(screens_ok))
+	var old_coins := Game.coins
+	var old_starlight := Game.starlight
+	var old_potions := Game.potions
+	var old_levels := Game.character_levels.duplicate()
+	var old_items := Game.collectibles.duplicate(true)
+	var old_wishes := Game.wish_count
+	var old_packs := Game.owned_backpacks.duplicate()
+	var old_equipped := Game.equipped_backpack
+	Game.owned_backpacks = [0]
+	Game.equipped_backpack = 0
+	Game.potions = 2
+	Game.collectibles = {}
+	Game.coins = 100
+	Game.starlight = 30
+	Game.character_levels[0] = 1
+	var shop_ok := Game.buy_potion() and Game.coins == 75
+	var level_ok := Game.upgrade_character(0) and Game.coins == 25 and Game.character_levels[0] == 2
+	var item := Game.make_wish()
+	var wish_ok := item != "" and Game.starlight == 0
+	Game.coins = 0
+	Game.load_collection()
+	var save_ok := Game.coins == 25 and Game.character_levels[0] == 2
+	Game.potions = 10
+	Game.collectibles = {}
+	Game.coins = 500
+	Game.starlight = 30
+	var full_ok := Game.inventory_capacity() == 10 and not Game.buy_potion() and Game.make_wish() == "" and Game.coins == 500 and Game.starlight == 30
+	var pack_ok := Game.buy_backpack(1) and Game.equip_backpack(1) and Game.inventory_capacity() == 15 and Game.buy_potion() and not Game.equip_backpack(0)
+	Game.save_collection()
+	Game.equipped_backpack = 0
+	Game.owned_backpacks = [0]
+	Game.load_collection()
+	pack_ok = pack_ok and Game.equipped_backpack == 1 and Game.owned_backpacks.has(1) and Game.inventory_used() == 11
+	_log("INFO" if full_ok and pack_ok else "FAIL", "inventory capacity and backpack persistence: full=%s pack=%s" % [str(full_ok), str(pack_ok)])
+	Game.owned_backpacks.assign(old_packs)
+	Game.equipped_backpack = old_equipped
+	Game.coins = old_coins
+	Game.starlight = old_starlight
+	Game.potions = old_potions
+	for i in range(Game.character_levels.size()):
+		Game.character_levels[i] = old_levels[i]
+	Game.collectibles = old_items
+	Game.wish_count = old_wishes
+	Game.save_collection()
+	_log("INFO" if shop_ok and level_ok and wish_ok and save_ok else "FAIL",
+		"offline transactions: shop=%s level=%s wish=%s save=%s" % [str(shop_ok), str(level_ok), str(wish_ok), str(save_ok)])
+
+	# Story progress and dropped items must survive reloading without duplicating
+	# sigil rewards, or discarding items when the inventory is full.
+	var saved_sigils := Game.sigils_seen.duplicate(true)
+	var saved_count := Game.sigils_collected
+	var saved_slimes := Game.slimes_defeated
+	var saved_waypoints := Game.waypoints_seen.duplicate(true)
+	var saved_waypoint_count := Game.waypoints_activated
+	var saved_checkpoint := Game.checkpoint
+	var saved_has_checkpoint := Game.has_checkpoint
+	var saved_waypoint_name := Game.last_waypoint_name
+	var saved_complete := Game.story_complete
+	var saved_drops := Game.dropped_items.duplicate(true)
+	var saved_next_drop := Game.next_drop_id
+	Game.sigils_seen = {}
+	Game.sigils_collected = 0
+	Game.slimes_defeated = 3
+	Game.waypoints_seen = {"Probe waypoint": true}
+	Game.waypoints_activated = 1
+	Game.has_checkpoint = true
+	Game.checkpoint = Vector3(10, 20, 30)
+	Game.last_waypoint_name = "Probe waypoint"
+	Game.story_complete = false
+	Game.collect_sigil("probe_sigil")
+	var reward_coins := Game.coins
+	Game.collect_sigil("probe_sigil")
+	var no_duplicate := Game.sigils_collected == 1 and Game.coins == reward_coins
+	Game.potions = 2
+	Game.collectibles = {}
+	Game.dropped_items = {}
+	var drop_id: String = Game.drop_item("Potion", Vector3(3, 2, 1))
+	Game.sigils_seen = {}
+	Game.slimes_defeated = 0
+	Game.waypoints_seen = {}
+	Game.dropped_items = {}
+	Game.load_collection()
+	var story_ok := Game.sigils_seen.has("probe_sigil") and Game.sigils_collected == 1 and Game.slimes_defeated == 3 and Game.waypoints_seen.has("Probe waypoint") and Game.checkpoint == Vector3(10, 20, 30)
+	var drop_ok := drop_id != "" and Game.dropped_items.has(drop_id) and Game.recover_drop(drop_id) and Game.potions == 2
+	Game.sigils_seen = saved_sigils
+	Game.sigils_collected = saved_count
+	Game.slimes_defeated = saved_slimes
+	Game.waypoints_seen = saved_waypoints
+	Game.waypoints_activated = saved_waypoint_count
+	Game.checkpoint = saved_checkpoint
+	Game.has_checkpoint = saved_has_checkpoint
+	Game.last_waypoint_name = saved_waypoint_name
+	Game.story_complete = saved_complete
+	Game.dropped_items = saved_drops
+	Game.next_drop_id = saved_next_drop
+	Game.coins = old_coins
+	Game.starlight = old_starlight
+	Game.potions = old_potions
+	Game.collectibles = old_items
+	Game.save_collection()
+	Game.sigils_changed.emit(Game.sigils_collected, Game.TOTAL_SIGILS)
+	Game.call("_refresh_quest")
+	_log("INFO" if story_ok and no_duplicate and drop_ok else "FAIL", "story persistence=%s duplicate prevention=%s drop recovery=%s" % [str(story_ok), str(no_duplicate), str(drop_ok)])
+	var old_jump: int = Game.key_for_action("jump")
+	var settings_ok := Game.rebind_action("jump", KEY_K) and Game.key_for_action("jump") == KEY_K and not Game.rebind_action("move_forward", KEY_K) and Game.rebind_action("jump", old_jump)
+	_log("INFO" if settings_ok else "FAIL", "key remapping and conflict prevention: %s" % str(settings_ok))
+
+	# Quest choice, one-time reward and Wander progression survive reload.
+	var guard_before := Game.guard_story.duplicate(true)
+	var wander_before := Game.wander.levels.duplicate(true)
+	var slots_before := Game.wander.slots.duplicate()
+	var progress_before := Game.wander_levels.duplicate(true)
+	var saved_slots_before := Game.wander_slots.duplicate()
+	var sigil_count_before := Game.sigils_collected
+	Game.guard_story = {}
+	Game.sigils_collected = 0
+	var accepted: bool = Game.guard_accept("seal", "curiosity")
+	var gated: bool = not Game.guard_complete("seal")
+	Game.sigils_collected = 1
+	var rewarded: bool = Game.guard_complete("seal") and Game.wander.known("stone_bulwark")
+	var once: bool = not Game.guard_complete("seal")
+	Game.wander.set_slot(2, "stone_bulwark")
+	Game.wander.begin_cast("stone_bulwark")
+	Game.load_collection()
+	var old_hp := Game.current_hp()
+	Game.shield_points = 100.0
+	Game.damage(35.0)
+	var shield_ok := Game.current_hp() == old_hp and is_equal_approx(Game.shield_points, 65.0)
+	Game.shield_points = 0.0
+	_log("INFO" if shield_ok else "FAIL", "stone shield absorbs damage: %s" % str(shield_ok))
+	var restored_wander := Wander.new()
+	restored_wander.restore(Game.wander_levels, Game.wander_slots)
+	var persist_wander: bool = restored_wander.known("stone_bulwark") and restored_wander.equipped_at(2) == "stone_bulwark" and int(restored_wander.levels.get("stone_bulwark_xp", 0)) == 1
+	var persist_choice: bool = Game.guard_story.get("answer", "") == "curiosity" and bool(Game.guard_story.get("seal_done", false))
+	_log("INFO" if accepted and gated and rewarded and once and persist_wander and persist_choice else "FAIL", "quest dialogue, one-time reward, Wander persistence: %s" % str(accepted and gated and rewarded and once and persist_wander and persist_choice))
+	Game.guard_story = guard_before
+	Game.wander.levels = wander_before
+	Game.wander.slots.assign(slots_before)
+	Game.wander_levels = progress_before
+	Game.wander_slots = saved_slots_before
+	Game.sigils_collected = sigil_count_before
+	Game.save_collection()
+	Game.sigils_changed.emit(Game.sigils_collected, Game.TOTAL_SIGILS)
+	Game.call("_refresh_quest")
+
 	# --- pixel checks -----------------------------------------------------
 	# A headless run has no framebuffer, so this only reports on a real device /
 	# xvfb run. That is fine: the structural checks above still gate CI.
 	if DisplayServer.get_name() == "headless":
 		_log("INFO", "headless server - skipping pixel capture")
+		await _check_title_screen(world, out_dir, false)
 		_finish(_fail)
 		return
 
@@ -407,6 +699,69 @@ func _run() -> void:
 		_finish(_fail)
 		return
 	img.save_png(out_dir.path_join("world.png"))
+	# Equip a real backpack and render a rear close-up to verify it is attached
+	# to the character. Restore the collection after the screenshot.
+	var equipment_player := world.get_node_or_null("Player") as Node3D
+	if equipment_player != null:
+		var before_packs := Game.owned_backpacks.duplicate()
+		var before_pack := Game.equipped_backpack
+		if not Game.owned_backpacks.has(1):
+			Game.owned_backpacks.append(1)
+		var equip_ok: bool = Game.equip_backpack(1)
+		var pack_node := equipment_player.get_node_or_null("Visual/Torso/Backpack") as Node3D
+		_log("INFO" if equip_ok and pack_node != null and pack_node.visible else "FAIL", "equipped backpack visible on character: %s" % str(equip_ok and pack_node != null and pack_node.visible))
+		var equipment_camera := Camera3D.new()
+		equipment_camera.fov = 40.0
+		world.add_child(equipment_camera)
+		var focus := equipment_player.global_position + Vector3(0, 1.05, 0)
+		equipment_camera.global_position = focus + equipment_player.global_basis.z * 3.4 + Vector3(0, 0.25, 0)
+		equipment_camera.look_at(focus, Vector3.UP)
+		equipment_camera.current = true
+		await _capture_ui(out_dir, "equipped_backpack", null)
+		cam.current = true
+		equipment_camera.queue_free()
+		Game.owned_backpacks.assign(before_packs)
+		Game.equipped_backpack = before_pack
+		Game.save_collection()
+		Game.collection_changed.emit()
+
+	# Capture every gameplay journal page, including the bottom of scrollable
+	# pages. These are real UI states, not mockups or stitched images.
+	if menu != null:
+		for page in ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story", "Dialogue"]:
+			menu.call("open_menu", page)
+			await _capture_ui(out_dir, "game_" + page.to_lower().replace(" ", "_"), menu)
+			menu.call("close_menu")
+	if hud != null:
+		hud.call("_pause")
+		await _capture_ui(out_dir, "pause", null)
+		hud.call("_resume")
+		hud.call("_toggle_perf_monitor")
+		await get_tree().create_timer(0.6, true).timeout
+		await _capture_ui(out_dir, "performance", null)
+		hud.call("_toggle_perf_monitor")
+		var wheel := hud.get_node_or_null("Root/SpellWheel")
+		if wheel != null and Game.wander != null:
+			wheel.call("_set_open", true, true)
+			await _capture_ui(out_dir, "spell_wheel", null)
+			wheel.call("_open_editor", 0)
+			await _capture_ui(out_dir, "spell_editor", wheel)
+			wheel.call("_on_editor_close")
+			wheel.call("_set_open", false, true)
+		else:
+			_log("FAIL", "spell wheel unavailable for UI screenshots")
+		# Preview mobile controls in the same viewport, without claiming this is
+		# an actual Android device or a mobile performance measurement.
+		var was_touch_active: bool = Game.touch_active
+		var touch = load("res://scripts/touch_controls.gd").new()
+		hud.add_child(touch)
+		await _capture_ui(out_dir, "touch_controls_simulated", null)
+		touch.queue_free()
+		Game.touch_active = was_touch_active
+		hud.call("_on_game_won")
+		await _capture_ui(out_dir, "victory", null)
+		var win_panel: Control = hud.get("_win_panel")
+		win_panel.visible = false
 
 	# What is actually under the camera's feet?
 	#
@@ -431,6 +786,8 @@ func _run() -> void:
 	else:
 		_log("INFO", "ground contrast: not measurable in this frame")
 	_check_blob(img, "gameplay")
+	# Nothing in the frame may be black foliage. See _check_black_props.
+	await _check_black_props()
 	_log("INFO", "size=%dx%d mean_luma=%.3f nonblack=%.1f%% distinct_colours=%d sky_blue=%.1f%%" % [
 		img.get_width(), img.get_height(), stats["luma"],
 		stats["nonblack"] * 100.0, stats["colours"], stats["sky"] * 100.0])
@@ -594,8 +951,8 @@ func _run() -> void:
 			fimg.save_png(out_dir.path_join("player_flat.png"))
 			var magenta := 0
 			var step := maxi(1, int(fimg.get_width() / 200.0))
-			for y in range(0, fimg.get_height(), step):
-				for x in range(0, fimg.get_width(), step):
+			for y in range(0, _sample_end(fimg.get_height(), step), step):
+				for x in range(0, _sample_end(fimg.get_width(), step), step):
 					var c := fimg.get_pixel(x, y)
 					if c.r > 0.7 and c.b > 0.7 and c.g < 0.3:
 						magenta += 1
@@ -676,7 +1033,82 @@ func _run() -> void:
 			_log("WARN", "wide view is overexposed (mean luma %.2f)" % s3["luma"])
 		_report_frame_cost(world)
 
+	await _check_title_screen(world, out_dir, true)
 	_finish(_fail)
+
+
+func _check_title_screen(world: Node, out_dir: String, capture: bool) -> void:
+	## Instantiate the real menu, exercise its wiring, and capture the actual UI.
+	world.queue_free()
+	await get_tree().process_frame
+	var menu_scene := load("res://scenes/main_menu.tscn") as PackedScene
+	if menu_scene == null:
+		_log("FAIL", "title screen scene missing")
+		return
+	var menu := menu_scene.instantiate()
+	get_tree().root.add_child(menu)
+	await get_tree().process_frame
+	var art := menu.get_node_or_null("CelestialBackground") as TextureRect
+	var button := menu.get_node_or_null("LeftPanel/Panel/VBox/StartButton") as Button
+	var ok := art != null and art.texture != null and button != null and not button.pressed.get_connections().is_empty()
+	_log("INFO" if ok else "FAIL", "celestial title art and start button wired: %s" % str(ok))
+	var home_nav := menu.get_node_or_null("LeftPanel/Panel/VBox/HomeNavigation")
+	var home_pages_ok := home_nav != null
+	if home_pages_ok:
+		for page in ["Wardrobe", "Profile", "Settings", "Shop"]:
+			var home_button := home_nav.get_node_or_null(page + "Button") as Button
+			if home_button == null or home_button.pressed.get_connections().is_empty():
+				home_pages_ok = false
+			else:
+				home_button.emit_signal("pressed")
+				var overlay := menu.get_node_or_null("AdventureMenu") as Control
+				if overlay == null or not overlay.visible or overlay.get("_tab") != page or Game.is_paused:
+					home_pages_ok = false
+				else:
+					if capture:
+						await _capture_ui(out_dir, "home_" + page.to_lower(), overlay)
+					overlay.call("close_menu")
+	_log("INFO" if home_pages_ok else "FAIL", "home navigation and pages: %s" % str(home_pages_ok))
+	if capture:
+		await get_tree().create_timer(0.2).timeout
+		var title_img := get_viewport().get_texture().get_image()
+		if title_img != null and not title_img.is_empty():
+			title_img.save_png(out_dir.path_join("title.png"))
+	menu.queue_free()
+
+
+func _capture_ui(out_dir: String, name: String, scroll_root: Node) -> void:
+	# Let containers layout and the renderer paint before reading the viewport.
+	await get_tree().create_timer(0.12, true).timeout
+	await get_tree().process_frame
+	var frame := get_viewport().get_texture().get_image()
+	if frame == null or frame.is_empty() or frame.save_png(out_dir.path_join(name + ".png")) != OK:
+		_log("FAIL", "could not capture UI: %s" % name)
+		return
+	_log("INFO", "captured UI: %s" % name)
+	if name == "game_character":
+		frame.save_png(out_dir.path_join("adventure.png"))
+	if scroll_root == null:
+		return
+	for node in scroll_root.find_children("*", "ScrollContainer", true, false):
+		var scroll := node as ScrollContainer
+		if not scroll.is_visible_in_tree():
+			continue
+		var bar := scroll.get_v_scroll_bar()
+		var bottom := int(maxf(0.0, bar.max_value - bar.page))
+		if bottom <= 0:
+			continue
+		var previous := scroll.scroll_vertical
+		scroll.scroll_vertical = bottom
+		await get_tree().create_timer(0.12, true).timeout
+		await get_tree().process_frame
+		var lower := get_viewport().get_texture().get_image()
+		if lower == null or lower.is_empty() or lower.save_png(out_dir.path_join(name + "_scrolled.png")) != OK:
+			_log("FAIL", "could not capture scrolled UI: %s" % name)
+		else:
+			_log("INFO", "captured scrolled UI: %s" % name)
+		scroll.scroll_vertical = previous
+		break
 
 
 func _clear_frame(world: Node) -> void:
@@ -777,15 +1209,19 @@ func _children_named(parent: Node, prefix: String) -> Array[Node]:
 func _check_cull_actually_culls(world: Node) -> void:
 	if world == null:
 		return
-	# Terrain tiles. One mesh covering 900 m means nothing is ever culled.
+	# Terrain tiles. One mesh covering the map means nothing is ever culled, and
+	# the tiles are no longer direct children: near and mid layers are separate
+	# node groups so the streaming code can free one layer without touching the
+	# other.
 	var terrain := world.get_node_or_null("Terrain")
 	var tiles := 0
 	var biggest_extent := 0.0
 	if terrain != null:
-		for c in terrain.get_children():
-			if c is MeshInstance3D and (c as MeshInstance3D).mesh != null:
+		for c in terrain.find_children("*", "MeshInstance3D", true, false):
+			var tmi := c as MeshInstance3D
+			if tmi.mesh != null:
 				tiles += 1
-				var aabb: AABB = (c as MeshInstance3D).mesh.get_aabb()
+				var aabb: AABB = tmi.mesh.get_aabb()
 				biggest_extent = maxf(biggest_extent, maxf(aabb.size.x, aabb.size.z))
 	if tiles < 4:
 		_fail += 1
@@ -829,6 +1265,463 @@ func _check_cull_actually_culls(world: Node) -> void:
 		_log("INFO", "CULL multimesh_batches=%d instances=%d largest_batch=%d" % [batches, total, largest])
 
 
+## Entity occlusion culling, which no screenshot can verify.
+##
+## A correctly culled entity and an entity that merely happens to be behind a
+## wall look identical in a frame, so the property has to be asserted from
+## outside the image:
+##
+##   * the culler's geometry predicates, on synthetic wall / ridge / roof cases
+##     where the answer is known in advance;
+##   * that the asynchronous pass has actually run against the live world and
+##     split the entities into visible and hidden - everything visible means it
+##     is doing nothing, everything hidden means it is rejecting the world;
+##   * that every hidden entity's visual is really suppressed, and that the
+##     entity's own cull flag agrees with the decision, since that flag is what
+##     stops its ticks.
+##
+## Runs headlessly on purpose: the structural job is the one that always runs.
+func _check_entity_culling(world: Node) -> void:
+	# Yield first, unconditionally: this makes the function a coroutine on every
+	# path, so the caller's `await` is always awaiting a real state rather than
+	# relying on what Godot does with `await` on a value that returned at once.
+	await get_tree().process_frame
+	if world == null:
+		return
+	var culler := world.get_node_or_null("EntityCuller")
+	if culler == null:
+		_log("FAIL", "ENTITY_CULL no EntityCuller - occluded entities are still drawn and still ticking")
+		return
+	var geometry: Dictionary = culler.call("self_test")
+	if bool(geometry.get("ok", false)):
+		_log("INFO", "ENTITY_CULL geometry: %s" % str(geometry.get("summary", "")))
+	else:
+		for note in geometry.get("failures", []):
+			_log("FAIL", "ENTITY_CULL geometry: %s" % str(note))
+	# The pass runs at 5 Hz and needs two consecutive misses before hiding
+	# anything, so wait for a decision instead of racing the first one.
+	var waited := 0
+	while waited < 12 and int(culler.call("stats").get("hidden", 0)) < 1:
+		await get_tree().create_timer(0.15).timeout
+		waited += 1
+	var stats: Dictionary = culler.call("stats")
+	var registered := int(stats.get("registered", 0))
+	var hidden := int(stats.get("hidden", 0))
+	var visible := int(stats.get("visible", 0))
+	var passes := int(stats.get("probes", 0))
+	if registered < 10:
+		_log("FAIL", "ENTITY_CULL only %d entit(ies) registered - the spawns are not wired to the culler" % registered)
+	if passes < 1:
+		_log("FAIL", "ENTITY_CULL the visibility pass never completed - the async probe is not running")
+	if passes >= 1 and hidden < 1:
+		_log("FAIL", "ENTITY_CULL nothing is ever hidden - every entity is drawn and ticked regardless of occlusion")
+	if passes >= 1 and visible < 1:
+		_log("FAIL", "ENTITY_CULL everything is hidden - the visibility test rejects the whole world")
+	if not bool(stats.get("consistent", false)):
+		_log("FAIL", "ENTITY_CULL an entity's cull flag disagrees with the culler's decision - its ticks did not stop")
+	if hidden > 0 and int(stats.get("render_skipped", 0)) < hidden:
+		_log("FAIL", "ENTITY_CULL %d hidden entit(ies) still have a visible visual" % (hidden - int(stats.get("render_skipped", 0))))
+	_log("INFO", "ENTITY_CULL registered=%d visible=%d hidden=%d passes=%d threads=%d grid=%d occluders=%d render_skipped=%d tick_reduced=%d" % [
+		registered, visible, hidden, passes, int(stats.get("threads", 0)),
+		int(stats.get("grid", 0)), int(stats.get("occluders", 0)),
+		int(stats.get("render_skipped", 0)), int(stats.get("tick_reduced", 0))])
+
+
+## Bone cloth, asserted as geometry rather than as a filename.
+##
+## The cloth pieces are vendored CC0 glTF models, so "the file is in the repo" and
+## "the world is wearing it" are very different claims: an unimported model gives
+## an empty scene, and a re-materialled surface can end up with no material at
+## all. Count the pieces, their mesh instances and their surfaces - a banner is
+## four surfaces, so a scene that imported but lost its primitives is visible here
+## as a piece with zero meshes.
+func _check_bone_cloth(world: Node) -> void:
+	if world == null:
+		return
+	var pieces := get_tree().get_nodes_in_group("bone_cloth")
+	if pieces.is_empty():
+		_log("FAIL", "BONE_CLOTH no bone-cloth pieces in the world - the cloth assets are not being instanced")
+		return
+	var meshes := 0
+	var surfaces := 0
+	for n in pieces:
+		for child in n.find_children("*", "MeshInstance3D", true, false):
+			var mi := child as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			meshes += 1
+			surfaces += mi.mesh.get_surface_count()
+	# The glTF scenes are authored in centimetres behind a 100x node scale, so the
+	# one thing that can silently ruin every placement is that scale not surviving
+	# import: the cloth would import correctly, instance correctly, hold its
+	# surfaces - and be a 3 cm banner buried in the grass.
+	var widest := 0.0
+	for n in pieces:
+		var box := AABB()
+		var first := true
+		for child in n.find_children("*", "MeshInstance3D", true, false):
+			var mi := child as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			var b: AABB = mi.global_transform * mi.get_aabb()
+			box = b if first else box.merge(b)
+			first = false
+		if not first:
+			widest = maxf(widest, maxf(box.size.x, maxf(box.size.y, box.size.z)))
+	if widest < 0.2 or widest > 14.0:
+		_log("FAIL", "BONE_CLOTH largest piece spans %.2f m - the glTF node scale did not survive import" % widest)
+	else:
+		_log("INFO", "BONE_CLOTH largest piece spans %.2f m" % widest)
+	if pieces.size() < 10:
+		_log("FAIL", "BONE_CLOTH only %d piece(s) in the whole world - the dressing did not place" % pieces.size())
+	if meshes < 10 or surfaces < 20:
+		_log("FAIL", "BONE_CLOTH %d piece(s) produced only %d mesh(es)/%d surface(s)" % [pieces.size(), meshes, surfaces])
+	_log("INFO" if meshes >= 10 and surfaces >= 20 else "WARN",
+		"BONE_CLOTH pieces=%d meshes=%d surfaces=%d (glTF imports alive)" % [pieces.size(), meshes, surfaces])
+	if world.has_method("bone_cloth_census"):
+		_log("INFO", "BONE_CLOTH census: %s" % str(world.call("bone_cloth_census")))
+
+
+## First MultiMeshInstance3D under a node, for the material dump.
+func _first_multimesh(node: Node) -> MultiMeshInstance3D:
+	for child in node.find_children("*", "MultiMeshInstance3D", true, false):
+		var mmi := child as MultiMeshInstance3D
+		if mmi != null and mmi.multimesh != null:
+			return mmi
+	return null
+
+
+## The same mesh and the same material, drawn once as a plain MeshInstance3D and
+## once as a one-instance MultiMesh, both a couple of metres in front of the
+## camera, with the pixel in the middle of each read back.
+##
+## This is the direct test of "do the pack's baked vertex colours reach the
+## shader", which is the question that cost the most time on this asset: a
+## black silhouette in a screenshot reads equally well as a shadow, an unlit
+## material or a missing texture, and none of those was it. A green number here
+## means the whole chain - bake, mesh, MultiMesh, shader - is intact.
+func _probe_colour_path(world: Node) -> void:
+	if world == null:
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var NP = load("res://scripts/nature_pack.gd")
+	if NP == null:
+		return
+	var kind := "bush_1"
+	var mesh = NP.mesh_of(kind)
+	if mesh == null:
+		return
+	var mat = NP.material(kind, 0.0)
+	if mat == null:
+		return
+	var ahead: Vector3 = cam.global_position + (-cam.global_transform.basis.z) * 2.2
+
+	var plain := MeshInstance3D.new()
+	plain.mesh = mesh
+	plain.material_override = mat
+	plain.scale = Vector3(0.7, 0.7, 0.7)
+	world.add_child(plain)
+	plain.global_position = ahead
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var plain_colour := _centre_colour()
+	_log("INFO", "COLOUR plain mesh = %s" % _colour_text(plain_colour))
+	if plain_colour.y < 55.0:
+		_log("FAIL", "COLOUR the pack's green baked into a mesh renders as %s - the vertex colour attribute is dead" % _colour_text(plain_colour))
+	plain.visible = false
+
+	var inst := MultiMeshInstance3D.new()
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = 1
+	mm.set_instance_transform(0, Transform3D())
+	inst.multimesh = mm
+	inst.material_override = mat
+	inst.scale = Vector3(0.7, 0.7, 0.7)
+	world.add_child(inst)
+	inst.global_position = ahead
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var inst_colour := _centre_colour()
+	_log("INFO", "COLOUR multimesh = %s" % _colour_text(inst_colour))
+	if inst_colour.y < 55.0:
+		_log("FAIL", "COLOUR a MultiMesh instance of the same mesh renders as %s" % _colour_text(inst_colour))
+
+	# And with custom data on, which is how every vegetation layer used to be
+	# built and is what broke it.
+	mm.use_custom_data = true
+	mm.set_instance_custom_data(0, Color(0.5, 0.0, 0.0, 0.0))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var custom_colour := _centre_colour()
+	_log("INFO", "COLOUR multimesh with custom data = %s (the layer path; must match the line above)" % _colour_text(custom_colour))
+	if custom_colour.y < 55.0:
+		_log("FAIL", "COLOUR custom data on a MultiMesh costs the mesh its vertex colours (%s) - the vegetation layers must not use it" % _colour_text(custom_colour))
+
+	inst.visible = false
+	await get_tree().process_frame
+	plain.queue_free()
+	inst.queue_free()
+
+
+## Mean colour of a patch at the centre of the frame, as 0-255 per channel.
+func _centre_colour() -> Vector3:
+	var img := get_viewport().get_texture().get_image()
+	if img == null:
+		return Vector3.ZERO
+	var cx := img.get_width() / 2
+	var cy := img.get_height() / 2
+	var sum := Vector3.ZERO
+	var n := 0
+	# Bounded by the image, not by a constant: a probe frame is whatever size the
+	# runner could allocate, and get_pixel() past the edge is a hard error.
+	var lo_y := clampi(cy - 20, 0, img.get_height() - 1)
+	var hi_y := clampi(cy + 20, 0, img.get_height())
+	var lo_x := clampi(cx - 20, 0, img.get_width() - 1)
+	var hi_x := clampi(cx + 20, 0, img.get_width())
+	for y in range(lo_y, hi_y, 2):
+		for x in range(lo_x, hi_x, 2):
+			var c := img.get_pixel(x, y)
+			sum += Vector3(c.r, c.g, c.b)
+			n += 1
+	return (sum / maxf(1.0, float(n))) * 255.0
+
+
+## A Vector3 of 0-255 channels, for the log.
+func _colour_text(c: Vector3) -> String:
+	return "(%d, %d, %d)" % [int(c.x), int(c.y), int(c.z)]
+
+
+## How much of the frame is near-black. Foliage is drawn with an emissive fill,
+## so a batch of it cannot be near-black unless something upstream ate its
+## vertex colours - which is exactly what happened, and what took a dozen round
+## trips to find because a black silhouette in a screenshot reads equally well
+## as a shadow, an unlit material or a missing texture. The number settles it.
+func _check_black_props() -> void:
+	await get_tree().process_frame
+	var img := get_viewport().get_texture().get_image()
+	if img == null:
+		return
+	var dark := _dark_fraction(img)
+	_log("INFO", "DARK %.2f%% of the frame is near-black" % dark)
+	if dark > 6.0:
+		_log("FAIL", "BLACK_PROPS %.1f%% of the frame is near-black inside the nature batches - the vertex colours are not reaching the shader" % dark)
+
+
+## Fraction of the frame that is very dark, as a percentage.
+func _dark_fraction(img: Image) -> float:
+	var w := img.get_width()
+	var h := img.get_height()
+	var step := maxi(1, h / 200)
+	var dark := 0
+	var total := 0
+	for y in range(int(h * 0.18), _sample_end(h, step), step):
+		for x in range(0, _sample_end(w, step), step):
+			var c := img.get_pixel(x, y)
+			if maxf(c.r, maxf(c.g, c.b)) < 0.10:
+				dark += 1
+			total += 1
+	return 100.0 * float(dark) / maxf(1.0, float(total))
+
+
+
+## The map has to be a map: a wide playable interior with no wall inside a
+## kilometre, mountains at the far edge, and all four kinds of water where the
+## terrain says they are.
+##
+## This is the check the old 600 m bowl would have failed. It measures the height
+## field itself rather than trusting constants, so a rim that creeps back in, a
+## river that stops being carved or a sea that never gets below the waterline is a
+## failed build rather than a screenshot somebody has to notice.
+func _check_world_scale(world: Node) -> void:
+	var terrain := world.get_node_or_null("Terrain")
+	if terrain == null:
+		_log("FAIL", "WORLD no terrain node to measure")
+		return
+	if terrain.has_method("census"):
+		_log("INFO", "TERRAIN %s" % str(terrain.call("census")))
+
+	# Playable interior: flat-or-hilly, not a wall, a kilometre out in four
+	# directions.
+	var wall := 0.0
+	for probe in [Vector2(1000.0, 0.0), Vector2(-1000.0, 0.0),
+			Vector2(0.0, 1000.0), Vector2(0.0, -1000.0)]:
+		wall = maxf(wall, _world_height(terrain, probe.x, probe.y))
+	_log("INFO" if wall < 110.0 else "FAIL",
+		"WORLD interior peak at 1 km = %.0f m %s" % [wall, "(a wall, not a landscape)" if wall >= 110.0 else ""])
+
+	# Mountains at the edge: the highest ground 3 km out has to be a real ridge.
+	# Four bearings is not enough. The range only closes 240 degrees of the map -
+	# the south-east is the bay, on purpose - and the two noise octaves swing the
+	# height of any single sample by tens of metres, so a compass rose can miss
+	# the ridge that is there. Eight bearings, and the check is that *some*
+	# direction is a mountain, not that every one is.
+	var peak := -999.0
+	for i in range(16):
+		var a := TAU * float(i) / 16.0
+		peak = maxf(peak, _world_height(terrain, cos(a) * 3000.0, sin(a) * 3000.0))
+	_log("INFO" if peak > 130.0 else "FAIL",
+		"WORLD mountains at 3 km = %.0f m %s" % [peak, "(no ridge - the map just ends)" if peak <= 130.0 else ""])
+
+	# Water. Every body is terrain below the waterline; the surface is scenery.
+	var level := Game.water_level
+	var lake_d := Vector2(Game.lake_center.x, Game.lake_center.y)
+	var lake_h := _world_height(terrain, lake_d.x, lake_d.y)
+	_log("INFO" if lake_h < level else "FAIL", "WATER lake bed = %.1f m (level %.1f)" % [lake_h, level])
+	var pond_ok := false
+	var pond_h := 99.0
+	var script: Script = terrain.get_script()
+	var ponds: Array = []
+	if script != null:
+		var constants: Dictionary = script.get_script_constant_map()
+		if constants.has("PONDS"):
+			ponds = constants["PONDS"]
+	for i in range(ponds.size()):
+		var pond: Vector3 = ponds[i]
+		pond_h = minf(pond_h, _world_height(terrain, pond.x, pond.y))
+		if pond_h < level:
+			pond_ok = true
+	_log("INFO" if pond_ok else "FAIL",
+		"WATER %d pond(s), lowest bed = %.1f m" % [ponds.size(), pond_h])
+	var river_h := 99.0
+	if terrain.has_method("river_x"):
+		for z in [-800.0, -200.0, 400.0, 900.0]:
+			var rx := float(terrain.call("river_x", z))
+			river_h = minf(river_h, _world_height(terrain, rx, z))
+	_log("INFO" if river_h < level else "FAIL", "WATER river bed = %.1f m at four points along it" % river_h)
+	var sea_h := _world_height(terrain, 1700.0, 1650.0)
+	_log("INFO" if sea_h < level else "FAIL", "WATER sea bed in the south-east = %.1f m" % sea_h)
+
+	# And the surface that makes it water.
+	var surface: MeshInstance3D = null
+	for node in world.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.name == "WaterSurface":
+			surface = mi
+			break
+	if surface == null:
+		_log("FAIL", "WATER no WaterSurface mesh - the sea, lake, river and ponds have no surface")
+	elif surface.mesh is PlaneMesh:
+		var span := (surface.mesh as PlaneMesh).size.x
+		_log("INFO" if span >= 4000.0 else "FAIL",
+			"WATER surface spans %.0f m at y=%.2f" % [span, surface.position.y])
+
+
+func _world_height(terrain: Node, x: float, z: float) -> float:
+	return float(terrain.call("get_height_at", x, z))
+
+
+
+## The environment, asserted as baked geometry.
+##
+## Every tree, bush, plant, rock, log, stump and blade of grass in the frame is
+## one of the nature pack's models, flattened by NaturePack into a single
+## vertex-coloured surface so a MultiMesh can draw a whole batch with one
+## material. Three things can go wrong silently: the models import empty (a node
+## exists, draws nothing), they import without their 100x node scale (a forest of
+## 3 cm trees), or the vertex colours are dropped in the bake (every prop one flat
+## colour). All three are countable, so they are counted.
+func _check_nature_pack(world: Node) -> void:
+	var NP = load("res://scripts/nature_pack.gd")
+	if NP == null:
+		_log("FAIL", "NATURE_PACK scripts/nature_pack.gd did not load")
+		return
+	var kinds: Array = NP.kinds()
+	var baked := 0
+	var tris := 0
+	var flat := 0
+	for kind in kinds:
+		var mesh: ArrayMesh = NP.mesh_of(kind)
+		if mesh == null or mesh.get_surface_count() == 0:
+			_log("FAIL", "NATURE_PACK model '%s' baked no surface" % kind)
+			continue
+		var arrays: Array = mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var cols: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		baked += 1
+		tris += idx.size() / 3
+		if cols.size() != verts.size():
+			flat += 1
+		var h: float = NP.height_of(kind)
+		if h < 0.2 or h > 8.0:
+			_log("FAIL", "NATURE_PACK '%s' is %.2f m tall - the 100x glTF node scale did not survive import" % [kind, h])
+	_log("INFO", "NATURE_PACK kinds=%d baked=%d triangles=%d" % [kinds.size(), baked, tris])
+	if baked < 12:
+		_log("FAIL", "NATURE_PACK only %d of %d models baked - the environment is not the pack" % [baked, kinds.size()])
+	if tris < 4000:
+		_log("FAIL", "NATURE_PACK baked only %d triangles - the models imported empty" % tris)
+	if flat > 0:
+		_log("FAIL", "NATURE_PACK %d model(s) lost their vertex colours - every prop of that kind would draw one flat colour" % flat)
+	# What the world actually built from them. A batch node with no instances is
+	# the difference between "the pack is vendored" and "the valley is the pack".
+	var veg := world.get_node_or_null("Vegetation") if world != null else null
+	var nature_nodes := 0
+	var nature_instances := 0
+	if veg != null:
+		for n in veg.find_children("*", "MultiMeshInstance3D", true, false):
+			var mmi := n as MultiMeshInstance3D
+			if mmi.multimesh == null or mmi.multimesh.mesh == null:
+				continue
+			if not (mmi.multimesh.mesh is ArrayMesh):
+				continue
+			# Nature meshes are the ones whose surface carries vertex colours.
+			var batch_arrays := (mmi.multimesh.mesh as ArrayMesh).surface_get_arrays(0)
+			if batch_arrays.size() > Mesh.ARRAY_COLOR and batch_arrays[Mesh.ARRAY_COLOR] != null:
+				nature_nodes += 1
+				nature_instances += mmi.multimesh.instance_count
+	_log("INFO" if nature_nodes > 0 else "FAIL",
+		"NATURE_PACK scatter batches=%d instances=%d" % [nature_nodes, nature_instances])
+	if nature_instances < 200:
+		_log("FAIL", "NATURE_PACK only %d nature instances in the valley - the scatter did not spawn" % nature_instances)
+	_log("INFO", "NATURE_PACK census: %s" % str(NP.census()))
+	# Material and vertex-colour dump, one line per species.
+	#
+	# A textureless model has exactly two ways to end up the wrong colour: the
+	# baked vertex colour is wrong, or the material's tint multiplies it to
+	# nothing. Both are invisible in a screenshot except as "that prop is dark",
+	# so the numbers are printed and the probe can be read instead of eyeballed.
+	var Presets = load("res://scripts/performance/vegetation_presets.gd")
+	if Presets != null:
+		for spec in Presets.species():
+			var layer: Node = null
+			if world != null:
+				layer = world.get_node_or_null("Veg_%s" % spec["name"])
+			if layer == null:
+				continue
+			var batch := _first_multimesh(layer)
+			if batch == null:
+				_log("FAIL", "NATURE_MAT %s has no MultiMesh batch" % spec["name"])
+				continue
+			var shader_mat := batch.material_override as ShaderMaterial
+			var vcol := Color.BLACK
+			if batch.multimesh.mesh is ArrayMesh:
+				var marr: Array = (batch.multimesh.mesh as ArrayMesh).surface_get_arrays(0)
+				var mcols: PackedColorArray = marr[Mesh.ARRAY_COLOR]
+				if mcols.size() > 0:
+					vcol = mcols[0]
+			if shader_mat == null:
+				_log("FAIL", "NATURE_MAT %s has no ShaderMaterial (%s)" % [spec["name"], str(batch.material_override)])
+				continue
+			_log("INFO", "NATURE_MAT %s shader=%s tint=%s wind=%s sway=%.2f vcol=%s shadow=%s" % [
+				spec["name"], str(shader_mat.shader.resource_path).get_file(),
+				str(shader_mat.get_shader_parameter("base_tint")),
+				str(shader_mat.get_shader_parameter("wind_strength")),
+				float(shader_mat.get_shader_parameter("sway_height")),
+				str(vcol), str(batch.cast_shadow)])
+			_log("INFO", "NATURE_PARAM %s darken=%s rim=%s back=%s rough=%s var=%s fill=%s" % [
+				spec["name"],
+				str(shader_mat.get_shader_parameter("base_darken")),
+				str(shader_mat.get_shader_parameter("rim_strength")),
+				str(shader_mat.get_shader_parameter("backlight_scale")),
+				str(shader_mat.get_shader_parameter("roughness_value")),
+				str(shader_mat.get_shader_parameter("tint_variation")),
+				str(shader_mat.get_shader_parameter("shadow_fill"))])
+
+
 func _report_palette(img: Image, label: String) -> void:
 	## Print hue/saturation for a few fixed sample points so the colour grade can
 	## be checked as numbers instead of by eye. The neon-green problem that took
@@ -859,8 +1752,8 @@ func _report_palette(img: Image, label: String) -> void:
 	var hot := 0
 	var counted := 0
 	var step := maxi(1, int(img.get_width() / 120.0))
-	for y in range(0, img.get_height(), step):
-		for x in range(0, img.get_width(), step):
+	for y in range(0, _sample_end(img.get_height(), step), step):
+		for x in range(0, _sample_end(img.get_width(), step), step):
 			counted += 1
 			var c2 := img.get_pixel(x, y)
 			var hsv2 := _hsv_of(c2)
@@ -1037,43 +1930,83 @@ func _hsv_of(c: Color) -> Vector3:
 	return Vector3(h, sat, mx)
 
 
-func _check_blob(img: Image, label: String) -> void:
-	## Detect a large, opaque, pure-white region - the signature of an unshaded
-	## emissive surface parked in front of the camera. This artifact shipped
-	## twice because nothing was measuring it; a HUD button behind it in the PNG
-	## was the only clue. Bright sky and clouds are excluded by requiring the
-	## region to be clustered and near-pure white with all three channels
-	## saturated, which the sky (blue-dominant) and snow (cool-tinted) are not.
+func _white_blob_stats(img: Image) -> Dictionary:
+	## Connected components on a sampled mask, not one bounding box around
+	## unrelated white pixels (e.g. clouds, text and HUD highlights).
 	var w := img.get_width()
 	var h := img.get_height()
 	var step := maxi(1, int(w / 200.0))
-	var hot := 0
-	var total := 0
-	var min_x := w
-	var max_x := 0
-	var min_y := h
-	var max_y := 0
-	for y in range(0, h, step):
-		for x in range(0, w, step):
-			total += 1
-			var c := img.get_pixel(x, y)
-			if c.r > 0.97 and c.g > 0.97 and c.b > 0.95 and c.a > 0.5:
-				hot += 1
-				min_x = mini(min_x, x)
-				max_x = maxi(max_x, x)
-				min_y = mini(min_y, y)
-				max_y = maxi(max_y, y)
+	var cols := int(_sample_end(w, step) / step)
+	var rows := int(_sample_end(h, step) / step)
+	var total := cols * rows
 	if total == 0:
+		return {"total": 0, "hot": 0, "largest": 0}
+	var mask := PackedByteArray()
+	mask.resize(total)
+	var hot := 0
+	for gy in range(rows):
+		for gx in range(cols):
+			var c := img.get_pixel(gx * step, gy * step)
+			if c.r > 0.97 and c.g > 0.97 and c.b > 0.95 and c.a > 0.5:
+				mask[gy * cols + gx] = 1
+				hot += 1
+	var largest := 0
+	for start in range(total):
+		if mask[start] == 0:
+			continue
+		var queue := PackedInt32Array([start])
+		mask[start] = 0
+		var cursor := 0
+		while cursor < queue.size():
+			var idx := queue[cursor]
+			cursor += 1
+			var x := idx % cols
+			var y := int(idx / cols)
+			for offset in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+				var nx: int = x + offset.x
+				var ny: int = y + offset.y
+				if nx < 0 or ny < 0 or nx >= cols or ny >= rows:
+					continue
+				var neighbor: int = ny * cols + nx
+				if mask[neighbor] == 1:
+					mask[neighbor] = 0
+					queue.append(neighbor)
+		largest = maxi(largest, queue.size())
+	return {"total": total, "hot": hot, "largest": largest}
+
+
+func _check_blob(img: Image, label: String) -> void:
+	## A large connected white patch is suspicious; scattered clouds are not.
+	var stats := _white_blob_stats(img)
+	var total: int = int(stats["total"])
+	if total == 0:
+		_log("WARN", "%s white-blob check had no samples" % label)
 		return
-	var frac := float(hot) / float(total)
-	if frac > 0.06:
-		var box_w := max_x - min_x
-		var box_h := max_y - min_y
-		var fill := frac / maxf(0.0001, (float(box_w) / float(w)) * (float(box_h) / float(h)))
-		_log("FAIL", "%s frame is %.1f%% pure white in a %dx%d box (fill %.2f) - an unshaded emissive surface is covering the view" % [
-			label, frac * 100.0, box_w, box_h, fill])
+	var fraction := float(stats["hot"]) / float(total)
+	var blob := float(stats["largest"]) / float(total)
+	if blob > 0.06:
+		_log("FAIL", "%s frame has a connected white region covering %.1f%% of samples (%.1f%% white overall)" % [
+			label, blob * 100.0, fraction * 100.0])
 	else:
-		_log("INFO", "%s frame white-clip %.1f%%" % [label, frac * 100.0])
+		_log("INFO", "%s frame white pixels %.1f%%, largest connected region %.1f%%" % [
+			label, fraction * 100.0, blob * 100.0])
+
+
+func _test_white_blob_detection() -> void:
+	## Regression cases: disconnected bright clouds must not be merged, while
+	## an opaque white slab covering over six percent still fails the threshold.
+	var img := Image.create_empty(100, 100, false, Image.FORMAT_RGBA8)
+	img.fill(Color.BLACK)
+	for i in range(10):
+		img.fill_rect(Rect2i(i * 10, 0, 8, 10), Color.WHITE)
+	var clouds := _white_blob_stats(img)
+	img.fill(Color.BLACK)
+	img.fill_rect(Rect2i(20, 20, 40, 25), Color.WHITE)
+	var slab := _white_blob_stats(img)
+	var ok := int(clouds["hot"]) == 800 and int(clouds["largest"]) == 80 \
+		and int(slab["largest"]) == 1000 and int(slab["total"]) == 10000
+	_log("INFO" if ok else "FAIL", "white-blob regression: scattered=%d/%d slab=%d/%d" % [
+		int(clouds["largest"]), int(clouds["hot"]), int(slab["largest"]), int(slab["total"])])
 
 
 func _dump_frustum(cam: Camera3D, world: Node) -> void:
@@ -1141,8 +2074,8 @@ func _analyse(img: Image) -> Dictionary:
 	var nonblack := 0
 	var sky := 0
 	var seen := {}
-	for y in range(0, h, step):
-		for x in range(0, w, step):
+	for y in range(0, _sample_end(h, step), step):
+		for x in range(0, _sample_end(w, step), step):
 			var c := img.get_pixel(x, y)
 			var l := c.get_luminance()
 			luma_sum += l
@@ -1211,8 +2144,10 @@ func _measure_ground_ratio(img: Image) -> Dictionary:
 	var step := maxi(1, int(w / 220.0))
 	var vals: Array[float] = []
 	var pts: Array[Vector2i] = []
-	for y in range(int(h * 0.28), int(h * 0.82), step):
-		for x in range(0, w, step):
+	# Upper bound is `_sample_end` too: `int(h * 0.82)` is not on the step grid
+	# either, so the last row it lands on can be one past the band.
+	for y in range(int(h * 0.28), _sample_end(int(h * 0.82), step), step):
+		for x in range(0, _sample_end(w, step), step):
 			# The character sits centre-frame; her costume is not ground.
 			if x > int(w * 0.38) and x < int(w * 0.62):
 				continue
@@ -1382,10 +2317,12 @@ func _image_difference(a: Image, b: Image) -> float:
 	var step_y := maxi(1, int(h / 90))
 	var changed := 0
 	var total := 0
-	for y in range(0, h, step_y):
-		for x in range(0, w, step_x):
-			var ca := a.get_pixel(x, y)
-			var cb := b.get_pixel(x, y)
+	for y in range(0, _sample_end(h, step_y), step_y):
+		for x in range(0, _sample_end(w, step_x), step_x):
+			# Clamped for the same reason as the mesh check: a step that does not
+			# divide the dimension overshoots on its last iteration.
+			var ca := a.get_pixel(mini(x, w - 1), mini(y, h - 1))
+			var cb := b.get_pixel(mini(x, w - 1), mini(y, h - 1))
 			var la := 0.2126 * ca.r + 0.7152 * ca.g + 0.0722 * ca.b
 			var lb := 0.2126 * cb.r + 0.7152 * cb.g + 0.0722 * cb.b
 			total += 1

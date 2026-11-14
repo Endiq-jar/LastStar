@@ -81,6 +81,20 @@ uniform vec3 cam_forward = vec3(0.0, 0.0, -1.0);
 uniform vec3 view_origin = vec3(0.0);
 uniform sampler2D blade_tex : source_color, filter_linear_mipmap, repeat_disable;
 uniform float alpha_cut : hint_range(0.0, 1.0) = 0.42;
+// Textureless mode.
+//
+// The meadow's tuft is geometry from the Quaternius nature pack now, not a
+// painted card: the blades are real triangles and their colour arrives as vertex
+// colours, because the pack ships neither textures nor UVs. Everything else in
+// this shader - the wind, the behind-camera collapse, the sightline clearing, the
+// distance fade, the shadow fill - is wanted for a 3D tuft exactly as much as for
+// a quad, so it is switched by a uniform rather than duplicated in a second file.
+// 0.0 keeps every existing behaviour bit for bit.
+uniform float use_vertex_color : hint_range(0.0, 1.0) = 0.0;
+// Height of the instanced tuft in metres, for normalising the root-to-tip ramp
+// and the wind weighting. Only read in textureless mode: a card is 0.73 m tall
+// by construction, a pack tuft is whatever its model is.
+uniform float model_height : hint_range(0.05, 4.0) = 1.0;
 
 varying float v_tint;
 varying float v_height;
@@ -88,7 +102,12 @@ varying float v_cull;
 
 void vertex() {
 	vec3 origin = MODEL_MATRIX[3].xyz;
-	float height = max(VERTEX.y, 0.0);
+	// Height up the plant, in metres of model space (the instance scale is in
+	// MODEL_MATRIX, not in VERTEX). A card is centred on its origin and only its
+	// top half is above the ground; a pack tuft's origin is its root. Both are
+	// normalised here so the wind weight means "fraction of the way to the tip".
+	float raw_height = max(VERTEX.y, 0.0);
+	float height = mix(raw_height * 1.44, raw_height / max(model_height, 0.05), use_vertex_color);
 
 	// ---- view cull ------------------------------------------------------
 	//
@@ -143,7 +162,9 @@ void vertex() {
 	// stable frame to frame (no shimmer as the camera moves).
 	float h = fract(sin(dot(origin.xz, vec2(12.9898, 78.233))) * 43758.5453);
 	v_tint = h;
-	v_height = height;
+	// Model-space height, for the root-to-tip ramp in the fragment stage. VERTEX
+	// there is view space, so it cannot be recomputed from it.
+	v_height = raw_height;
 
 	// Distance from this instance to the camera, in world space. VERTEX is in
 	// model space here and MODEL_MATRIX is the instance transform, so the world
@@ -193,8 +214,14 @@ void vertex() {
 void fragment() {
 	// Cut the blade shape out of the quad. Anything outside the drawn tuft is
 	// discarded outright, so the quad never reads as a rectangle.
-	vec4 tex = texture(blade_tex, UV);
-	if (tex.a < alpha_cut || v_cull < 0.02) {
+	vec4 tex = vec4(1.0);
+	if (use_vertex_color < 0.5) {
+		tex = texture(blade_tex, UV);
+		if (tex.a < alpha_cut) {
+			discard;
+		}
+	}
+	if (v_cull < 0.02) {
 		discard;
 	}
 
@@ -215,6 +242,17 @@ void fragment() {
 	// Centred a little above 1.0: the previous 0.86-1.14 range biased the whole
 	// field darker, which is why the grass read as wet mud next to the terrain.
 	col *= 0.94 + v_tint * 0.30;
+
+	// Textureless mode: the pack's own green, from the vertex colours, with the
+	// root-to-tip ramp rebuilt from the model's height instead of the sheet's
+	// alpha. Scaled down hard, for the reason in this file's header: a bright
+	// green albedo plus a bright sun is the neon-lime carpet. The pack's green is
+	// 0.30/0.39/0.25, so 0.52 puts the tuft in the same place the hand-picked
+	// 0.125/0.255/0.125 sat, and the ramp adds the rest.
+	if (use_vertex_color > 0.5) {
+		float tip = clamp(v_height / max(model_height, 0.05), 0.0, 1.0);
+		col = COLOR.rgb * 0.52 * (0.80 + 0.40 * tip) * (0.94 + v_tint * 0.30);
+	}
 
 	// --- distance fade ------------------------------------------------------
 	// Far chunks cover many screen pixels each with a quad, so their flat colour

@@ -14,6 +14,8 @@ const VegWindScript := preload("res://scripts/performance/vegetation_wind.gd")
 const VegLayerScript := preload("res://scripts/performance/vegetation_layer.gd")
 const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
 const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
+const EntityCullerScript := preload("res://scripts/performance/entity_culler.gd")
+const BoneCloth := preload("res://scripts/bone_cloth.gd")
 
 const ENEMY_COUNT := 14
 
@@ -41,8 +43,14 @@ var _perf_frames := 0
 var _perf_warmup := 45
 var _perf_accum := 0.0
 var _perf_done := false
+## Hysteresis and a bounded range prevent rapid resolution oscillation.
+var _dynamic_time := 0.0
+var _dynamic_frames := 0
+var _dynamic_scale := 0.9
 ## Countdown of frames to wait before sampling the framebuffer once.
 var _grass_field: Node3D
+## Async occluder that decides which entities are actually on screen.
+var _culler: Node
 var _render_check_countdown := -1
 var _render_checked := false
 
@@ -72,6 +80,7 @@ func _ready() -> void:
 	# HUD still draws), so nothing optional may run before them.
 	_setup_environment()
 	_spawn_player()
+	_spawn_story_contact()
 
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
@@ -81,7 +90,9 @@ func _ready() -> void:
 	_scatter_landmarks()
 	_spawn_waypoints()
 	_spawn_sigils()
+	_restore_drops()
 	_spawn_enemies()
+	_build_entity_culler()
 	_add_audio()
 	Game.quest_changed.emit(Game.quest_text)
 	apply_quality()
@@ -93,7 +104,6 @@ func _ready() -> void:
 	_built = true
 	_ensure_camera.call_deferred()
 	_watch_render()
-	_autotune_performance()
 
 
 func _autotune_performance() -> void:
@@ -104,10 +114,10 @@ func _autotune_performance() -> void:
 	## Purely frame-driven - no coroutines, no timers - so it cannot wedge.
 	if _perf_done:
 		return
-	_perf_done = true
 	var measured := _perf_frames - _perf_warmup
 	if measured < 20:
 		return
+	_perf_done = true
 	var avg_ms := (_perf_accum / float(measured)) * 1000.0
 	print("LastStar: average frame time %.1f ms over %d frames" % [avg_ms, measured])
 	# Worse than ~24 fps: shed effects instead of stuttering.
@@ -209,7 +219,10 @@ func _ensure_camera() -> void:
 	cam.name = "FallbackCamera"
 	cam.fov = 70.0
 	cam.near = 0.08
-	cam.far = 900.0
+	# The map is 10 km across and the far shell reaches 5 km. A 900 m far plane
+	# would cut the horizon off in a hard line, so the fallback camera matches
+	# the player's.
+	cam.far = 4200.0
 	cam.position = Vector3(0.0, _height(0.0, 0.0) + 9.0, 26.0)
 	cam.rotation_degrees = Vector3(-11.0, 0.0, 0.0)
 	cam.current = true
@@ -286,13 +299,16 @@ func apply_quality() -> void:
 	# which is the version pinned in project.godot, so this is safe on the
 	# GLES3 path the phone build uses. It is a no-op rather than an error on any
 	# driver that refuses it.
+	_dynamic_time = 0.0
+	_dynamic_frames = 0
 	match tier:
 		1:
-			_set_3d_scale(0.75)
+			_dynamic_scale = 0.75
 		0:
-			_set_3d_scale(0.9)
+			_dynamic_scale = 0.9
 		_:
-			_set_3d_scale(1.0)
+			_dynamic_scale = 1.0
+	_set_3d_scale(_dynamic_scale)
 
 	if env == null:
 		return
@@ -391,7 +407,7 @@ func _setup_environment() -> void:
 	# pale mint no matter how the light energies were tuned. A muted, slightly
 	# warm ambient keeps grass green and lets the sun do the colouring.
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_energy = 1.35
+	env.ambient_light_energy = 1.45
 	env.ambient_light_color = Color(0.57, 0.66, 0.82)
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	# Sky ambient alone can dip to near-black once the sun is low; this floor
@@ -399,7 +415,7 @@ func _setup_environment() -> void:
 	env.ambient_light_sky_contribution = 0.45
 
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.02
+	env.tonemap_exposure = 1.08
 	env.tonemap_white = 2.4
 
 	env.fog_enabled = true
@@ -409,9 +425,15 @@ func _setup_environment() -> void:
 	# gains depth - the whole map just looks slightly dirty. A begin/end depth
 	# gradient stays at zero through the playable range and then ramps in, which
 	# is what separates the ridge layers the way a painted background does.
+	#
+	# The end depth is also the far draw distance in disguise. The mountains are
+	# 2-3.2 km out and the far shell reaches 5 km; with the fog ending at 780 m
+	# everything past that was a flat blue wall of terrain with no shape to it.
+	# Full fog at 3.7 km puts the ridge line in the haze where it belongs - still
+	# readable as a shape - and hides the point where the drawn ground stops.
 	env.fog_density = 0.0
-	env.fog_depth_begin = 160.0
-	env.fog_depth_end = 780.0
+	env.fog_depth_begin = 200.0
+	env.fog_depth_end = 3700.0
 	env.fog_depth_curve = 1.35
 	env.fog_aerial_perspective = 0.55
 	env.fog_sky_affect = 0.10
@@ -480,6 +502,8 @@ func _process(delta: float) -> void:
 		if _render_check_countdown <= 0:
 			_check_rendered_frame()
 
+	_update_dynamic_resolution(delta)
+
 	# Sample frame time; decide once we have enough real frames.
 	if not _perf_done and _perf_frames < 400:
 		_perf_frames += 1
@@ -487,6 +511,37 @@ func _process(delta: float) -> void:
 			_perf_accum += delta
 			if _perf_frames >= _perf_warmup + 60:
 				_autotune_performance()
+
+
+func _update_dynamic_resolution(delta: float) -> void:
+	## Balanced/Performance aim for 30 fps. Evaluate two seconds at a time;
+	## use separate thresholds so the scale does not flicker back and forth.
+	## High stays fixed at full resolution. This cannot cure CPU-bound stalls.
+	if Game.quality_tier == 2 or not _perf_done or delta <= 0.0:
+		return
+	_dynamic_time += minf(delta, 0.25)
+	_dynamic_frames += 1
+	if _dynamic_time < 2.0:
+		return
+	var avg := _dynamic_time / float(_dynamic_frames)
+	_dynamic_time = 0.0
+	_dynamic_frames = 0
+	var next := _next_dynamic_scale(Game.quality_tier, _dynamic_scale, avg)
+	if not is_equal_approx(next, _dynamic_scale):
+		_dynamic_scale = next
+		_set_3d_scale(next)
+
+
+func _next_dynamic_scale(tier: int, current: float, avg: float) -> float:
+	if tier == 2:
+		return current
+	var ceiling := 0.75 if tier == 1 else 0.9
+	var floor_scale := 0.60 if tier == 1 else 0.65
+	if avg > 0.040:
+		return maxf(floor_scale, current - 0.05)
+	if avg < 0.028:
+		return minf(ceiling, current + 0.05)
+	return current
 
 
 func _set_beauty_time(t: float) -> void:
@@ -553,15 +608,15 @@ func _update_time_of_day() -> void:
 	# every hill sat at rgb(0,38,0) - near black, which is what made the terrain
 	# read as a dark green felt wedge rather than grass in shade. Shade in a
 	# stylised world is a colour, not an absence of one.
-	env.ambient_light_energy = lerpf(1.35, 1.15, warmth)
+	env.ambient_light_energy = lerpf(1.45, 1.27, warmth)
 
 	# --- fog ---------------------------------------------------------------
 	# Fog carries the sun's colour, which is what makes distant hills read as
 	# warm-lit rather than grey haze. Pulled in tighter at the warm ends: morning
 	# haze pooling in the valley is a signature of the look.
 	env.fog_light_color = Color(0.78, 0.86, 0.95).lerp(Color(1.0, 0.82, 0.64), warmth)
-	env.fog_depth_begin = lerpf(190.0, 120.0, warmth)
-	env.fog_depth_end = lerpf(820.0, 640.0, warmth)
+	env.fog_depth_begin = lerpf(240.0, 160.0, warmth)
+	env.fog_depth_end = lerpf(3800.0, 3200.0, warmth)
 	env.fog_depth_curve = lerpf(1.25, 1.55, warmth)
 	env.fog_aerial_perspective = lerpf(0.50, 0.62, warmth)
 
@@ -599,31 +654,15 @@ func _update_time_of_day() -> void:
 
 
 func _grade_env(env: Environment, warmth: float = 0.5) -> void:
-	## The one and only place the colour grade is written.
-	##
-	## Contrast pulls the frame together and the grade warms slightly as the sun
-	## drops, but saturation stays close to 1.0. Pushing it up - which is the
-	## obvious "make it pop" move, and was what this did - clips the most
-	## saturated surface in the frame (the meadow) while leaving everything else
-	## untouched, so the greens go neon and the rock does not change at all. Any
-	## extra saturation has to come from the albedo, which this project already
-	## has plenty of.
+	## One shared grade for the 3D world, characters, water and sky on every
+	## quality tier and throughout the day. A modest contrast keeps bright
+	## highlights and shaded grass readable while the palette becomes livelier.
 	if env == null:
 		return
 	env.adjustment_enabled = true
-	# Raised to give the "more saturated" look, but the ceiling is deliberate.
-	#
-	# The old warning - that global saturation clips the most saturated surface in
-	# the frame while leaving everything else alone - is still true and is why this
-	# is 1.24 and not 1.45. The excess saturation the user is asking for comes from
-	# the albedo (the greens were moved to a true green hue, and the rock now has
-	# real texture instead of flat grey), so the grade only has to finish the job.
-	# Pushed further, the meadow clips to a single flat green and the rock does not
-	# move at all - the specific failure the previous comment was written about.
-	env.adjustment_saturation = lerpf(1.14, 1.22, warmth)
-	env.adjustment_contrast = lerpf(1.10, 1.15, warmth)
-	env.adjustment_brightness = lerpf(1.0, 1.02, warmth)
-
+	env.adjustment_saturation = lerpf(1.30, 1.36, warmth)
+	env.adjustment_contrast = lerpf(1.06, 1.10, warmth)
+	env.adjustment_brightness = lerpf(1.08, 1.10, warmth)
 
 
 func _build_lake() -> void:
@@ -645,6 +684,18 @@ func _height(x: float, z: float) -> float:
 	if terrain and terrain.has_method("get_height_at"):
 		return terrain.get_height_at(x, z)
 	return 0.0
+
+
+## Is this point under the waterline? Every kind of water - the bay, the lake,
+## the river, each pond - is just terrain below sea level, so this one question
+## covers all of them. Placement used to ask "am I inside the lake disc?", which
+## after the map grew was true of a puddle and false of an ocean.
+func _is_wet(x: float, z: float) -> bool:
+	if terrain and terrain.has_method("is_underwater"):
+		return bool(terrain.call("is_underwater", x, z))
+	if terrain and terrain.has_method("get_height_at"):
+		return float(terrain.call("get_height_at", x, z)) < Game.water_level
+	return false
 
 
 func _build_spawn_glade() -> void:
@@ -677,8 +728,9 @@ func _build_spawn_glade() -> void:
 	altar.add_child(disc)
 
 	var stone := MeshInstance3D.new()
-	# A monolith with a taper, not a 1x2.2x0.6 box.
-	stone.mesh = VegMeshes.trunk(2.2, 0.55, 0.30, 0.10, 5)
+	# A monolith with a taper, not a 1x2.2x0.6 box. Knee-high on the altar, not
+	# chest-high: the glowing disc is the thing to look at here.
+	stone.mesh = VegMeshes.trunk(1.5, 0.5, 0.26, 0.10, 5)
 	var sm := StandardMaterial3D.new()
 	# 0.82 albedo under a 1.3-energy sun clipped to white; these read as blank
 	# white slabs. A weathered grey stone matches the rock band on the terrain.
@@ -686,22 +738,29 @@ func _build_spawn_glade() -> void:
 	sm.roughness = 0.85
 	sm.metallic = 0.0
 	stone.material_override = sm
-	stone.position.y = 1.1
+	stone.position.y = 0.75
 	stone.rotation_degrees = Vector3(0, 25, 0)
 	altar.add_child(stone)
 
-	for i in range(6):
-		var a := TAU * float(i) / 6.0
+	# Seven stones around an 11 m ring, 1.5-2.6 m tall.
+	#
+	# They were six at 3.4-5.2 m on a 9 m ring, which reads as a quarry wall
+	# around the character's neck: at the spawn camera, three of them filled the
+	# middle third of the frame and read as grey slabs standing in the grass. A
+	# shrine's standing stones should be taller than her and no taller than twice
+	# her, and they should leave the view out.
+	for i in range(7):
+		var a := TAU * float(i) / 7.0
 		var pillar := MeshInstance3D.new()
 		# A tapered, slightly leaning stone column instead of a box. Still
 		# rectangular in plan - these are built ruins, not boulders - but with a
 		# taper, a lean and a real rock texture, which is the difference between
 		# "standing stone" and "grey rectangle".
-		var ph := _rng.randf_range(3.4, 5.2)
+		var ph := _rng.randf_range(1.5, 2.6)
 		var mesh := VegMeshes.trunk(ph, 0.46, 0.18, _rng.randf_range(-0.06, 0.06), 6)
 		pillar.mesh = mesh
 		pillar.material_override = sm
-		pillar.position = center + Vector3(cos(a) * 9.0, -0.4, sin(a) * 9.0)
+		pillar.position = center + Vector3(cos(a) * 11.0, -0.4, sin(a) * 11.0)
 		pillar.rotation_degrees = Vector3(0, rad_to_deg(a) + 8.0, _rng.randf_range(-5.0, 5.0))
 		_props.add_child(pillar)
 
@@ -714,7 +773,7 @@ func _build_spawn_glade() -> void:
 		# such property, so this had to be rewritten with the pillar rather than
 		# left to fail at runtime.
 		var shape := BoxShape3D.new()
-		shape.size = Vector3(0.92, ph, 0.92)
+		shape.size = Vector3(0.72, ph, 0.72)
 		col.shape = shape
 		body.add_child(col)
 		pillar.add_child(body)
@@ -725,6 +784,24 @@ func _build_spawn_glade() -> void:
 	light.omni_range = 14.0
 	light.position = center + Vector3(0, 2.0, 0)
 	add_child(light)
+
+	# Bone cloth in the starting glade: a carpet up to the altar and a banner
+	# hung behind the monolith, so the first thing a player sees is dressed.
+	var carpet := BoneCloth.ground_cloth(Color(0.93, 0.90, 0.83), 0.55)
+	if carpet != null:
+		# In front of the altar on the side the player spawns, which is +Z: the
+		# spawn is at z = +6 and she faces -Z.
+		carpet.position = center + Vector3(0.0, 0.03, 3.6)
+		add_child(carpet)
+	# Two standards flanking the altar. Nothing hangs over this glade - there is
+	# no beam, no lintel - so these stand on their own bone feet, planted on the
+	# edge of the altar disc rather than in the grass that would swallow them.
+	for side in [-1.0, 1.0]:
+		var standard := BoneCloth.standard(Color(0.90, 0.87, 0.79), 0.55)
+		if standard != null:
+			standard.position = center + Vector3(2.3 * side, 0.14, 1.5)
+			standard.rotation_degrees = Vector3(0, 24.0 * side, 0)
+			add_child(standard)
 
 
 ## Weathered stone, textured and triplanar.
@@ -742,7 +819,7 @@ func _stone_material() -> StandardMaterial3D:
 	m.albedo_color = Color(0.60, 0.62, 0.66)
 	m.roughness = 0.92
 	m.metallic = 0.0
-	var tex := _load_stone_tex("res://textures/terrain/rock.png")
+	var tex := _load_stone_tex("res://textures/terrain/rock.webp")
 	if tex != null:
 		m.albedo_texture = tex
 		m.uv1_triplanar = true
@@ -769,13 +846,11 @@ func _scatter_landmarks() -> void:
 	# Wind arches: tall broken gates that read like Genshin's ruins.
 	for i in range(7):
 		var a := _rng.randf() * TAU
-		var r := _rng.randf_range(60.0, 260.0)
+		var r := _rng.randf_range(60.0, 700.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
-		if Vector2(x, z).distance_to(Game.lake_center) < Game.lake_radius * 0.9:
-			continue
 		var y := _height(x, z)
-		if y < 2.0 or y > 90.0:
+		if y < 2.0 or y > 90.0 or _is_wet(x, z):
 			continue
 		var gate := Node3D.new()
 		gate.position = Vector3(x, y, z)
@@ -797,15 +872,31 @@ func _scatter_landmarks() -> void:
 		lintel.position.y = 8.4
 		gate.add_child(lintel)
 
-	# Floating crystal formations.
+		# Bone cloth hung from the lintel: the gates are the one built structure a
+		# player walks under, and a banner between the pillars is what makes them
+		# read as a place rather than as two grey columns and a beam.
+		var banner := BoneCloth.hanging(Color(0.92, 0.88, 0.79), 0.85)
+		if banner != null:
+			# The lintel is 1.1 m deep and centred on 8.4, so its underside is here.
+			banner.position = Vector3(0.0, 7.85, 0.15)
+			gate.add_child(banner)
+
+	# Crystal formations.
+	#
+	# Opaque, and half as many. These were 85%-alpha prisms with an emission
+	# energy of 1.2, and from any distance at all a transparent prism lit from
+	# inside reads as a flat coloured plank lying on the hill - which is what the
+	# thin blue rectangles scattered across the wide shot were. A crystal is a
+	# solid object; the emission is what makes it glow, and it does not need the
+	# alpha channel to do it.
 	var crystal_colors := [Color(0.55, 0.85, 1.0), Color(0.75, 0.6, 1.0), Color(1.0, 0.78, 0.55)]
-	for i in range(14):
+	for i in range(9):
 		var a := _rng.randf() * TAU
-		var r := _rng.randf_range(40.0, 300.0)
+		var r := _rng.randf_range(60.0, 760.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
 		var y := _height(x, z)
-		if y < 1.5:
+		if y < 1.5 or _is_wet(x, z):
 			continue
 		var cluster := Node3D.new()
 		cluster.position = Vector3(x, y - 0.2, z)
@@ -818,13 +909,15 @@ func _scatter_landmarks() -> void:
 			mesh.size = Vector3(_rng.randf_range(0.3, 0.7), h, _rng.randf_range(0.3, 0.7))
 			crystal.mesh = mesh
 			var m := StandardMaterial3D.new()
-			m.albedo_color = Color(col.r, col.g, col.b, 0.85)
-			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			# Opaque, and the albedo is darker than the glow on purpose: the
+			# emission is what the eye reads as the crystal, and an albedo as
+			# bright as the emission just blows the shape out to a flat plate.
+			m.albedo_color = Color(col.r * 0.55, col.g * 0.55, col.b * 0.60, 1.0)
 			m.emission_enabled = true
 			m.emission = col
-			m.emission_energy_multiplier = 1.2
-			m.roughness = 0.15
-			m.metallic = 0.4
+			m.emission_energy_multiplier = 0.9
+			m.roughness = 0.18
+			m.metallic = 0.35
 			crystal.material_override = m
 			crystal.position = Vector3(_rng.randf_range(-1.2, 1.2), h * 0.5, _rng.randf_range(-1.2, 1.2))
 			crystal.rotation_degrees = Vector3(_rng.randf_range(-18, 18), _rng.randf() * 360, _rng.randf_range(-18, 18))
@@ -835,11 +928,11 @@ func _scatter_landmarks() -> void:
 	wood.albedo_color = Color(0.45, 0.32, 0.23)
 	for i in range(6):
 		var a := _rng.randf() * TAU
-		var r := _rng.randf_range(70.0, 240.0)
+		var r := _rng.randf_range(70.0, 680.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
 		var y := _height(x, z)
-		if y < 2.5 or Vector2(x, z).distance_to(Game.lake_center) < Game.lake_radius:
+		if y < 2.5 or _is_wet(x, z):
 			continue
 		var camp := Node3D.new()
 		camp.position = Vector3(x, y, z)
@@ -887,6 +980,67 @@ func _scatter_landmarks() -> void:
 		t.tween_property(fm, "emission_energy_multiplier", 2.0, 0.5)
 		t.tween_property(fm, "emission_energy_multiplier", 3.4, 0.7)
 
+		# A roofed pavilion around the fire.
+		#
+		# Until now the valley had walls (the ruin gates, the altar ring) but no
+		# ceilings, so there was nowhere for a player to stand that was covered -
+		# and nothing for the entity culler to prove its roof test on. Four posts
+		# and a slab also turn a campfire into a shelter, which is what the note
+		# above has been calling it all along.
+		for side in [-1.0, 1.0]:
+			for front in [-1.0, 1.0]:
+				var post := MeshInstance3D.new()
+				var post_mesh := BoxMesh.new()
+				post_mesh.size = Vector3(0.18, 2.6, 0.18)
+				post.mesh = post_mesh
+				post.material_override = wood
+				post.position = Vector3(1.7 * side, 1.3, 1.7 * front)
+				camp.add_child(post)
+		var roof := MeshInstance3D.new()
+		var roof_mesh := BoxMesh.new()
+		roof_mesh.size = Vector3(4.4, 0.35, 4.4)
+		roof.mesh = roof_mesh
+		roof.material_override = wood
+		roof.position.y = 2.7
+		camp.add_child(roof)
+
+		# Bone cloth in the shelter: a drape across the open side, a carpet on the
+		# floor and a heap of bones the fire was lit on.
+		var drape := BoneCloth.drape(Color(0.34, 0.40, 0.48), 0.42)
+		if drape != null:
+			drape.position = Vector3(0.0, 2.5, 1.95)
+			drape.rotation_degrees = Vector3(0, 180, 0)
+			camp.add_child(drape)
+		var carpet := BoneCloth.ground_cloth(Color(0.66, 0.30, 0.28), 0.30)
+		if carpet != null:
+			carpet.position = Vector3(0.0, 0.02, 0.0)
+			camp.add_child(carpet)
+		var pile := BoneCloth.bone_pile(0.30)
+		if pile != null:
+			pile.position = Vector3(1.35, 0.02, -1.05)
+			camp.add_child(pile)
+
+
+## Count the bone cloth the world actually dressed itself in.
+##
+## A piece that placed geometry is a different claim from a piece that placed
+## nothing, and only the counts separate them: the models are preloaded, so a
+## failed import is a parse error, but an imported file that instanced an empty
+## scene would otherwise be invisible in every screenshot.
+func bone_cloth_census() -> String:
+	var pieces := 0
+	var meshes := 0
+	var surfaces := 0
+	for n in get_tree().get_nodes_in_group("bone_cloth"):
+		pieces += 1
+		for child in n.find_children("*", "MeshInstance3D", true, false):
+			var mi := child as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			meshes += 1
+			surfaces += mi.mesh.get_surface_count()
+	return "BONE_CLOTH pieces=%d meshes=%d surfaces=%d" % [pieces, meshes, surfaces]
+
 
 ## Count what the world is actually asking the renderer to draw.
 ##
@@ -919,6 +1073,15 @@ func perf_census() -> String:
 			stack.append(c)
 	var out := "census meshes=%d multimeshes=%d multimesh_instances=%d lights=%d bodies=%d" % [
 		meshes, multimeshes, instances, lights, bodies]
+	# How many entities the culler is actually keeping out of the frame and out
+	# of the tick. On the main census line's tail so it survives the annotation
+	# cap in CI.
+	if _culler != null and is_instance_valid(_culler) and _culler.has_method("census"):
+		out += "\n" + str(_culler.call("census"))
+	# Bone cloth: how many pieces the world actually dressed, and how many of them
+	# resolved to real geometry after import. Zero here means the GLBs were not
+	# imported, which is exactly the failure a census should name.
+	out += "\n" + bone_cloth_census()
 	# One line per vegetation layer, naming the mesh it actually resolved.
 	#
 	# "flowers are in the scene" and "flowers are drawn as flowers" are different
@@ -932,8 +1095,8 @@ func perf_census() -> String:
 		if layer == null or not layer.has_method("census"):
 			continue
 		var c: Dictionary = layer.call("census")
-		out += "\nVEG_LAYERS %s kind=%s mesh=%s verts=%s chunks=%s instances=%s" % [
-			spec["name"], c.get("mesh_kind", "?"), c.get("mesh_class", "?"),
+		out += "\nVEG_LAYERS %s model=%s mesh=%s verts=%s chunks=%s instances=%s" % [
+			spec["name"], c.get("model_kind", "?"), c.get("mesh_class", "?"),
 			c.get("mesh_verts", 0), c.get("chunks", 0), c.get("instances", 0)]
 	return out
 
@@ -941,8 +1104,8 @@ func perf_census() -> String:
 func _spawn_waypoints() -> void:
 	var spots := [
 		{"name": "Starlit Shore", "pos": Vector3(0.0, 0.0, 0.0)},
-		{"name": "Windrise Lookout", "pos": Vector3(-140.0, 0.0, -60.0)},
-		{"name": "Jadewater Glade", "pos": Vector3(250.0, 0.0, 120.0)},
+		{"name": "Windrise Lookout", "pos": Vector3(-620.0, 0.0, -380.0)},
+		{"name": "Jadewater Glade", "pos": Vector3(250.0, 0.0, 300.0)},
 	]
 	for spot in spots:
 		var p: Vector3 = spot["pos"]
@@ -951,6 +1114,11 @@ func _spawn_waypoints() -> void:
 		statue.statue_name = str(spot["name"])
 		statue.position = Vector3(p.x, _height(p.x, p.z) - 0.2, p.z)
 		add_child(statue)
+		# Every waypoint wears bone cloth on its spire, like a shrine banner.
+		var totem := BoneCloth.totem(Color(0.80, 0.86, 0.95), 0.34)
+		if totem != null:
+			totem.position = Vector3(0.0, 3.4, 0.62)
+			statue.add_child(totem)
 
 
 func _spawn_sigils() -> void:
@@ -960,13 +1128,13 @@ func _spawn_sigils() -> void:
 	while placed < Game.TOTAL_SIGILS and attempts < 600:
 		attempts += 1
 		var a := TAU * float(placed) / float(Game.TOTAL_SIGILS) + _rng.randf_range(-0.25, 0.25)
-		var r := _rng.randf_range(55.0, 300.0)
+		var r := _rng.randf_range(55.0, 820.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
 		var y := _height(x, z)
 		if y < 1.6 or y > 120.0:
 			continue
-		if Vector2(x, z).distance_to(Game.lake_center) < Game.lake_radius * 0.75:
+		if _is_wet(x, z):
 			continue
 		var too_close := false
 		for u in used:
@@ -976,28 +1144,75 @@ func _spawn_sigils() -> void:
 		if too_close:
 			continue
 		used.append(Vector3(x, y, z))
+		var sigil_id := "Sigil_%d" % placed
+		if Game.sigils_seen.has(sigil_id):
+			placed += 1
+			continue
 		var sigil := Area3D.new()
 		sigil.set_script(SigilScript)
 		sigil.position = Vector3(x, y + 0.6, z)
-		sigil.name = "Sigil_%d" % placed
+		sigil.name = sigil_id
 		_collectibles.add_child(sigil)
 		placed += 1
+
+
+func _restore_drops() -> void:
+	for id in Game.dropped_items:
+		spawn_dropped_item(str(id))
+
+
+func spawn_dropped_item(id: String) -> void:
+	if not Game.dropped_items.has(id):
+		return
+	var data: Dictionary = Game.dropped_items[id]
+	if not data.get("position") is Vector3:
+		return
+	var drop := Area3D.new()
+	drop.set_script(load("res://scripts/dropped_item.gd"))
+	drop.set("drop_id", id)
+	drop.position = data["position"]
+	_collectibles.add_child(drop)
 
 
 func _spawn_enemies() -> void:
 	for i in range(ENEMY_COUNT):
 		var a := _rng.randf() * TAU
-		var r := _rng.randf_range(25.0, 250.0)
+		var r := _rng.randf_range(25.0, 620.0)
 		var x := cos(a) * r
 		var z := sin(a) * r
 		var y := _height(x, z)
-		if y < 1.8 or Vector2(x, z).distance_to(Game.lake_center) < Game.lake_radius * 0.8:
+		if y < 1.8 or _is_wet(x, z):
 			continue
 		var slime := CharacterBody3D.new()
 		slime.set_script(SlimeScript)
 		slime.position = Vector3(x, y + 1.2, z)
 		slime.set_element(i % 3)
 		_enemies.add_child(slime)
+
+
+func _build_entity_culler() -> void:
+	## Occlusion-cull the spawned entities on a worker thread.
+	##
+	## Registered by group rather than by handle: the slimes, sigils and waypoints
+	## are spawned by three different functions, each of which can skip a spot,
+	## and the groups are already the authoritative list of what exists (the HUD
+	## counts sigils from the same one).
+	var culler := Node.new()
+	culler.name = "EntityCuller"
+	culler.set_script(EntityCullerScript)
+	add_child(culler)
+	culler.call("setup", terrain, _props)
+	for group_name in ["enemy", "sigil", "waypoint"]:
+		culler.call("register_group", group_name)
+	_culler = culler
+
+
+func _spawn_story_contact() -> void:
+	var guard := Node3D.new()
+	guard.name = "StarGuardIlyra"
+	guard.set_script(load("res://scripts/star_guard.gd"))
+	guard.position = Vector3(5.0, _height(5.0, 6.0), 6.0)
+	add_child(guard)
 
 
 func _spawn_player() -> void:
@@ -1029,13 +1244,11 @@ func _build_grass_field() -> void:
 	var field := Node3D.new()
 	field.set_script(GrassFieldScript)
 	add_child(field)
+	# Set the chosen density before setup queues any grass.
+	field.call("set_density_scale", 1.0 if Game.quality_tier >= 2 else (0.65 if Game.quality_tier == 0 else 0.35))
 	field.call("setup", t, player)
 	_grass_field = field
 	_build_environment_vegetation(t, player)
-
-
-## The five authored leaf silhouettes, one per leaf layer instance.
-const LEAF_VARIETIES := ["lance", "oval", "round", "needle", "lobed"]
 
 
 func _build_environment_vegetation(t: Node, player: Node3D) -> void:
@@ -1056,17 +1269,14 @@ func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 	wind.call("set_player", player)
 
 	for spec in VegPresets.species():
-		# The base grass carpet is already handled by GrassField, which is tuned
-		# to the player's position and streams differently. Skip the duplicate.
-		if spec["name"] == "grass":
+		# The meadow's carpet is GrassField's job, which streams and thins by
+		# distance; every species here is a discrete prop.
+		# One material per species, built from the species' model so the wind
+		# strength it asks for is the strength its shader uses.
+		var mat: ShaderMaterial = VegPresets.material_for(spec)
+		if mat == null:
+			push_warning("LastStar: no material for species %s" % spec["name"])
 			continue
-		var tex: Texture2D = VegPresets.texture(spec["tex"])
-		if tex == null:
-			push_warning("LastStar: missing vegetation texture %s" % spec["tex"])
-			continue
-		var mat: ShaderMaterial = VegPresets.material_for(
-			spec["name"], spec["wind"], spec["tint"])
-		mat.set_shader_parameter("albedo_texture", tex)
 		wind.call("register_material", mat)
 
 		var layer := Node3D.new()
@@ -1078,31 +1288,15 @@ func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 		# reads far worse than the detail simply thinning out. Grass holds its
 		# density to the streaming edge; small props taper.
 		layer.set("density", float(spec["density"]))
+		# The scale range, not a height: the pack authors each model at its own
+		# size and only a scale is honest about that. See vegetation_presets.gd.
 		layer.set("min_height", spec["hmin"])
 		layer.set("max_height", spec["hmax"])
 		layer.set("max_slope", spec["slope"])
-		layer.set("mesh_kind", spec["mesh"])
-		# Variant selection for the generated cluster meshes. `hash` is stable
-		# within a run but not across platforms, so it is only used to pick a
-		# variant, never for placement.
-		# Solid geometry needs three changes from a foliage card: no alpha cutout,
-		# no wind sway, and a tiled albedo. Set here rather than in the material
-		# cache because material_for() is shared per (species, wind, tint) and the
-		# rock texture is not interchangeable with a leaf sprite.
-		# Typed, not inferred. `spec` is an untyped Dictionary, so `spec["mesh"]`
-		# has no static type and `var solid := ... in [...]` fails Godot's analyser
-		# with "Cannot infer the type of solid variable" - at load time, which kills
-		# the whole world script. gdparse and undeclared.py both accept it.
-		var solid: bool = str(spec["mesh"]) in ["rock", "boulder", "trunk"]
-		if solid:
-			mat.set_shader_parameter("solid", 1.0)
-			mat.set_shader_parameter("uv_scale", Vector2(2.2, 2.2))
-			mat.set_shader_parameter("rim_strength", 0.18)
-		layer.set("mesh_variant", absi(hash(spec["name"])) % 8)
-		layer.set("seed_for_mesh", absi(hash(spec["name"])) % 97 + 1)
-		layer.set("leaf_variety", LEAF_VARIETIES[absi(hash(spec["name"])) % LEAF_VARIETIES.size()])
+		layer.set("model_kind", spec["model"])
 		# Per-species streaming radius. Small detail does not need to exist at
 		# 130 m; see the note on the species table.
+		layer.set("casts_shadow", bool(spec.get("casts_shadow", false)))
 		layer.set("chunk_radius", int(spec["radius"]))
 		layer.set("material", mat)
 		# Fewer chunks per frame than the demo scene: the world is already

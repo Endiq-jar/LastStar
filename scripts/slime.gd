@@ -32,6 +32,9 @@ static var _eye_mat: StandardMaterial3D
 ## AI tick cadence. Close enemies every frame; distant ones four times a second.
 const AI_NEAR_RANGE := 45.0
 const AI_TICK := 0.25
+## Physics frames between the only work a fully occluded slime does (settling its
+## own gravity). See the note in _physics_process.
+const CULLED_TICK_EVERY := 8
 
 var _ai_timer := 0.0
 var max_hp := 150.0
@@ -52,6 +55,9 @@ var _attack_timer := 0.0
 var _dead := false
 var _wander_target := Vector3.ZERO
 var _wander_timer := 0.0
+## True while the entity culler has decided the player cannot see this slime.
+var _view_culled := false
+var _culled_frames := 0
 
 
 func _ready() -> void:
@@ -215,9 +221,45 @@ func set_element(index: int) -> void:
 		_apply_element()
 
 
+## Called by the entity culler when this slime leaves / re-enters the player's
+## sight lines. Hiding the mesh root takes it out of the renderer entirely
+## without touching the CharacterBody3D, so physics and combat stay correct.
+func set_view_culled(hidden: bool) -> void:
+	if _view_culled == hidden:
+		return
+	_view_culled = hidden
+	if _mesh_root != null and is_instance_valid(_mesh_root):
+		_mesh_root.visible = not hidden
+
+
+func is_view_culled() -> bool:
+	return _view_culled
+
+
 func _physics_process(delta: float) -> void:
 	if _dead or Game.is_paused:
 		return
+
+	# Occluded: no brain, no animation, no contact-damage check.
+	#
+	# The culler has geometry-proved that this slime is behind a wall, a ceiling
+	# or a hillside, so nothing it decides this frame can be seen. Gravity still
+	# settles it at one frame in eight (and with the elapsed time folded back in)
+	# so an occluded slime cannot be left hovering in mid-air and then drop the
+	# moment it comes back into view.
+	if _view_culled:
+		_culled_frames += 1
+		if _culled_frames % CULLED_TICK_EVERY != 0:
+			return
+		if not is_on_floor():
+			velocity.y -= 24.0 * delta * float(CULLED_TICK_EVERY)
+		else:
+			velocity.y = 0.0
+		move_and_slide()
+		if global_position.y < -50.0:
+			queue_free()
+		return
+	_culled_frames = 0
 
 	# Distance-gated AI.
 	#
