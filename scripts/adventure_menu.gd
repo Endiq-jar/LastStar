@@ -408,7 +408,7 @@ func _reset_bindings() -> void:
 func _input(event: InputEvent) -> void:
 	if not visible or _binding_action == "" or not (event is InputEventKey) or not event.pressed or event.echo:
 		return
-	var key := event.physical_keycode if event.physical_keycode != 0 else event.keycode
+	var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
 	if key == KEY_ESCAPE:
 		_status = "Key binding cancelled."
 	elif Game.rebind_action(_binding_action, key):
