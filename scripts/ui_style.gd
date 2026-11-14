@@ -41,3 +41,4 @@ static func button(button_node: Button, highlighted: bool = false) -> void:
 	button_node.add_theme_color_override("font_color", Color(0.12, 0.10, 0.25) if highlighted else TEXT)
 	button_node.add_theme_color_override("font_hover_color", Color(0.12, 0.10, 0.25) if highlighted else TEXT)
 	button_node.add_theme_color_override("font_pressed_color", Color(0.12, 0.10, 0.25) if highlighted else TEXT)
+	button_node.add_theme_color_override("font_focus_color", Color(0.12, 0.10, 0.25) if highlighted else TEXT)
