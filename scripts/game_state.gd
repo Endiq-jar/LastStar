@@ -100,6 +100,7 @@ var party_index: int = 0
 var health: Array[float] = []
 var energy: float = 0.0
 var stamina: float = MAX_STAMINA
+var shield_points: float = 0.0
 
 var sigils_collected: int = 0
 var slimes_defeated: int = 0
@@ -182,6 +183,7 @@ func reset_run() -> void:
 		health.append(float(c["max_hp"]))
 	energy = 25.0
 	stamina = MAX_STAMINA
+	shield_points = 0.0
 	sigils_collected = 0
 	slimes_defeated = 0
 	waypoints_activated = 0
@@ -236,7 +238,14 @@ func heal(amount: float) -> void:
 
 
 func damage(amount: float) -> void:
-	set_hp(current_hp() - amount)
+	var remaining := maxf(0.0, amount)
+	if shield_points > 0.0:
+		var absorbed := minf(shield_points, remaining)
+		shield_points -= absorbed
+		remaining -= absorbed
+		if absorbed > 0.0:
+			toast.emit("Bulwark absorbed %.0f damage" % absorbed)
+	set_hp(current_hp() - remaining)
 
 
 func add_stamina(amount: float) -> void:

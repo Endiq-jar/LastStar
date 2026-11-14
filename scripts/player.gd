@@ -868,6 +868,12 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 	FX.element_burst(get_parent(), origin + forward * 1.4, color, element)
 	FX.ring_burst(get_parent(), origin, color, 1.4)
 
+	# Defensive mastery produces an actual damage-absorbing shield.
+	if id == "stone_bulwark":
+		Game.shield_points = maxf(Game.shield_points, 120.0 * mastery)
+		Game.toast.emit("Stone Bulwark: %.0f shield" % Game.shield_points)
+		return
+
 	# Spatial spells relocate the caster instead of dealing damage.
 	if id == "tide_step":
 		var dest := global_position + forward * minf(reach, 14.0)

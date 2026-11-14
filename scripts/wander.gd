@@ -35,7 +35,7 @@ const CATALOGUE := {
 		"power": 1.5,
 		"radius": 0.0,
 		"range": 26.0,
-		"desc": "A dart of fire that bursts on impact.",
+		"desc": "A focused burst of fire in front of you.",
 		"starter": true,
 	},
 	"gale_palm": {
@@ -63,7 +63,7 @@ const CATALOGUE := {
 		"power": 2.0,
 		"radius": 0.0,
 		"range": 30.0,
-		"desc": "A splinter of ice that slows what it touches.",
+		"desc": "A focused burst of ice in front of you.",
 		"starter": true,
 	},
 	"stone_bulwark": {
@@ -77,7 +77,7 @@ const CATALOGUE := {
 		"power": 0.4,
 		"radius": 3.0,
 		"range": 0.0,
-		"desc": "Raises a slab of rock that soaks a hit.",
+		"desc": "Wraps the party in a damage-absorbing stone shield.",
 		"starter": false,
 	},
 	"arc_lance": {
@@ -91,7 +91,7 @@ const CATALOGUE := {
 		"power": 2.6,
 		"radius": 2.2,
 		"range": 34.0,
-		"desc": "A spear of raw current that chains between foes.",
+		"desc": "A powerful arcane strike against foes ahead.",
 		"starter": false,
 	},
 	"sun_spear": {

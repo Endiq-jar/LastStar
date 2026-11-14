@@ -654,6 +654,12 @@ func _run() -> void:
 	Game.wander.set_slot(2, "stone_bulwark")
 	Game.wander.begin_cast("stone_bulwark")
 	Game.load_collection()
+	var old_hp := Game.current_hp()
+	Game.shield_points = 100.0
+	Game.damage(35.0)
+	var shield_ok := Game.current_hp() == old_hp and is_equal_approx(Game.shield_points, 65.0)
+	Game.shield_points = 0.0
+	_log("INFO" if shield_ok else "FAIL", "stone shield absorbs damage: %s" % str(shield_ok))
 	var restored_wander := Wander.new()
 	restored_wander.restore(Game.wander_levels, Game.wander_slots)
 	var persist_wander: bool = restored_wander.known("stone_bulwark") and restored_wander.equipped_at(2) == "stone_bulwark" and int(restored_wander.levels.get("stone_bulwark_xp", 0)) == 1
