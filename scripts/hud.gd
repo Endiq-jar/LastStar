@@ -136,10 +136,6 @@ func _build() -> void:
 	_compass.add_theme_constant_override("shadow_offset_y", 2)
 	top_right.add_child(_compass)
 
-	var journal_btn := _round_button("✦", Vector2(46, 46))
-	journal_btn.tooltip_text = "Adventure journal (J)"
-	journal_btn.pressed.connect(_open_adventure)
-	top_right.add_child(journal_btn)
 	var pause_btn := _round_button("II", Vector2(46, 46))
 	pause_btn.pressed.connect(_pause)
 	top_right.add_child(pause_btn)
@@ -161,10 +157,24 @@ func _build() -> void:
 	bottom_center.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	bottom_center.offset_left = -230
 	bottom_center.offset_right = 230
-	bottom_center.offset_top = -92
+	bottom_center.offset_top = -138
 	bottom_center.offset_bottom = -18
 	bottom_center.add_theme_constant_override("separation", 7)
 	root.add_child(bottom_center)
+
+	var navigation := HBoxContainer.new()
+	navigation.name = "GameplayNavigation"
+	navigation.alignment = BoxContainer.ALIGNMENT_CENTER
+	navigation.add_theme_constant_override("separation", 8)
+	bottom_center.add_child(navigation)
+	for entry in [["Inventory", "Inventory"], ["Map", "Map"], ["Journal", "Character"]]:
+		var button := Button.new()
+		button.name = entry[0] + "Button"
+		button.text = entry[0]
+		button.custom_minimum_size = Vector2(100, 42)
+		UI.button(button)
+		button.pressed.connect(_open_adventure.bind(entry[1]))
+		navigation.add_child(button)
 
 	var energy_row := HBoxContainer.new()
 	energy_row.add_theme_constant_override("separation", 8)
@@ -497,9 +507,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-func _open_adventure() -> void:
+func _open_adventure(tab: String = "Character") -> void:
 	if _adventure_menu != null and not Game.is_paused and not Game.has_won:
-		_adventure_menu.call("open_menu", "Character")
+		_adventure_menu.call("open_menu", tab)
 
 
 func _toggle_perf_monitor() -> void:

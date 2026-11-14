@@ -536,6 +536,12 @@ func _run() -> void:
 	var old_levels := Game.character_levels.duplicate()
 	var old_items := Game.collectibles.duplicate(true)
 	var old_wishes := Game.wish_count
+	var old_packs := Game.owned_backpacks.duplicate()
+	var old_equipped := Game.equipped_backpack
+	Game.owned_backpacks = [0]
+	Game.equipped_backpack = 0
+	Game.potions = 2
+	Game.collectibles = {}
 	Game.coins = 100
 	Game.starlight = 30
 	Game.character_levels[0] = 1
@@ -546,6 +552,20 @@ func _run() -> void:
 	Game.coins = 0
 	Game.load_collection()
 	var save_ok := Game.coins == 25 and Game.character_levels[0] == 2
+	Game.potions = 10
+	Game.collectibles = {}
+	Game.coins = 500
+	Game.starlight = 30
+	var full_ok := Game.inventory_capacity() == 10 and not Game.buy_potion() and Game.make_wish() == "" and Game.coins == 500 and Game.starlight == 30
+	var pack_ok := Game.buy_backpack(1) and Game.equip_backpack(1) and Game.inventory_capacity() == 15 and Game.buy_potion() and not Game.equip_backpack(0)
+	Game.save_collection()
+	Game.equipped_backpack = 0
+	Game.owned_backpacks = [0]
+	Game.load_collection()
+	pack_ok = pack_ok and Game.equipped_backpack == 1 and Game.owned_backpacks.has(1) and Game.inventory_used() == 11
+	_log("INFO" if full_ok and pack_ok else "FAIL", "inventory capacity and backpack persistence: full=%s pack=%s" % [str(full_ok), str(pack_ok)])
+	Game.owned_backpacks.assign(old_packs)
+	Game.equipped_backpack = old_equipped
 	Game.coins = old_coins
 	Game.starlight = old_starlight
 	Game.potions = old_potions
@@ -885,6 +905,21 @@ func _check_title_screen(world: Node, out_dir: String, capture: bool) -> void:
 	var button := menu.get_node_or_null("LeftPanel/Panel/VBox/StartButton") as Button
 	var ok := art != null and art.texture != null and button != null and not button.pressed.get_connections().is_empty()
 	_log("INFO" if ok else "FAIL", "celestial title art and start button wired: %s" % str(ok))
+	var home_nav := menu.get_node_or_null("LeftPanel/Panel/VBox/HomeNavigation")
+	var home_pages_ok := home_nav != null
+	if home_pages_ok:
+		for page in ["Wardrobe", "Profile", "Settings", "Shop"]:
+			var home_button := home_nav.get_node_or_null(page + "Button") as Button
+			if home_button == null or home_button.pressed.get_connections().is_empty():
+				home_pages_ok = false
+			else:
+				home_button.emit_signal("pressed")
+				var overlay := menu.get_node_or_null("AdventureMenu") as Control
+				if overlay == null or not overlay.visible or overlay.get("_tab") != page or Game.is_paused:
+					home_pages_ok = false
+				else:
+					overlay.call("close_menu")
+	_log("INFO" if home_pages_ok else "FAIL", "home navigation and pages: %s" % str(home_pages_ok))
 	if capture:
 		await get_tree().create_timer(0.2).timeout
 		var title_img := get_viewport().get_texture().get_image()

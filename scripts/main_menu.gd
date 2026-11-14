@@ -3,6 +3,8 @@ extends Control
 ## viewport so the menu stays inexpensive on mobile devices.
 
 const UI := preload("res://scripts/ui_style.gd")
+const AdventureMenu := preload("res://scripts/adventure_menu.gd")
+var _home_menu: Control
 const TITLE_BACKGROUND := preload("res://assets/ui/celestial_title.webp")
 
 @onready var start_btn: Button = %StartButton
@@ -25,6 +27,42 @@ func _ready() -> void:
 		quit_btn.visible = false
 	_update_quality_label()
 	_fill_party()
+	_build_home_navigation()
+
+
+func _build_home_navigation() -> void:
+	start_btn.text = "✦     Play"
+	quality_btn.visible = false
+	var box := start_btn.get_parent() as VBoxContainer
+	var grid := GridContainer.new()
+	grid.name = "HomeNavigation"
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	box.add_child(grid)
+	box.move_child(grid, start_btn.get_index() + 1)
+	for page in ["Wardrobe", "Profile", "Settings", "Shop"]:
+		var button := Button.new()
+		button.name = page + "Button"
+		button.text = page
+		button.custom_minimum_size = Vector2(0, 42)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		UI.button(button)
+		button.pressed.connect(_open_home_page.bind(page))
+		grid.add_child(button)
+	_home_menu = AdventureMenu.new()
+	_home_menu.set("home_mode", true)
+	add_child(_home_menu)
+
+
+func _open_home_page(page: String) -> void:
+	_home_menu.call("open_menu", page)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("pause") and _home_menu != null and _home_menu.visible:
+		_home_menu.call("close_menu")
+		get_viewport().set_input_as_handled()
 
 
 func _build_background() -> void:
@@ -41,6 +79,9 @@ func _build_background() -> void:
 
 func _style_menu() -> void:
 	var panel := get_node("LeftPanel/Panel") as PanelContainer
+	get_node("LeftPanel/Panel/VBox/Blurb").visible = false
+	get_node("LeftPanel/Panel/VBox/Footer").visible = false
+	get_node("LeftPanel/Panel/VBox/Spacer").visible = false
 	panel.add_theme_stylebox_override("panel", UI.panel(28.0, 0.84))
 	UI.button(start_btn, true)
 	UI.button(quality_btn)

@@ -148,6 +148,11 @@ var potions := 2
 var character_levels: Array[int] = [1, 1, 1]
 var collectibles: Dictionary = {}
 var wish_count := 0
+const BACKPACK_NAMES := ["No backpack", "Trail backpack", "Explorer backpack"]
+const BACKPACK_BONUS := [0, 5, 10]
+const BACKPACK_PRICES := [0, 100, 250]
+var owned_backpacks: Array[int] = [0]
+var equipped_backpack := 0
 
 
 func _ready() -> void:
@@ -366,6 +371,8 @@ func save_collection() -> bool:
 	cfg.set_value("collection", "levels", character_levels)
 	cfg.set_value("collection", "items", collectibles)
 	cfg.set_value("collection", "wishes", wish_count)
+	cfg.set_value("collection", "owned_backpacks", owned_backpacks)
+	cfg.set_value("collection", "equipped_backpack", equipped_backpack)
 	var err := cfg.save(COLLECTION_FILE)
 	if err != OK:
 		push_warning("LastStar: could not save the offline collection (%d)" % err)
@@ -380,6 +387,16 @@ func load_collection() -> void:
 	starlight = maxi(0, int(cfg.get_value("collection", "starlight", 30)))
 	potions = maxi(0, int(cfg.get_value("collection", "potions", 2)))
 	wish_count = maxi(0, int(cfg.get_value("collection", "wishes", 0)))
+	owned_backpacks = [0]
+	var saved_packs = cfg.get_value("collection", "owned_backpacks", [0])
+	if saved_packs is Array:
+		for pack in saved_packs:
+			var index := int(pack)
+			if index > 0 and index < BACKPACK_NAMES.size() and not owned_backpacks.has(index):
+				owned_backpacks.append(index)
+	equipped_backpack = int(cfg.get_value("collection", "equipped_backpack", 0))
+	if not owned_backpacks.has(equipped_backpack):
+		equipped_backpack = 0
 	var levels = cfg.get_value("collection", "levels", [1, 1, 1])
 	if levels is Array and levels.size() == PARTY.size():
 		for i in range(PARTY.size()):
@@ -390,8 +407,40 @@ func load_collection() -> void:
 	collection_changed.emit()
 
 
+func inventory_capacity() -> int:
+	return 10 + int(BACKPACK_BONUS[equipped_backpack])
+
+
+func inventory_used() -> int:
+	var total := potions
+	for item in WISH_ITEMS:
+		total += maxi(0, int(collectibles.get(item, 0)))
+	return total
+
+
+func buy_backpack(index: int) -> bool:
+	if index <= 0 or index >= BACKPACK_NAMES.size() or owned_backpacks.has(index) or coins < BACKPACK_PRICES[index]:
+		return false
+	coins -= int(BACKPACK_PRICES[index])
+	owned_backpacks.append(index)
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func equip_backpack(index: int) -> bool:
+	if not owned_backpacks.has(index) or index < 0 or index >= BACKPACK_NAMES.size():
+		return false
+	if inventory_used() > 10 + int(BACKPACK_BONUS[index]):
+		return false
+	equipped_backpack = index
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
 func buy_potion() -> bool:
-	if coins < 25:
+	if coins < 25 or inventory_used() >= inventory_capacity():
 		return false
 	coins -= 25
 	potions += 1
@@ -425,7 +474,7 @@ func upgrade_character(index: int) -> bool:
 
 
 func make_wish() -> String:
-	if starlight < 30:
+	if starlight < 30 or inventory_used() >= inventory_capacity():
 		return ""
 	starlight -= 30
 	var item: String = WISH_ITEMS[randi_range(0, WISH_ITEMS.size() - 1)]

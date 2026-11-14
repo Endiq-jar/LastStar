@@ -248,17 +248,22 @@ system: billboard impostors, asynchronous resource/texture streaming, thermal
 management, per-option graphics controls and pooled combat effects remain future
 work. The grass cards stay static; the existing foliage shader has its own wind.
 
-### Offline adventure journal
+### Home and offline inventory
 
-Open the ✦ button in the upper-right HUD (or press **J**) for the character,
-inventory, waypoint list, quests, wishes, level-up, shop, profile, settings and
-story pages. Waypoints become fast-travel destinations after activation. Coins
-and starlight are earned from expedition objectives; the offline shop sells
-healing potions, and a wish spends 30 starlight for an equally likely collectible.
-There are no real-money transactions or online accounts. Character levels raise
-attack and are capped at 10.
+The game opens at Home: choose Play, Wardrobe, Profile, Settings or Shop.
+During play, use the bottom Inventory, Map and Journal buttons (or J for the
+journal). The map lists waypoints; activate a statue to unlock fast travel.
 
-Coins, starlight, potions, levels, wish count and collectibles persist locally in
-`user://collection.cfg`; the current expedition and its waypoint/quest progress
-still reset when starting a new journey. The map is a waypoint list, not a drawn
-world map; story entries are not branching NPC conversations.
+Inventory begins with 10 slots. Each potion and each treasure uses one slot.
+Purchase backpacks in the home shop with earned coins and equip them in the home
+wardrobe: the Trail backpack adds 5 slots, and the Explorer backpack adds 10.
+You cannot receive potions or wish rewards when full, or equip a smaller pack
+if its capacity would be exceeded. Older over-capacity collections are retained;
+use potions or equip a larger pack to make space. Backpacks don't yet change the
+character's 3D appearance.
+
+Coins, starlight, potions, levels, backpack ownership/equipment, wish count and
+collectibles save locally in `user://collection.cfg`. Expedition progress resets
+on a new journey. Wishes and the shop use only earned currency; there are no
+online accounts or real-money purchases. The story is a journal entry, not
+branching NPC dialogue.

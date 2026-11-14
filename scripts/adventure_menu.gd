@@ -3,7 +3,10 @@ extends Control
 
 signal closed
 const UI := preload("res://scripts/ui_style.gd")
-const TABS := ["Character", "Inventory", "Map", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story"]
+const TABS := ["Character", "Inventory", "Map", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story", "Wardrobe"]
+const HOME_TABS := ["Wardrobe", "Profile", "Settings", "Shop"]
+const GAME_TABS := ["Inventory", "Map", "Character", "Quests", "Wish", "Level Up", "Story"]
+var home_mode := false
 
 var _body: VBoxContainer
 var _header: Label
@@ -56,19 +59,21 @@ func _build() -> void:
 	UI.button(close)
 	close.pressed.connect(close_menu)
 	bar.add_child(close)
-	# Two rows fit landscape mobile screens without tiny horizontal tabs.
-	for row_index in range(2):
+	var tabs: Array = HOME_TABS if home_mode else GAME_TABS
+	var rows := 1 if home_mode else 2
+	for row_index in range(rows):
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
 		layout.add_child(row)
-		for i in range(row_index * 5, row_index * 5 + 5):
+		var start := row_index * 4
+		for i in range(start, mini(start + 4, tabs.size())):
 			var tab := Button.new()
-			tab.text = TABS[i]
+			tab.text = tabs[i]
 			tab.custom_minimum_size = Vector2(0, 40)
 			tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			tab.add_theme_font_size_override("font_size", 15)
 			UI.button(tab)
-			tab.pressed.connect(_select.bind(TABS[i]))
+			tab.pressed.connect(_select.bind(tabs[i]))
 			row.add_child(tab)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -86,13 +91,17 @@ func open_menu(tab: String = "Character") -> void:
 	_tab = tab
 	_status = ""
 	visible = true
-	Game.set_paused(true)
+	if not home_mode:
+		Game.set_paused(true)
 	_refresh()
 
 
 func close_menu() -> void:
 	visible = false
-	Game.set_paused(false)
+	if not home_mode:
+		Game.set_paused(false)
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	closed.emit()
 
 
@@ -141,6 +150,7 @@ func _refresh() -> void:
 		"Profile": _profile()
 		"Settings": _settings()
 		"Story": _story()
+		"Wardrobe": _wardrobe()
 	if _status != "":
 		_line(_status, 16, UI.ACCENT)
 
@@ -163,15 +173,37 @@ func _switch(index: int) -> void:
 
 
 func _inventory() -> void:
-	_line("SUPPLIES", 14, UI.ACCENT)
-	_line("Healing potion × %d  ·  Restores up to 300 HP" % Game.potions, 20)
-	_action("Use healing potion", _use_potion, Game.potions > 0 and Game.current_hp() < Game.max_hp())
-	_line("STAR COLLECTION", 14, UI.ACCENT)
-	if Game.collectibles.is_empty():
-		_line("No treasures yet. Collect starlight and make an offline wish.")
+	var used: int = Game.inventory_used()
+	var capacity: int = Game.inventory_capacity()
+	_line("INVENTORY   %d / %d SLOTS" % [used, capacity], 22, UI.ACCENT)
+	_line("Each potion or treasure uses one slot. Equip a backpack from the home wardrobe for more room.")
+	if used > capacity:
+		_line("Your existing collection exceeds capacity. No items were lost; equip a larger backpack or use potions.", 16, UI.ACCENT)
+	var entries: Array[String] = []
+	for i in range(Game.potions):
+		entries.append("Potion")
 	for item in Game.WISH_ITEMS:
-		if int(Game.collectibles.get(item, 0)) > 0:
-			_line("✦  %s  × %d" % [item, int(Game.collectibles[item])])
+		for i in range(maxi(0, int(Game.collectibles.get(item, 0)))):
+			entries.append(str(item))
+	var grid := GridContainer.new()
+	grid.columns = 5
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	_body.add_child(grid)
+	for i in range(maxi(capacity, used)):
+		var slot := PanelContainer.new()
+		slot.custom_minimum_size = Vector2(120, 55)
+		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slot.add_theme_stylebox_override("panel", UI.panel(8.0, 0.72))
+		var label := Label.new()
+		label.text = entries[i] if i < entries.size() else "Empty"
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_font_size_override("font_size", 14)
+		label.add_theme_color_override("font_color", UI.TEXT if i < entries.size() else Color(0.6, 0.6, 0.7))
+		slot.add_child(label)
+		grid.add_child(slot)
+	_action("Use healing potion (%d owned)" % Game.potions, _use_potion, Game.potions > 0 and Game.current_hp() < Game.max_hp())
 
 
 func _use_potion() -> void:
@@ -226,7 +258,7 @@ func _wish() -> void:
 	_line("STARFALL WISH", 26, UI.ACCENT)
 	_line("Spend 30 earned starlight for one random collectible. Every item has an equal chance; duplicates are kept. No real money or online purchases.")
 	_line("Possible treasures: %s" % ", ".join(PackedStringArray(Game.WISH_ITEMS)))
-	_action("✦  Make one wish   ·   30 starlight", _make_wish, Game.starlight >= 30)
+	_action("✦  Make one wish   ·   30 starlight", _make_wish, Game.starlight >= 30 and Game.inventory_used() < Game.inventory_capacity())
 
 
 func _make_wish() -> void:
@@ -253,7 +285,31 @@ func _upgrade(index: int) -> void:
 func _shop() -> void:
 	_line("THE WANDERER'S SHOP", 23, UI.ACCENT)
 	_line("Offline supplies only. Coins are earned by playing.")
-	_action("Healing potion   ·   25 coins", _buy_potion, Game.coins >= 25)
+	_action("Healing potion   ·   25 coins", _buy_potion, Game.coins >= 25 and Game.inventory_used() < Game.inventory_capacity())
+	_line("Potions require an empty inventory slot.")
+	for i in range(1, Game.BACKPACK_NAMES.size()):
+		var owned: bool = Game.owned_backpacks.has(i)
+		_action("%s  ·  +%d slots  ·  %s" % [Game.BACKPACK_NAMES[i], Game.BACKPACK_BONUS[i], "Owned" if owned else "%d coins" % Game.BACKPACK_PRICES[i]], _buy_backpack.bind(i), not owned and Game.coins >= Game.BACKPACK_PRICES[i])
+
+
+func _wardrobe() -> void:
+	_line("BACKPACKS", 23, UI.ACCENT)
+	_line("Equipping a backpack increases inventory capacity. Buy backpacks in the home shop.")
+	for i in Game.owned_backpacks:
+		var equipped: bool = i == Game.equipped_backpack
+		var fits: bool = Game.inventory_used() <= 10 + Game.BACKPACK_BONUS[i]
+		var suffix := "Equipped" if equipped else ("Equip" if fits else "Too many items")
+		_action("%s  ·  %d slots  ·  %s" % [Game.BACKPACK_NAMES[i], 10 + Game.BACKPACK_BONUS[i], suffix], _equip_backpack.bind(i), not equipped and fits)
+
+
+func _equip_backpack(index: int) -> void:
+	_status = "Backpack equipped." if Game.equip_backpack(index) else "Inventory does not fit."
+	_refresh()
+
+
+func _buy_backpack(index: int) -> void:
+	_status = "Backpack purchased. Equip it in Wardrobe." if Game.buy_backpack(index) else "Unable to buy backpack."
+	_refresh()
 
 
 func _buy_potion() -> void:
@@ -280,9 +336,12 @@ func _settings() -> void:
 
 func _change_quality() -> void:
 	Game.cycle_quality()
-	var world := get_parent().get_parent().get_parent()
-	if world != null and world.has_method("apply_quality"):
-		world.call("apply_quality")
+	var node := get_parent()
+	while node != null:
+		if node.has_method("apply_quality"):
+			node.call("apply_quality")
+			break
+		node = node.get_parent()
 	_refresh()
 
 
