@@ -86,6 +86,7 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	_out_dir = out_dir
 
+	_test_white_blob_detection()
 	print("PROBE_BEGIN godot=%s renderer=%s driver=%s" % [
 		Engine.get_version_info().string,
 		ProjectSettings.get_setting("rendering/renderer/rendering_method"),
@@ -1591,43 +1592,83 @@ func _hsv_of(c: Color) -> Vector3:
 	return Vector3(h, sat, mx)
 
 
-func _check_blob(img: Image, label: String) -> void:
-	## Detect a large, opaque, pure-white region - the signature of an unshaded
-	## emissive surface parked in front of the camera. This artifact shipped
-	## twice because nothing was measuring it; a HUD button behind it in the PNG
-	## was the only clue. Bright sky and clouds are excluded by requiring the
-	## region to be clustered and near-pure white with all three channels
-	## saturated, which the sky (blue-dominant) and snow (cool-tinted) are not.
+func _white_blob_stats(img: Image) -> Dictionary:
+	## Connected components on a sampled mask, not one bounding box around
+	## unrelated white pixels (e.g. clouds, text and HUD highlights).
 	var w := img.get_width()
 	var h := img.get_height()
 	var step := maxi(1, int(w / 200.0))
-	var hot := 0
-	var total := 0
-	var min_x := w
-	var max_x := 0
-	var min_y := h
-	var max_y := 0
-	for y in range(0, _sample_end(h, step), step):
-		for x in range(0, _sample_end(w, step), step):
-			total += 1
-			var c := img.get_pixel(x, y)
-			if c.r > 0.97 and c.g > 0.97 and c.b > 0.95 and c.a > 0.5:
-				hot += 1
-				min_x = mini(min_x, x)
-				max_x = maxi(max_x, x)
-				min_y = mini(min_y, y)
-				max_y = maxi(max_y, y)
+	var cols := int(_sample_end(w, step) / step)
+	var rows := int(_sample_end(h, step) / step)
+	var total := cols * rows
 	if total == 0:
+		return {"total": 0, "hot": 0, "largest": 0}
+	var mask := PackedByteArray()
+	mask.resize(total)
+	var hot := 0
+	for gy in range(rows):
+		for gx in range(cols):
+			var c := img.get_pixel(gx * step, gy * step)
+			if c.r > 0.97 and c.g > 0.97 and c.b > 0.95 and c.a > 0.5:
+				mask[gy * cols + gx] = 1
+				hot += 1
+	var largest := 0
+	for start in range(total):
+		if mask[start] == 0:
+			continue
+		var queue := PackedInt32Array([start])
+		mask[start] = 0
+		var cursor := 0
+		while cursor < queue.size():
+			var idx := queue[cursor]
+			cursor += 1
+			var x := idx % cols
+			var y := int(idx / cols)
+			for offset in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+				var nx: int = x + offset.x
+				var ny: int = y + offset.y
+				if nx < 0 or ny < 0 or nx >= cols or ny >= rows:
+					continue
+				var neighbor: int = ny * cols + nx
+				if mask[neighbor] == 1:
+					mask[neighbor] = 0
+					queue.append(neighbor)
+		largest = maxi(largest, queue.size())
+	return {"total": total, "hot": hot, "largest": largest}
+
+
+func _check_blob(img: Image, label: String) -> void:
+	## A large connected white patch is suspicious; scattered clouds are not.
+	var stats := _white_blob_stats(img)
+	var total: int = int(stats["total"])
+	if total == 0:
+		_log("WARN", "%s white-blob check had no samples" % label)
 		return
-	var frac := float(hot) / float(total)
-	if frac > 0.06:
-		var box_w := max_x - min_x
-		var box_h := max_y - min_y
-		var fill := frac / maxf(0.0001, (float(box_w) / float(w)) * (float(box_h) / float(h)))
-		_log("FAIL", "%s frame is %.1f%% pure white in a %dx%d box (fill %.2f) - an unshaded emissive surface is covering the view" % [
-			label, frac * 100.0, box_w, box_h, fill])
+	var fraction := float(stats["hot"]) / float(total)
+	var blob := float(stats["largest"]) / float(total)
+	if blob > 0.06:
+		_log("FAIL", "%s frame has a connected white region covering %.1f%% of samples (%.1f%% white overall)" % [
+			label, blob * 100.0, fraction * 100.0])
 	else:
-		_log("INFO", "%s frame white-clip %.1f%%" % [label, frac * 100.0])
+		_log("INFO", "%s frame white pixels %.1f%%, largest connected region %.1f%%" % [
+			label, fraction * 100.0, blob * 100.0])
+
+
+func _test_white_blob_detection() -> void:
+	## Regression cases: disconnected bright clouds must not be merged, while
+	## an opaque white slab covering over six percent still fails the threshold.
+	var img := Image.create_empty(100, 100, false, Image.FORMAT_RGBA8)
+	img.fill(Color.BLACK)
+	for i in range(10):
+		img.fill_rect(Rect2i(i * 10, 0, 8, 10), Color.WHITE)
+	var clouds := _white_blob_stats(img)
+	img.fill(Color.BLACK)
+	img.fill_rect(Rect2i(20, 20, 40, 25), Color.WHITE)
+	var slab := _white_blob_stats(img)
+	var ok := int(clouds["hot"]) == 800 and int(clouds["largest"]) == 80 \
+		and int(slab["largest"]) == 1000 and int(slab["total"]) == 10000
+	_log("INFO" if ok else "FAIL", "white-blob regression: scattered=%d/%d slab=%d/%d" % [
+		int(clouds["largest"]), int(clouds["hot"]), int(slab["largest"]), int(slab["total"])])
 
 
 func _dump_frustum(cam: Camera3D, world: Node) -> void:

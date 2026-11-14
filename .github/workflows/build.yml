@@ -303,7 +303,7 @@ jobs:
           # validate a renderer our players never run.
           set +e
           timeout -k 10 240 xvfb-run -a --server-args="-screen 0 1280x720x24" \
-            /opt/godot/godot --path . --rendering-method gl_compatibility \
+            /opt/godot/godot --path . --audio-driver Dummy --rendering-method gl_compatibility \
             --rendering-driver opengl3 --resolution 1280x720 \
             res://tests/render_probe.tscn -- --out=/tmp/probe \
             > /tmp/probe.log 2>&1
@@ -365,7 +365,7 @@ jobs:
               echo "::error title=in-game::$line"
             done
             tail -25 /tmp/probe.log
-            echo "::error::Render probe FAILED - the 3D view is not drawing (see the render-probe artifact)"
+            echo "::error::Render probe FAILED - see the individual PROBE_FAIL messages and render-probe artifact"
             exit 1
           fi
           echo "Render probe passed."
