@@ -219,6 +219,7 @@ func _inventory() -> void:
 			slot.pressed.connect(_select_item.bind(item))
 		else:
 			slot.disabled = true
+			slot.add_theme_stylebox_override("disabled", UI.panel(8.0, 0.55))
 			slot.tooltip_text = "Empty slot"
 		grid.add_child(slot)
 	if _selected_item != "":

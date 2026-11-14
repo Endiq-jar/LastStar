@@ -660,6 +660,32 @@ func _run() -> void:
 		_finish(_fail)
 		return
 	img.save_png(out_dir.path_join("world.png"))
+	# Equip a real backpack and render a rear close-up to verify it is attached
+	# to the character. Restore the collection after the screenshot.
+	var equipment_player := world.get_node_or_null("Player") as Node3D
+	if equipment_player != null:
+		var before_packs := Game.owned_backpacks.duplicate()
+		var before_pack := Game.equipped_backpack
+		if not Game.owned_backpacks.has(1):
+			Game.owned_backpacks.append(1)
+		var equip_ok: bool = Game.equip_backpack(1)
+		var pack_node := equipment_player.get_node_or_null("Visual/Torso/Backpack") as Node3D
+		_log("INFO" if equip_ok and pack_node != null and pack_node.visible else "FAIL", "equipped backpack visible on character: %s" % str(equip_ok and pack_node != null and pack_node.visible))
+		var equipment_camera := Camera3D.new()
+		equipment_camera.fov = 40.0
+		world.add_child(equipment_camera)
+		var focus := equipment_player.global_position + Vector3(0, 1.05, 0)
+		equipment_camera.global_position = focus + equipment_player.global_basis.z * 3.4 + Vector3(0, 0.25, 0)
+		equipment_camera.look_at(focus, Vector3.UP)
+		equipment_camera.current = true
+		await _capture_ui(out_dir, "equipped_backpack", null)
+		cam.current = true
+		equipment_camera.queue_free()
+		Game.owned_backpacks.assign(before_packs)
+		Game.equipped_backpack = before_pack
+		Game.save_collection()
+		Game.collection_changed.emit()
+
 	# Capture every gameplay journal page, including the bottom of scrollable
 	# pages. These are real UI states, not mockups or stitched images.
 	if menu != null:
