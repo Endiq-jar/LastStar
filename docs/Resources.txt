@@ -1,0 +1,302 @@
+# LAST STAR
+### When the world loses its light, one star must remember.
+
+**Genre:** 3D Open-World Action RPG  
+**Platform:** Android (primary), with controller support  
+**Engine:** Unity  
+**Visual Style:** Anime-inspired 3D fantasy  
+**Gameplay:** Real-time sword combat, spellcasting, exploration, dungeons, boss battles, quests, and character relationships.
+
+## 1. Core Game Premise
+
+The world of Elaris is inhabited by people who possess a mysterious supernatural potential known as a **Gift**.
+Approximately 80% of the world's NPC population are Gifted, while every playable character possesses a Gift.
+However, possessing a Gift does not mean someone knows how to use it.
+To awaken and develop their abilities, Gifted individuals need a special magical book called a **Wander**.
+A Wander is more than a spellbook. It is a personal record of magical knowledge that allows its owner to:
+
+- Discover and learn spells.
+- Create entirely new spells.
+- Modify existing spells.
+- Combine compatible magical abilities.
+- Develop their own combat style.
+- Record discoveries made during exploration.
+
+Every Wander is different. Its appearance, magical structure, and potential depend on its owner.
+
+At the beginning, players have only 3–4 basic spells. They must explore, experiment, fight, complete quests, and discover forgotten magical knowledge to expand their abilities.
+
+## 2. The Three Foundations of Magic
+
+### Gift
+A Gift is an individual's unique magical potential.
+
+Examples:
+- Fire manipulation.
+- Spatial distortion.
+- Gravity control.
+- Sound manipulation.
+- Shadow manipulation.
+- Time-related abilities.
+
+Not every Gift is equally powerful. Some are excellent for combat, while others are designed for exploration, support, defense, or unusual applications.
+
+### Wander
+A Wander is the magical book used to develop and control a Gift.
+
+It contains:
+- Spell collection.
+- Spell creation.
+- Spell modification.
+- Magical research.
+- Spell combinations.
+- Mastery records.
+
+Players begin with a limited collection and gradually develop a unique spell library.
+
+### Light
+Light is the energy required to activate spells.
+
+Every spell consumes Light depending on its complexity and level.
+
+Light Capacity can be improved through:
+- Character progression.
+- Gift mastery.
+- Special equipment.
+- Rare materials.
+- Story discoveries.
+- Certain side quests.
+
+Light regenerates naturally, but its regeneration rate depends on the character's development and equipment.
+
+## 3. Spell Progression
+
+The game should feature more than 100 spells across multiple magical categories.
+
+Spells have individual mastery levels, with a maximum of Level 30.
+
+Players should not simply collect spells. They should learn how each spell works and develop it through repeated use and experimentation.
+
+Example:
+
+**Ember Shot**
+- Lv. 1: Fires a small fire projectile.
+- Lv. 5: Increased projectile speed.
+- Lv. 10: Explodes on impact.
+- Lv. 15: Can pierce weak enemies.
+- Lv. 20: Creates a burning area.
+- Lv. 25: Unlocks a charged version.
+- Lv. 30: Unlocks its advanced evolution.(this is jjst an example imaplement many spells but unlock only 2-4 spells at first they need to grinf to unlock)
+
+Not every spell needs the same upgrades. Some should gain entirely new mechanics rather than just increased damage.
+
+## 4. World Structure
+
+**World Name:** Elaris
+
+Elaris contains 14 major settlements, multiple explorable regions, ancient ruins, hidden locations, and dangerous Hollows.
+
+Regions should connect through exploration and story progression instead of feeling like disconnected levels.
+
+Each region should have:
+- Many Unique enemies.
+- Many Local factions.
+- Main and side quests.
+- Hidden treasures.
+- Many Dungeons.
+- Many Regional bosses.
+- Many Unique materials.
+- Environmental storytelling.
+
+## 5. Important World Elements
+
+**Hollows:** Mysterious openings leading into dangerous and often distorted locations.
+
+**Hollow Creatures:** Monsters that originate from or have been corrupted by Hollows.
+
+**Star Guard:** An organization responsible for protecting settlements and investigating supernatural threats.
+
+**Seven Seals:** Ancient structures that maintain the barriers protecting Elaris.
+
+**The First Silence:** An ancient catastrophe that changed the history of the world.
+
+**Memory Vault:** An ancient structure containing lost memories, forbidden knowledge, and fragments of forgotten history.
+
+**The Keeper:** A mysterious title associated with the primary antagonist.
+
+**Remnants:** Mysterious traces of the ancient catastrophe that still influence the present world.
+
+## 6. Main Gameplay Features
+
+- Real-time sword and magic combat.
+- More than 100 learnable and developable spells.
+- 14 major settlements.
+- Multiple explorable dungeons.
+- Multi-phase cinematic boss encounters.
+- Companion characters and relationships.
+- 25 main quests.
+- 165 side quests.
+- Working quest and dialogue systems.
+- Inventory and equipment.
+- Character progression.
+- Saving and loading.
+- Day and night cycle.
+- Touchscreen-first controls.
+- External controller support.
+- Cloud saves planned for a later update.
+
+## 7. Design Philosophy
+
+Last Star should reward curiosity, experimentation, preparation, and skill.
+Not every enemy should be easy to defeat. Some bosses should require players to understand attack patterns, prepare suitable spells, upgrade equipment, and use the environment.
+Winning should feel earned.
+The world should also have meaningful discoveries that are not marked directly on the map. Players should sometimes discover hidden spells, secret dungeons, unusual characters, and forgotten stories by exploring on their own.
+
+Settlement / Region	Identity
+1	Ashvale	        Starting city and first safe hub
+2	Elaris Capital	Political and military centre
+3	Lunareth	City of scholars and magic
+4	Tidefall	Coastal kingdom
+5	Glassheaven	Crystal city
+6	Frostmere	Frozen mountain settlement
+7	Suncrest	Desert trading city
+8	Whispering Orchard	Ancient forest settlement
+9	Ravenhold	Fortress city
+10	Duskhaven	City surrounded by perpetual twilight
+11	The Deep	Underground civilization
+12	Starfall Haven	Settlement built around a fallen star
+13	Evergloom	Abandoned settlement near dangerous Hollows
+14	Aetheris	Ancient city connected to the Seven Seals
+
+Special locations (not counted as settlements):
+- Archive — Memory Vault dungeon.
+- The First Silence — ancient catastrophe site.
+- Seven Seals — seven major structures.
+- Hollow Depths — dangerous dungeon network.
+- Forgotten Observatory — hidden magical research facility.
+divide spells into eight categories:
+Category	All Gifts
+Elemental	Fire, Water, Wind, Earth, Lightning, Ice (chance 30%)
+Spatial	        Teleportation, portals, spatial cuts (chance 10%)
+Defensive	Shields, barriers, counterattacks  (chance 40%)
+Enhancement	Speed, strength, weapon enhancement (chance 20%)
+Summoning	Familiars, magical constructs (chance 10%)
+Illusion	Clones, concealment, hallucinations (chance 5%)
+Arcane	Energy  manipulation, magical disruption (chance 3%)
+Forbidden	Time distortion, soul manipulation, reality alteration (chance 2%)
+Important mechanic: Spell Creation
+
+Don't make spell creation just another crafting menu.
+
+Let players experiment with:
+- Different magical elements.
+- Spell shapes and patterns.
+- Projectile behaviour.
+- Range and area.
+- Light consumption.
+- Secondary effects.
+
+example, a player might combine Wind and Lightning to create a chain-lightning projectile.
+
+Combat system
+Combat should combine swordplay, magic, dodging, blocking, and enemy pattern recognition.
+
+Suggested combat mechanics:
+- Light and heavy sword attacks.
+- Charged attacks.
+- Perfect dodge.
+- Parrying.
+- Spell casting while moving.
+- Spell combinations.
+- Aerial combat.
+- Enemy stagger.
+- Boss weak points.
+- Special finishing attacks.
+Boss encounters should have a maximum of four phases.
+
+Companion system
+Companions should be actual characters, not just NPCs following the player.
+
+Each important companion should have:
+- Their own Gift.
+- Personal quests.
+- Unique combat abilities.
+- Dialogue choices.
+- Relationship progression.
+- Personal history.
+- Interactions with other companions.
+Companions can also help players discover new spell combinations.
+
+Quest structure
+Your planned quest count is:
+25
+Main quests
+Primary story progression
+165
+Side quests
+Characters, exploration and rewards
+Side quests should have meaningful rewards, not just currency.
+
+Examples:
+- Discover a lost Wander. reward new skill
+- Help a village defend against a Hollow. reward new accersories
+- Find the missing members of an expedition. reward new costemits
+- Investigate a mysterious Gift. reward new spell
+- Help a companion confront their past. reward new spell
+- Discover a hidden dungeon.reward light
+- Recover a forbidden spell.reward spell
+Some side quests should have consequences that change later dialogue or events.
+Each phase should introduce a new attack pattern, arena mechanic, or combat challenge rather than simply increasing enemy health.
+
+Technical architecture
+Your language choices are good. I would organize them like this:
+System	Technology
+Game engine	Unity
+Main gameplay	C#
+Player and enemy AI	C#
+Combat and magic	C#
+Quests and dialogue	C#
+Inventory and equipment	C#
+Relationships	C#
+Saving and loading	C#
+Anime shaders	HLSL / ShaderLab
+Android native plugins	Kotlin / Java
+Native performance modules	C/C++
+Development utilities	Python
+Version control	Git / GitHub
+
+Spell Discovery: Discover spells through environmental clues, books, enemies and experimentation.
+Gift Awakening: Certain story events unlock hidden aspects of a character's Gift.
+Spell Evolution: Level 30 spells can evolve into more advanced forms.
+Hollow Exploration: Hollows can contain randomized encounters, rare materials and dangerous bosses.
+Memory Fragments: Collect memories that reveal the truth about the First Silence.
+Enemy Adaptation: Certain powerful enemies adapt to repeated combat strategies.
+World Events: Settlements can experience attacks, festivals, investigations and special events.
+Hidden Bosses: Optional bosses should be significantly harder than ordinary story bosses.
+Companion Synergy: Certain companion combinations unlock special combat abilities.
+
+- URP (Universal Render Pipeline).
+- Stylized anime shaders rather than expensive realistic rendering.
+- LOD (Level of Detail) for distant objects.
+- Occlusion culling.
+- GPU instancing.
+- Object pooling for enemies, projectiles and effects.
+- Addressables for loading regions and assets.
+- Additive scene loading.
+- Adjustable graphics settings.
+- Scalable shadows and particle effects.
+- Dynamic resolution as an optional setting.
+- Separate quality presets for low-end and high-end devices.
+
+Purpose	Technology
+Main game UI	Unity uGUI
+Secondary structured menus	Unity UI Toolkit
+Text	TextMeshPro
+Icons	Phosphor Icons
+Custom animations	Unity Animator / DOTween
+3D character preview	Unity RenderTexture
+UI shaders	ShaderLab / HLSL
+UI scaling	Canvas Scaler
+Touch input	Unity Input System
+Controller support	Unity Input System
+Native Android integration	Kotlin / Java

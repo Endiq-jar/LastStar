@@ -271,3 +271,17 @@ party switching. These settings save locally. Touch layout, mouse bindings and
 individual graphics features are not customizable yet; there is no music track.
 Coins, supplies, levels, story progress, wardrobe and dropped items are saved in
 `user://collection.cfg`. Wishes and the shop use only in-game currency.
+
+### Elaris story and Wander slice
+
+Talk to Star Guard Ilyra near the starting shore using F or the Talk button.
+Choose a dialogue response and accept the first main quest; a side quest becomes
+available afterwards. Recover a sigil and defeat three slimes, then return to
+Ilyra to learn Stone Bulwark and Arc Lance. Long-press a spell slot in the
+Wander to equip learned spells. Learned spells, slot assignments, mastery XP,
+quest choices and completion are saved locally.
+
+`docs/Resources.txt` is the full design brief. This is an initial Godot
+implementation, not the complete 14-settlement, 190-quest, 100-spell game.
+Spell crafting, companions, dungeons, bosses, the wider story and controller
+support remain to be developed; the current settlement is not a full Ashvale.

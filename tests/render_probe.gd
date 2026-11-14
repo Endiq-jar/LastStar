@@ -637,6 +637,38 @@ func _run() -> void:
 	var settings_ok := Game.rebind_action("jump", KEY_K) and Game.key_for_action("jump") == KEY_K and not Game.rebind_action("move_forward", KEY_K) and Game.rebind_action("jump", old_jump)
 	_log("INFO" if settings_ok else "FAIL", "key remapping and conflict prevention: %s" % str(settings_ok))
 
+	# Quest choice, one-time reward and Wander progression survive reload.
+	var guard_before := Game.guard_story.duplicate(true)
+	var wander_before := Game.wander.levels.duplicate(true)
+	var slots_before := Game.wander.slots.duplicate()
+	var progress_before := Game.wander_levels.duplicate(true)
+	var saved_slots_before := Game.wander_slots.duplicate()
+	var sigil_count_before := Game.sigils_collected
+	Game.guard_story = {}
+	Game.sigils_collected = 0
+	var accepted: bool = Game.guard_accept("seal", "curiosity")
+	var gated: bool = not Game.guard_complete("seal")
+	Game.sigils_collected = 1
+	var rewarded: bool = Game.guard_complete("seal") and Game.wander.known("stone_bulwark")
+	var once: bool = not Game.guard_complete("seal")
+	Game.wander.set_slot(2, "stone_bulwark")
+	Game.wander.begin_cast("stone_bulwark")
+	Game.load_collection()
+	var restored_wander := Wander.new()
+	restored_wander.restore(Game.wander_levels, Game.wander_slots)
+	var persist_wander: bool = restored_wander.known("stone_bulwark") and restored_wander.equipped_at(2) == "stone_bulwark" and int(restored_wander.levels.get("stone_bulwark_xp", 0)) == 1
+	var persist_choice: bool = Game.guard_story.get("answer", "") == "curiosity" and bool(Game.guard_story.get("seal_done", false))
+	_log("INFO" if accepted and gated and rewarded and once and persist_wander and persist_choice else "FAIL", "quest dialogue, one-time reward, Wander persistence: %s" % str(accepted and gated and rewarded and once and persist_wander and persist_choice))
+	Game.guard_story = guard_before
+	Game.wander.levels = wander_before
+	Game.wander.slots.assign(slots_before)
+	Game.wander_levels = progress_before
+	Game.wander_slots = saved_slots_before
+	Game.sigils_collected = sigil_count_before
+	Game.save_collection()
+	Game.sigils_changed.emit(Game.sigils_collected, Game.TOTAL_SIGILS)
+	Game.call("_refresh_quest")
+
 	# --- pixel checks -----------------------------------------------------
 	# A headless run has no framebuffer, so this only reports on a real device /
 	# xvfb run. That is fine: the structural checks above still gate CI.
@@ -690,7 +722,7 @@ func _run() -> void:
 	# Capture every gameplay journal page, including the bottom of scrollable
 	# pages. These are real UI states, not mockups or stitched images.
 	if menu != null:
-		for page in ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story"]:
+		for page in ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story", "Dialogue"]:
 			menu.call("open_menu", page)
 			await _capture_ui(out_dir, "game_" + page.to_lower().replace(" ", "_"), menu)
 			menu.call("close_menu")

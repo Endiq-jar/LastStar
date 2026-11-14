@@ -150,6 +150,10 @@ var collectibles: Dictionary = {}
 var wish_count := 0
 var sigils_seen: Dictionary = {}
 var story_complete := false
+# First playable story slice, independent from the older sigil victory.
+var guard_story: Dictionary = {}
+var wander_levels: Dictionary = {}
+var wander_slots: Array = []
 var outfit_style := 0
 var camera_sensitivity := 1.0
 const REBIND_ACTIONS := ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "skill", "burst", "party_next"]
@@ -400,6 +404,9 @@ func save_collection() -> bool:
 	cfg.set_value("story", "has_checkpoint", has_checkpoint)
 	cfg.set_value("story", "checkpoint", checkpoint)
 	cfg.set_value("story", "complete", story_complete)
+	cfg.set_value("story", "guard_story", guard_story)
+	cfg.set_value("wander", "levels", wander_levels)
+	cfg.set_value("wander", "slots", wander_slots)
 	cfg.set_value("story", "dropped_items", dropped_items)
 	cfg.set_value("story", "next_drop_id", next_drop_id)
 	var err := cfg.save(COLLECTION_FILE)
@@ -424,6 +431,12 @@ func load_collection() -> void:
 	checkpoint = saved_checkpoint if saved_checkpoint is Vector3 else Vector3.ZERO
 	has_checkpoint = bool(cfg.get_value("story", "has_checkpoint", false)) and saved_checkpoint is Vector3
 	story_complete = bool(cfg.get_value("story", "complete", false))
+	var story_data = cfg.get_value("story", "guard_story", {})
+	guard_story = story_data if story_data is Dictionary else {}
+	var levels_data = cfg.get_value("wander", "levels", {})
+	wander_levels = levels_data if levels_data is Dictionary else {}
+	var slots_data = cfg.get_value("wander", "slots", [])
+	wander_slots = slots_data if slots_data is Array else []
 	var saved_drops = cfg.get_value("story", "dropped_items", {})
 	dropped_items = saved_drops if saved_drops is Dictionary else {}
 	next_drop_id = maxi(1, int(cfg.get_value("story", "next_drop_id", 1)))
@@ -452,6 +465,46 @@ func load_collection() -> void:
 	if saved_items is Dictionary:
 		collectibles = saved_items
 	collection_changed.emit()
+
+
+func save_wander() -> void:
+	if wander == null:
+		return
+	wander_levels = wander.levels.duplicate(true)
+	wander_slots = wander.slots.duplicate()
+	save_collection()
+
+
+func guard_accept(quest: String, answer: String = "") -> bool:
+	if not ["seal", "hollow"].has(quest) or bool(guard_story.get(quest + "_accepted", false)):
+		return false
+	guard_story[quest + "_accepted"] = true
+	if quest == "seal" and ["duty", "curiosity"].has(answer):
+		guard_story["answer"] = answer
+	save_collection()
+	quest_changed.emit(quest_text)
+	collection_changed.emit()
+	return true
+
+
+func guard_can_complete(quest: String) -> bool:
+	if not bool(guard_story.get(quest + "_accepted", false)) or bool(guard_story.get(quest + "_done", false)):
+		return false
+	return (quest == "seal" and sigils_collected >= 1) or (quest == "hollow" and slimes_defeated >= 3)
+
+
+func guard_complete(quest: String) -> bool:
+	if not guard_can_complete(quest) or wander == null:
+		return false
+	guard_story[quest + "_done"] = true
+	var reward := "stone_bulwark" if quest == "seal" else "arc_lance"
+	# Set completion before learn emits its save signal: the reward and quest
+	# completion are then persisted together, with no repeatable reward window.
+	wander.learn(reward)
+	save_wander()
+	collection_changed.emit()
+	toast.emit("Wander discovery: %s" % wander.spell(reward)["name"])
+	return true
 
 
 func inventory_capacity() -> int:

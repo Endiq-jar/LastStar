@@ -121,7 +121,9 @@ func _ready() -> void:
 
 func _make_wander() -> void:
 	wander = Wander.new()
+	wander.restore(Game.wander_levels, Game.wander_slots)
 	Game.wander = wander
+	wander.progress_changed.connect(Game.save_wander)
 
 
 func _build_rig() -> void:

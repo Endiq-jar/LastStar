@@ -12,6 +12,7 @@ extends RefCounted
 ## through repeated use. Light is the casting resource (Game.energy).
 
 signal slots_changed()
+signal progress_changed()
 signal spell_levelled(id: String, level: int)
 signal spell_cast(id: String)
 
@@ -151,6 +152,33 @@ func _init() -> void:
 			levels[id] = 1
 
 
+func learn(id: String) -> bool:
+	if not CATALOGUE.has(id) or known(id):
+		return false
+	levels[id] = 1
+	progress_changed.emit()
+	slots_changed.emit()
+	return true
+
+
+func restore(saved_levels: Dictionary, saved_slots: Array) -> void:
+	# Ignore unrecognised data; starter spells are always available.
+	for id in CATALOGUE:
+		if saved_levels.has(id):
+			levels[id] = clampi(int(saved_levels[id]), 1, MAX_SPELL_LEVEL)
+			levels[id + "_xp"] = clampi(int(saved_levels.get(id + "_xp", 0)), 0, 180)
+	if saved_slots.size() == MAX_SLOTS:
+		var used: Array[String] = []
+		for i in range(MAX_SLOTS):
+			var id := str(saved_slots[i])
+			if id == "" or (known(id) and not used.has(id)):
+				slots[i] = id
+				if id != "":
+					used.append(id)
+			else:
+				slots[i] = ""
+
+
 func spell(id: String) -> Dictionary:
 	return CATALOGUE.get(id, {})
 
@@ -180,6 +208,7 @@ func set_slot(i: int, id: String) -> bool:
 			slots[j] = ""
 	slots[i] = id
 	slots_changed.emit()
+	progress_changed.emit()
 	return true
 
 
@@ -219,6 +248,7 @@ func begin_cast(id: String) -> Dictionary:
 	cooldowns[id] = float(data["cooldown"])
 	spell_cast.emit(id)
 	_add_mastery(id)
+	progress_changed.emit()
 	return data
 
 

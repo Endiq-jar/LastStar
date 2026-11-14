@@ -80,6 +80,7 @@ func _ready() -> void:
 	# HUD still draws), so nothing optional may run before them.
 	_setup_environment()
 	_spawn_player()
+	_spawn_story_contact()
 
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
@@ -1204,6 +1205,14 @@ func _build_entity_culler() -> void:
 	for group_name in ["enemy", "sigil", "waypoint"]:
 		culler.call("register_group", group_name)
 	_culler = culler
+
+
+func _spawn_story_contact() -> void:
+	var guard := Node3D.new()
+	guard.name = "StarGuardIlyra"
+	guard.set_script(load("res://scripts/star_guard.gd"))
+	guard.position = Vector3(5.0, _height(5.0, 6.0), 6.0)
+	add_child(guard)
 
 
 func _spawn_player() -> void:

@@ -3,7 +3,7 @@ extends Control
 
 signal closed
 const UI := preload("res://scripts/ui_style.gd")
-const TABS := ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story", "Wardrobe"]
+const TABS := ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story", "Wardrobe", "Dialogue"]
 const HOME_TABS := ["Wardrobe", "Profile", "Settings", "Shop"]
 const GAME_TABS := ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story"]
 var home_mode := false
@@ -161,6 +161,7 @@ func _refresh() -> void:
 		"Settings": _settings()
 		"Story": _story()
 		"Wardrobe": _wardrobe()
+		"Dialogue": _dialogue()
 	if _status != "":
 		_line(_status, 16, UI.ACCENT)
 
@@ -263,6 +264,16 @@ func _use_potion() -> void:
 
 
 func _quests() -> void:
+	_line("STAR GUARD JOURNAL", 23, UI.ACCENT)
+	var story := Game.guard_story
+	if not bool(story.get("seal_accepted", false)):
+		_line("Main · A Light Remembered: speak with Star Guard Ilyra near the starting shore.")
+	elif bool(story.get("seal_done", false)):
+		_line("Main · A Light Remembered: completed. Reward: Stone Bulwark.")
+	else:
+		_line("Main · A Light Remembered: recover a star sigil (%d / 1), then return to Ilyra." % mini(Game.sigils_collected, 1))
+	if bool(story.get("hollow_accepted", false)):
+		_line("Side · Hollow Signs: %s" % ("completed. Reward: Arc Lance." if bool(story.get("hollow_done", false)) else "defeat three slimes (%d / 3), then return to Ilyra." % mini(Game.slimes_defeated, 3)))
 	_line("THE VALLEY REMEMBERS", 23, UI.ACCENT)
 	_line("Recover star sigils: %d / %d" % [Game.sigils_collected, Game.TOTAL_SIGILS])
 	_line("Clear wandering slimes: %d / 6" % mini(Game.slimes_defeated, 6))
@@ -432,8 +443,52 @@ func _change_quality() -> void:
 	_refresh()
 
 
+func _dialogue() -> void:
+	_line("STAR GUARD ILYRA", 25, UI.ACCENT)
+	var story := Game.guard_story
+	if not bool(story.get("seal_accepted", false)):
+		_line("The lights around Ashvale are fading. A star sigil may tell us why the Seven Seals have weakened. What brings you here, traveller?")
+		_action("I want to protect the valley.", _accept_guard.bind("seal", "duty"))
+		_action("I want to understand what happened.", _accept_guard.bind("seal", "curiosity"))
+	else:
+		var answer := str(story.get("answer", ""))
+		_line("I remember your promise to protect this place." if answer == "duty" else "You wanted answers. The First Silence left more questions than records.")
+		if bool(story.get("seal_done", false)):
+			_line("The sigil is safe. Your Wander now holds the Stone Bulwark spell.")
+		elif Game.guard_can_complete("seal"):
+			_line("You found a sigil! Let me copy the defensive pattern into your Wander.")
+			_action("Complete A Light Remembered · learn Stone Bulwark", _complete_guard.bind("seal"))
+		else:
+			_line("Please recover a star sigil and bring its light back here.")
+		if not bool(story.get("hollow_accepted", false)):
+			_line("The Hollow creatures have also begun gathering outside the shore.")
+			_action("Offer to help · begin Hollow Signs", _accept_guard.bind("hollow", ""))
+		elif bool(story.get("hollow_done", false)):
+			_line("The shore is safer, thanks to you. Remember what you learned of Arc Lance.")
+		elif Game.guard_can_complete("hollow"):
+			_line("You drove them back. I found an arcane pattern for your Wander.")
+			_action("Complete Hollow Signs · learn Arc Lance", _complete_guard.bind("hollow"))
+		else:
+			_line("Please defeat three slimes. Progress: %d / 3." % mini(Game.slimes_defeated, 3))
+
+
+func _accept_guard(quest: String, answer: String) -> void:
+	_status = "Quest added to your journal." if Game.guard_accept(quest, answer) else "Quest already accepted."
+	_refresh()
+
+
+func _complete_guard(quest: String) -> void:
+	_status = "Quest complete. Assign the new spell in the spellbook." if Game.guard_complete(quest) else "Objective not yet complete."
+	_refresh()
+
+
 func _story() -> void:
 	_line("THE VALLEY REMEMBERS", 25, UI.ACCENT)
 	_line("The valley's scattered stars have fallen quiet. Sora and her companions travel between the waypoints to bring their light home.")
 	_line("✦  Recover twelve sigils and discover the landmarks of the valley.")
-	_line("This is a journal entry; branching NPC dialogue is not yet available.")
+	_line("Visit Star Guard Ilyra at the starting shore to begin the first playable story quests.")
+	if Game.wander != null:
+		_line("WANDER MASTERY", 18, UI.ACCENT)
+		for id in Game.wander.CATALOGUE:
+			if Game.wander.known(id):
+				_line("%s · Level %d / 30" % [Game.wander.spell(id)["name"], Game.wander.level_of(id)])

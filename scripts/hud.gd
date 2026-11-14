@@ -176,6 +176,14 @@ func _build() -> void:
 		button.pressed.connect(_open_adventure.bind(entry[1]))
 		navigation.add_child(button)
 
+	var talk := Button.new()
+	talk.name = "TalkButton"
+	talk.text = "Talk"
+	talk.custom_minimum_size = Vector2(100, 42)
+	UI.button(talk)
+	talk.pressed.connect(_talk_to_guard)
+	navigation.add_child(talk)
+
 	var energy_row := HBoxContainer.new()
 	energy_row.add_theme_constant_override("separation", 8)
 	energy_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -484,6 +492,10 @@ func _resume() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("interact") and not Game.is_paused:
+		_talk_to_guard()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_J:
 		if _adventure_menu != null and _adventure_menu.visible:
 			_adventure_menu.call("close_menu")
@@ -505,6 +517,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			_pause()
 		get_viewport().set_input_as_handled()
+
+
+func _talk_to_guard() -> void:
+	if Game.is_paused or Game.has_won:
+		return
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null:
+		return
+	for npc in get_tree().get_nodes_in_group("story_npc"):
+		if npc is Node3D and player.global_position.distance_to(npc.global_position) <= 8.0:
+			_open_adventure("Dialogue")
+			return
+	Game.toast.emit("Move closer to Star Guard Ilyra to talk.")
 
 
 func _open_adventure(tab: String = "Character") -> void:
