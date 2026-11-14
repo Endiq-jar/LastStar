@@ -1,0 +1,163 @@
+PROBE_INFO: white-blob regression: scattered=80/800 slab=1000/10000
+PROBE_INFO: performance tuner waits for frame samples
+PROBE_INFO: world is_node_ready=true children=30 [WorldEnvironment, Sun, Terrain, Vegetation, HUD, Props, Enemies, Collectibles, Player, StarGuardIlyra, Lake, WindAltar, @OmniLight3D@175, BoneCloth_carpet, BoneCloth_standard, @Node3D@176, @Area3D@300, @Area3D@310, @Area3D@320, EntityCuller, Ambience, GrassField, VegetationWind, Veg_border_grass, Veg_flowers, Veg_bush, Veg_plants, Veg_ferns, Veg_pebbles, Veg_rocks]
+PROBE_INFO: dynamic resolution slow=0.85 fast=0.85 stable=0.80 high=1.00
+PROBE_INFO: performance monitor metrics available
+PROBE_INFO: camera=/root/World/Player/CameraPivot/@SpringArm3D@76/@Camera3D@77 pos=(0.449234, 24.2522, 9.73927) fov=54.0 near=0.050 far=4200.0
+PROBE_INFO: renderer=llvmpipe (LLVM 15.0.7, 256 bits) (project method gl_compatibility)
+PROBE_INFO: attack input: touch-emulated=false physical-mouse=true
+PROBE_INFO: player nodes in group = 1
+PROBE_INFO: GROUND_ANCHOR feet=21.621 ground=21.625 gap=-0.004 m
+PROBE_INFO: all 35 scripts compile
+PROBE_INFO: terrain normals face up: 0.0% of 404 sampled point down
+PROBE_INFO: player chest projects to (561,386) of (1280,720), HUD starts at y=533
+PROBE_INFO: character is in clear view
+PROBE_INFO: TOON_MAT shader_uniforms=10 code_len=5063 render_priority=0
+PROBE_INFO: PLAYER_TREE Visual vis=true children=3 | Torso vis=true y=21.9..23.5 n=49 | LegL vis=true y=21.6..22.4 n=4 | LegR vis=true y=21.6..22.4 n=4
+PROBE_INFO: PLAYER_MESHES total=57 hidden_in_tree=5
+PROBE_INFO: PART Torso world_y=21.58 (rel 0.01) scale=(1, 1, 1)
+PROBE_INFO: PART Head world_y=23.20 (rel 1.63) scale=(1, 1, 1)
+PROBE_INFO: PART ArmL world_y=22.96 (rel 1.39) scale=(1, 1, 1)
+PROBE_INFO: PART LegL world_y=22.37 (rel 0.80) scale=(1, 1, 1)
+PROBE_INFO: PART LegR world_y=22.37 (rel 0.80) scale=(1, 1, 1)
+PROBE_INFO: MESH_Y (rel to feet): @MeshInstance3D@78:0.7-1.0 OutlineShell:0.7-1.0 @MeshInstance3D@79:0.9-1.5 OutlineShell:0.9-1.5 @MeshInstance3D@80:1.3-1.6 @MeshInstance3D@81:1.3-1.4 @MeshInstance3D@82:1.0-1.0 @MeshInstance3D@84:0.6-0.9 @MeshInstance3D@86:0.6-0.9 @MeshInstance3D@87:1.5-1.8 OutlineShell:1.5-1.8 @MeshInstance3D@88:1.6-1.7 @MeshInstance3D@89:1.6-1.7 @MeshInstance3D@90:1.6-1.7
+PROBE_INFO: player bounds y=21.58..23.52 (height 1.95 m), x=-1.08..1.08
+PROBE_INFO: player parts: 58 meshes, 53 on screen
+PROBE_INFO:   ContactShadow vis=true behind=false screen=(567,551) size=2.05 y=21.67
+PROBE_INFO:   Visual/LegL/@MeshInstance3D@111 vis=true behind=false screen=(548,484) size=0.50 y=22.14
+PROBE_INFO:   Visual/LegL/@MeshInstance3D@111/OutlineShell vis=true behind=false screen=(548,484) size=0.50 y=22.14
+PROBE_INFO:   Visual/LegL/@MeshInstance3D@112 vis=true behind=false screen=(551,530) size=0.46 y=21.82
+PROBE_INFO: frustum has 111 large meshes within 40m, nearest first:
+PROBE_INFO:   0003.9m  screen=( 557,310)  size=0.6  Player/Visual/Torso/Head/@MeshInstance3D@95  SphereMesh  ShaderMaterial(res://shaders/character/anime_toon.gdshader) albedo=(0.13, 0.12, 0.16, 1)
+PROBE_INFO:   0003.9m  screen=( 557,359)  size=0.7  Player/Visual/Torso/Head/@MeshInstance3D@103  CapsuleMesh  ShaderMaterial(res://shaders/character/anime_toon.gdshader) albedo=(0.13, 0.12, 0.16, 1)
+PROBE_INFO:   0004.0m  screen=( 558,417)  size=0.8  Player/Visual/Torso/Cape/@MeshInstance3D@117  QuadMesh  ShaderMaterial(res://shaders/character/anime_toon.gdshader) albedo=(0.637, 0.3815, 0.363, 1)
+PROBE_INFO:   0004.0m  screen=( 558,417)  size=0.8  Player/Visual/Torso/Cape/@MeshInstance3D@117/OutlineShell  QuadMesh  ShaderMaterial(res://shaders/character/outline.gdshader)
+PROBE_INFO:   0004.1m  screen=( 560,387)  size=0.8  Player/Visual/Torso/@MeshInstance3D@79  CapsuleMesh  ShaderMaterial(res://shaders/character/anime_toon.gdshader) albedo=(0.14, 0.13, 0.17, 1)
+PROBE_INFO:   0004.1m  screen=( 560,387)  size=0.8  Player/Visual/Torso/@MeshInstance3D@79/OutlineShell  CapsuleMesh  ShaderMaterial(res://shaders/character/outline.gdshader)
+PROBE_INFO:   0004.1m  screen=( 593,415)  size=1.1  Player/Visual/Torso/ArmR/@MeshInstance3D@109  SphereMesh  ShaderMaterial(res://shaders/character/anime_toon.gdshader) albedo=(0.88, 0.74, 0.66, 1)
+PROBE_INFO:   0004.2m  screen=( 530,409)  size=1.1  Player/Visual/Torso/ArmL/@MeshInstance3D@106  SphereMesh  ShaderMaterial(res://shaders/character/anime_toon.gdshader) albedo=(0.88, 0.74, 0.66, 1)
+PROBE_INFO:   0004.2m  screen=( 563,444)  size=1.0  Player/Visual/Torso/@MeshInstance3D@78  CylinderMesh  ShaderMaterial(res://shaders/character/anime_toon.gdshader) albedo=(0.66, 0.13, 0.16, 1)
+PROBE_INFO:   0004.2m  screen=( 563,444)  size=1.0  Player/Visual/Torso/@MeshInstance3D@78/OutlineShell  CylinderMesh  ShaderMaterial(res://shaders/character/outline.gdshader)
+PROBE_INFO:   0004.2m  screen=( 604,422)  size=0.9  Player/Visual/Torso/Weapon/@MeshInstance3D@125  BoxMesh  ShaderMaterial(res://shaders/character/anime_toon.gdshader) albedo=(0.46, 0.47, 0.54, 1)
+PROBE_INFO:   0004.6m  screen=( 567,551)  size=2.1  Player/ContactShadow  PlaneMesh  Standard(unshaded=true emission=false energy=1.0 albedo=(0.06, 0.07, 0.09, 1))
+PROBE_INFO:   0005.6m  screen=(1459,170)  size=0.7  StarGuardIlyra/@MeshInstance3D@133  BoxMesh  Standard(unshaded=false emission=false energy=1.0 albedo=(0.19, 0.29, 0.45, 1))
+PROBE_INFO:   0005.9m  screen=(1444,316)  size=0.6  StarGuardIlyra/@MeshInstance3D@132  BoxMesh  Standard(unshaded=false emission=false energy=1.0 albedo=(0.19, 0.29, 0.45, 1))
+PROBE_INFO: ENTITY_CULL geometry: 12/12 predicate checks passed (wall, ridge, roof, near/far/behind)
+PROBE_INFO: ENTITY_CULL registered=18 visible=1 hidden=17 passes=34 threads=4 grid=4356 occluders=83 render_skipped=17 tick_reduced=17
+PROBE_INFO: BONE_CLOTH largest piece spans 3.80 m
+PROBE_INFO: BONE_CLOTH pieces=64 meshes=103 surfaces=150 (glTF imports alive)
+PROBE_INFO: BONE_CLOTH census: BONE_CLOTH pieces=64 meshes=103 surfaces=150
+PROBE_INFO: NATURE_PACK kinds=21 baked=21 triangles=18329
+PROBE_INFO: NATURE_PACK scatter batches=57 instances=2036
+PROBE_INFO: NATURE_PACK census: NATURE_PACK kinds=21 meshes=21 triangles=18329
+PROBE_INFO: NATURE_MAT border_grass shader=nature_foliage.gdshader tint=(0.88, 0.96, 0.88) wind=0.24 sway=1.20 vcol=(0.298, 0.3882, 0.2471, 1) shadow=0
+PROBE_INFO: NATURE_PARAM border_grass darken=0.3 rim=0.35 back=0.35 rough=0.9 var=0.1 fill=<null>
+PROBE_INFO: NATURE_MAT flowers shader=nature_foliage.gdshader tint=(1, 1, 1) wind=0.2 sway=0.83 vcol=(0.298, 0.3882, 0.2471, 1) shadow=0
+PROBE_INFO: NATURE_PARAM flowers darken=0.3 rim=0.35 back=0.35 rough=0.9 var=0.1 fill=<null>
+PROBE_INFO: NATURE_MAT bush shader=nature_foliage.gdshader tint=(1, 1, 1) wind=0.1 sway=1.24 vcol=(0.298, 0.3882, 0.2471, 1) shadow=1
+PROBE_INFO: NATURE_PARAM bush darken=0.3 rim=0.35 back=0.35 rough=0.9 var=0.1 fill=<null>
+PROBE_INFO: NATURE_MAT plants shader=nature_foliage.gdshader tint=(1, 1.02, 0.98) wind=0.16 sway=0.94 vcol=(0.2392, 0.3098, 0.2, 1) shadow=0
+PROBE_INFO: NATURE_PARAM plants darken=0.3 rim=0.35 back=0.35 rough=0.9 var=0.1 fill=<null>
+PROBE_INFO: NATURE_MAT ferns shader=nature_foliage.gdshader tint=(1.04, 1.02, 0.96) wind=0.18 sway=0.51 vcol=(0.298, 0.3882, 0.2471, 1) shadow=0
+PROBE_INFO: NATURE_PARAM ferns darken=0.3 rim=0.35 back=0.35 rough=0.9 var=0.1 fill=<null>
+PROBE_INFO: NATURE_MAT pebbles shader=nature_foliage.gdshader tint=(0.62, 0.64, 0.68) wind=0 sway=0.88 vcol=(0.4784, 0.4863, 0.5294, 1) shadow=0
+PROBE_INFO: NATURE_PARAM pebbles darken=0 rim=0.08 back=0 rough=0.96 var=0.1 fill=<null>
+PROBE_INFO: NATURE_MAT rocks shader=nature_foliage.gdshader tint=(0.62, 0.64, 0.68) wind=0 sway=0.78 vcol=(0.4784, 0.4863, 0.5294, 1) shadow=0
+PROBE_INFO: NATURE_PARAM rocks darken=0 rim=0.08 back=0 rough=0.96 var=0.1 fill=<null>
+PROBE_INFO: GRASS_SUMMARY blades=33897 chunks=66 diag=tried=56220 placed=33897 chunks=66 water=986 height=0 slope=15950 tiers(near/mid/far)=9/14/43
+PROBE_INFO: GRASS_CARD 256x226 (CompressedTexture2D) alpha(top/mid/bottom)=0.00/1.00/1.00
+PROBE_INFO: FallenLogs = 4 batch(es)
+PROBE_INFO: Pebbles = 9 batch(es)
+PROBE_INFO: scatter: 4 log batch(es), 960 pebbles
+PROBE_INFO: terrain texture meadow loaded
+PROBE_INFO: terrain texture rock loaded
+PROBE_INFO: terrain texture sand loaded
+PROBE_INFO: terrain texture macro loaded
+PROBE_INFO: terrain texture path loaded
+PROBE_INFO: grass: 33897 blades across 66 chunks near the player
+PROBE_INFO: grass chunks populated=66/66, largest=3012
+PROBE_INFO: grass diagnostics: tried=56220 placed=33897 chunks=66 water=986 height=0 slope=15950 tiers(near/mid/far)=9/14/43
+PROBE_INFO: grass density upgrades when a far chunk becomes near: true
+PROBE_INFO: grass quality change queues a fresh density
+PROBE_INFO: TERRAIN near=25 tiles/33600 tris mid=49 tiles/42826 tris far=160m cells near_window=480m
+PROBE_INFO: WORLD interior peak at 1 km = 30 m 
+PROBE_INFO: WORLD mountains at 3 km = 276 m 
+PROBE_INFO: WATER lake bed = -1.4 m (level 1.2)
+PROBE_INFO: WATER 6 pond(s), lowest bed = -0.4 m
+PROBE_INFO: WATER river bed = -1.4 m at four points along it
+PROBE_INFO: WATER sea bed in the south-east = -16.0 m
+PROBE_INFO: WATER surface spans 10000 m at y=1.55
+PROBE_INFO: wander spells known=6 slots=["ember_shot", "gale_palm", "", "", ""]
+PROBE_INFO: spell wheel present (5 slots)
+PROBE_INFO: casting ember_shot started a 1.6s cooldown (left 1.60)
+PROBE_INFO: cooldown expired after ticking
+PROBE_INFO: terrain body layer=1 shapes=1 face_verts=9600
+PROBE_INFO: probe raycast from y=200 hit=(0, 23.34072, 6)
+PROBE_INFO: player standing at y=21.6 (on_floor=true), sole-to-ground gap -0.004 m (feet y=21.62, ground y=21.62)
+PROBE_INFO: environment bg_mode=2 ambient=2 glow=false fog=true
+PROBE_INFO: vivid grade: saturation=1.30 brightness=1.08 exposure=1.08
+PROBE_INFO: yellow path placement matches the meadow clearing: true
+PROBE_INFO: terrain MeshInstance3D count = 75
+PROBE_INFO: sun visible=true energy=1.29 rot=(-21.88542, -51.87751, 0)
+PROBE_INFO: celestial pause overlay and resume: true
+PROBE_INFO: offline adventure screens and close: true
+PROBE_INFO: inventory capacity and backpack persistence: full=true pack=true
+PROBE_INFO: offline transactions: shop=true level=true wish=true save=true
+PROBE_INFO: story persistence=true duplicate prevention=true drop recovery=true
+PROBE_INFO: key remapping and conflict prevention: true
+PROBE_INFO: stone shield absorbs damage: true
+PROBE_INFO: quest dialogue, one-time reward, Wander persistence: true
+PROBE_INFO: cleared 5 transient/enemy nodes from the camera frame
+PROBE_INFO: equipped backpack visible on character: true
+PROBE_INFO: captured UI: equipped_backpack
+PROBE_INFO: captured UI: game_inventory
+PROBE_INFO: captured UI: game_character
+PROBE_INFO: captured UI: game_quests
+PROBE_INFO: captured UI: game_wish
+PROBE_INFO: captured UI: game_level_up
+PROBE_INFO: captured UI: game_story
+PROBE_INFO: captured UI: game_dialogue
+PROBE_INFO: captured UI: pause
+PROBE_INFO: captured UI: performance
+PROBE_INFO: captured UI: spell_wheel
+PROBE_INFO: captured UI: spell_editor
+PROBE_INFO: captured UI: touch_controls_simulated
+PROBE_INFO: captured UI: victory
+PROBE_INFO: NEAR_GROUND at (0.4,15.7): hit Terrain/TerrainBody at y=26.60
+PROBE_INFO: CAMERA_ARM player_y=21.57 spring_pos=(0.45, 0.542005, 0) hit_len=3.90 lift=0.54 want=0.54 paused=false
+PROBE_INFO: NEAR_GROUND rise_ahead=2.29 m, buried=-0.75 m (negative = clear)
+PROBE_INFO: ground contrast p95=0.918@(915,271) p05=0.569@(180,381) median=0.683 ratio=1.61x
+PROBE_INFO: gameplay frame white pixels 0.5%, largest connected region 0.2%
+PROBE_INFO: DARK 0.09% of the frame is near-black
+PROBE_INFO: size=1280x720 mean_luma=0.645 nonblack=99.9% distinct_colours=264 sky_blue=14.2%
+PROBE_INFO: alt view mean_luma=0.521 nonblack=99.9% colours=224 differs=84.1% (OK)
+PROBE_INFO: side view differs=62.7% from main
+PROBE_INFO: portrait: character AABB 1.93m tall projects to 285px tall (screen 720)
+PROBE_INFO: saved character close-up
+PROBE_INFO: flat-material test: 1024 magenta samples in frame
+PROBE_INFO: cleared 1 transient/enemy nodes from the camera frame
+PROBE_INFO: wide frame white pixels 5.4%, largest connected region 1.2%
+PROBE_INFO: wide palette: foreground h= 95 s=0.56 v=0.78, meadow h=114 s=0.43 v=0.64, far hill h= 95 s=0.41 v=0.75, horizon h=229 s=0.12 v=0.89
+PROBE_INFO: wide saturated pixels (s>0.90, v>0.30) = 0.0%
+PROBE_INFO: wide view mean_luma=0.649 nonblack=100.0% colours=214 sky=35.2%
+PROBE_INFO: PERF draw_calls=803 objects=934 primitives=4351998 nodes=1875 video_mem=50.2MB fps=1 process=660.64ms physics=1.07ms
+PROBE_INFO: PERF census meshes=404 multimeshes=261 multimesh_instances=16608 lights=2 bodies=420
+ENTITY_CULL registered=15 visible=0 hidden=15 probes=65 tasks=65 threads=4 grid=4356 occluders=83 render_skipped=15 tick_reduced=15
+BONE_CLOTH pieces=52 meshes=81 surfaces=116
+VEG_LAYERS border_grass model=grass_2 mesh=ArrayMesh verts=408 chunks=36 instances=230
+VEG_LAYERS flowers model=flowers mesh=ArrayMesh verts=848 chunks=36 instances=504
+VEG_LAYERS bush model=bush_1 mesh=ArrayMesh verts=728 chunks=24 instances=45
+VEG_LAYERS plants model=plant_3 mesh=ArrayMesh verts=1232 chunks=36 instances=258
+VEG_LAYERS ferns model=plant_1 mesh=ArrayMesh verts=623 chunks=21 instances=153
+VEG_LAYERS pebbles model=rock_1 mesh=ArrayMesh verts=142 chunks=21 instances=1080
+VEG_LAYERS rocks model=rock_4 mesh=ArrayMesh verts=268 chunks=20 instances=50
+PROBE_INFO: CULL terrain tiles=75 largest_extent=10080m
+PROBE_INFO: CULL multimesh_batches=261 instances=16608 largest_batch=4607
+PROBE_INFO: celestial title art and start button wired: true
+PROBE_INFO: captured UI: home_wardrobe
+PROBE_INFO: captured UI: home_profile
+PROBE_INFO: captured UI: home_settings
+PROBE_INFO: captured scrolled UI: home_settings
+PROBE_INFO: captured UI: home_shop
+PROBE_INFO: home navigation and pages: true
+PROBE_LOG sha=dd44e2090c0e61432faa602cb3826dbbbb9e8db2 run=43615389423 at=2026-11-14T16:25:56Z

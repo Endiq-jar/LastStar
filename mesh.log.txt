@@ -1,0 +1,67 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+MESH_CHECK flowers declared=20
+MESH_CHECK sig daisy      0186_0413c4fb verts=390 tris=80
+MESH_CHECK sig oxeye      0126_70780076 verts=294 tris=80
+MESH_CHECK sig cosmos     00f6_3d232c30 verts=246 tris=80
+MESH_CHECK sig buttercup  00ae_6c4cf17e verts=174 tris=80
+MESH_CHECK sig poppy      0096_2d99a80c verts=150 tris=80
+MESH_CHECK sig anemone    00de_2a955db2 verts=222 tris=80
+MESH_CHECK sig cornflower 01b6_0db16fb1 verts=438 tris=80
+MESH_CHECK sig bell       00c6_20dd4e6d verts=198 tris=80
+MESH_CHECK sig bluebell   00ae_1c3c8957 verts=174 tris=80
+MESH_CHECK sig trumpet    00c6_30be61ef verts=198 tris=80
+MESH_CHECK sig star       00ae_762ebe49 verts=174 tris=80
+MESH_CHECK sig open_star  00c6_4b9f8fca verts=198 tris=80
+MESH_CHECK sig rose       0126_1e1de6fc verts=294 tris=80
+MESH_CHECK sig camellia   0126_073394da verts=294 tris=80
+MESH_CHECK sig thistle    0186_648d6cb9 verts=390 tris=80
+MESH_CHECK sig clover     0156_251757dd verts=342 tris=80
+MESH_CHECK sig yarrow     0366_2c8ca21f verts=870 tris=80
+MESH_CHECK sig verbena    01e6_4760d995 verts=486 tris=80
+MESH_CHECK sig marigold   0246_420937b2 verts=582 tris=80
+MESH_CHECK sig sunflower  0306_18ba0663 verts=774 tris=80
+MESH_CHECK distinct flower extents=20/20 tris=1600
+MESH_CHECK distinct leaf extents=5/5
+MESH_CHECK trunk verts=168 r_top=0.195 r_bottom=0.300
+MESH_CHECK clusters
+MESH_CHECK clusters distinct=8/8
+MESH_CHECK rocks
+MESH_CHECK rock verts=189 extent=(2.24,0.67,2.14)
+MESH_CHECK rock faces=63 distinct_normals=63
+MESH_CHECK boulder verts=567
+MESH_CHECK boulder uv_span=(3.58,3.43)
+MESH_CHECK rock surface indexed=false
+MESH_CHECK nature pack
+MESH_CHECK nature kinds=21
+MESH_CHECK nature tree_common_1  verts= 5776 tris= 2888 height=2.48m
+MESH_CHECK nature tree_common_3  verts= 3168 tris= 1584 height=3.46m
+MESH_CHECK nature tree_dead      verts= 4720 tris= 2360 height=2.22m
+MESH_CHECK nature tree_birch     verts= 3481 tris= 1704 height=3.57m
+MESH_CHECK nature tree_pine_1    verts= 3827 tris= 1911 height=2.70m
+MESH_CHECK nature tree_pine_3    verts= 4771 tris= 2383 height=3.30m
+MESH_CHECK nature tree_willow    verts= 3944 tris= 1946 height=2.85m
+MESH_CHECK nature bush_1         verts=  728 tris=  364 height=1.24m
+MESH_CHECK nature bush_2         verts=  536 tris=  266 height=1.11m
+MESH_CHECK nature plant_1        verts=  623 tris=  295 height=0.51m
+MESH_CHECK nature plant_3        verts= 1232 tris=  600 height=0.94m
+MESH_CHECK nature flowers        verts=  848 tris=  408 height=0.83m
+MESH_CHECK nature grass          verts=  408 tris=  192 height=1.01m
+MESH_CHECK nature grass_2        verts=  408 tris=  192 height=1.20m
+MESH_CHECK nature grass_short    verts=  408 tris=  192 height=0.40m
+MESH_CHECK nature rock_1         verts=  142 tris=   70 height=0.88m
+MESH_CHECK nature rock_2         verts=  164 tris=   80 height=0.65m
+MESH_CHECK nature rock_4         verts=  268 tris=  128 height=0.78m
+MESH_CHECK nature rock_moss      verts=  147 tris=   70 height=0.95m
+MESH_CHECK nature log            verts=  948 tris=  464 height=0.75m
+MESH_CHECK nature stump          verts=  480 tris=  232 height=0.62m
+MESH_CHECK nature total tris=18329
+MESH_CHECK grass card verts=4 tris=2 uv=4
+WARNING: Loaded resource as image file, this will not work on export: 'res://textures/terrain/meadow.webp'. Instead, import the image file as an Image resource and load it normally as a resource.
+     at: load_from_file (core/io/image.cpp:2486)
+MESH_CHECK surface textures
+MESH_CHECK tex rock.webp                                      256x256 transparent=0.0% near-black=0.0%
+MESH_CHECK tex meadow.webp                                    256x256 transparent=0.0% near-black=0.0%
+MESH_CHECK tex sand.webp                                      256x256 transparent=0.0% near-black=0.0%
+MESH_CHECK OK
+MESH_LOG sha=dd44e2090c0e61432faa602cb3826dbbbb9e8db2 run=43615389423 at=2026-11-14T16:25:56Z
