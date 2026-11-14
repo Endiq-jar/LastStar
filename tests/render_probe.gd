@@ -601,20 +601,43 @@ func _run() -> void:
 		_finish(_fail)
 		return
 	img.save_png(out_dir.path_join("world.png"))
+	# Capture every gameplay journal page, including the bottom of scrollable
+	# pages. These are real UI states, not mockups or stitched images.
 	if menu != null:
-		menu.call("open_menu", "Character")
-		await get_tree().create_timer(0.2, true).timeout
-		var journal_img := get_viewport().get_texture().get_image()
-		if journal_img != null and not journal_img.is_empty():
-			journal_img.save_png(out_dir.path_join("adventure.png"))
-		menu.call("close_menu")
+		for page in ["Inventory", "Map", "Character", "Quests", "Wish", "Level Up", "Story"]:
+			menu.call("open_menu", page)
+			await _capture_ui(out_dir, "game_" + page.to_lower().replace(" ", "_"), menu)
+			menu.call("close_menu")
 	if hud != null:
 		hud.call("_pause")
-		await get_tree().create_timer(0.2, true).timeout
-		var pause_img := get_viewport().get_texture().get_image()
-		if pause_img != null and not pause_img.is_empty():
-			pause_img.save_png(out_dir.path_join("pause.png"))
+		await _capture_ui(out_dir, "pause", null)
 		hud.call("_resume")
+		hud.call("_toggle_perf_monitor")
+		await get_tree().create_timer(0.6, true).timeout
+		await _capture_ui(out_dir, "performance", null)
+		hud.call("_toggle_perf_monitor")
+		var wheel := hud.get_node_or_null("Root/SpellWheel")
+		if wheel != null and Game.wander != null:
+			wheel.call("_set_open", true, true)
+			await _capture_ui(out_dir, "spell_wheel", null)
+			wheel.call("_open_editor", 0)
+			await _capture_ui(out_dir, "spell_editor", wheel)
+			wheel.call("_on_editor_close")
+			wheel.call("_set_open", false, true)
+		else:
+			_log("FAIL", "spell wheel unavailable for UI screenshots")
+		# Preview mobile controls in the same viewport, without claiming this is
+		# an actual Android device or a mobile performance measurement.
+		var was_touch_active: bool = Game.touch_active
+		var touch = load("res://scripts/touch_controls.gd").new()
+		hud.add_child(touch)
+		await _capture_ui(out_dir, "touch_controls_simulated", null)
+		touch.queue_free()
+		Game.touch_active = was_touch_active
+		hud.call("_on_game_won")
+		await _capture_ui(out_dir, "victory", null)
+		var win_panel: Control = hud.get("_win_panel")
+		win_panel.visible = false
 
 	# What is actually under the camera's feet?
 	#
@@ -918,6 +941,8 @@ func _check_title_screen(world: Node, out_dir: String, capture: bool) -> void:
 				if overlay == null or not overlay.visible or overlay.get("_tab") != page or Game.is_paused:
 					home_pages_ok = false
 				else:
+					if capture:
+						await _capture_ui(out_dir, "home_" + page.to_lower(), overlay)
 					overlay.call("close_menu")
 	_log("INFO" if home_pages_ok else "FAIL", "home navigation and pages: %s" % str(home_pages_ok))
 	if capture:
@@ -926,6 +951,40 @@ func _check_title_screen(world: Node, out_dir: String, capture: bool) -> void:
 		if title_img != null and not title_img.is_empty():
 			title_img.save_png(out_dir.path_join("title.png"))
 	menu.queue_free()
+
+
+func _capture_ui(out_dir: String, name: String, scroll_root: Node) -> void:
+	# Let containers layout and the renderer paint before reading the viewport.
+	await get_tree().create_timer(0.12, true).timeout
+	await get_tree().process_frame
+	var frame := get_viewport().get_texture().get_image()
+	if frame == null or frame.is_empty() or frame.save_png(out_dir.path_join(name + ".png")) != OK:
+		_log("FAIL", "could not capture UI: %s" % name)
+		return
+	_log("INFO", "captured UI: %s" % name)
+	if name == "game_character":
+		frame.save_png(out_dir.path_join("adventure.png"))
+	if scroll_root == null:
+		return
+	for node in scroll_root.find_children("*", "ScrollContainer", true, false):
+		var scroll := node as ScrollContainer
+		if not scroll.is_visible_in_tree():
+			continue
+		var bar := scroll.get_v_scroll_bar()
+		var bottom := int(maxf(0.0, bar.max_value - bar.page))
+		if bottom <= 0:
+			continue
+		var previous := scroll.scroll_vertical
+		scroll.scroll_vertical = bottom
+		await get_tree().create_timer(0.12, true).timeout
+		await get_tree().process_frame
+		var lower := get_viewport().get_texture().get_image()
+		if lower == null or lower.is_empty() or lower.save_png(out_dir.path_join(name + "_scrolled.png")) != OK:
+			_log("FAIL", "could not capture scrolled UI: %s" % name)
+		else:
+			_log("INFO", "captured scrolled UI: %s" % name)
+		scroll.scroll_vertical = previous
+		break
 
 
 func _clear_frame(world: Node) -> void:
