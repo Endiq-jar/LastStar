@@ -522,7 +522,7 @@ func _run() -> void:
 		_log("FAIL", "adventure menu missing")
 	else:
 		menu.call("open_menu", "Character")
-		var screens_ok := menu.visible and Game.is_paused
+		var screens_ok: bool = menu.visible and Game.is_paused
 		for page in ["Character", "Inventory", "Map", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story"]:
 			menu.call("_select", page)
 			var body: VBoxContainer = menu.get("_body")
