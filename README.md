@@ -247,3 +247,18 @@ This is not a five-level model LOD or a full world-partition/asset-streaming
 system: billboard impostors, asynchronous resource/texture streaming, thermal
 management, per-option graphics controls and pooled combat effects remain future
 work. The grass cards stay static; the existing foliage shader has its own wind.
+
+### Offline adventure journal
+
+Open the ✦ button in the upper-right HUD (or press **J**) for the character,
+inventory, waypoint list, quests, wishes, level-up, shop, profile, settings and
+story pages. Waypoints become fast-travel destinations after activation. Coins
+and starlight are earned from expedition objectives; the offline shop sells
+healing potions, and a wish spends 30 starlight for an equally likely collectible.
+There are no real-money transactions or online accounts. Character levels raise
+attack and are capped at 10.
+
+Coins, starlight, potions, levels, wish count and collectibles persist locally in
+`user://collection.cfg`; the current expedition and its waypoint/quest progress
+still reset when starting a new journey. The map is a waypoint list, not a drawn
+world map; story entries are not branching NPC conversations.

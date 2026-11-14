@@ -446,6 +446,7 @@ jobs:
           cp /tmp/probe/world_wide.png /tmp/shots_out/world_wide.png 2>/dev/null || true
           cp /tmp/probe/title.png /tmp/shots_out/title.png 2>/dev/null || true
           cp /tmp/probe/pause.png /tmp/shots_out/pause.png 2>/dev/null || true
+          cp /tmp/probe/adventure.png /tmp/shots_out/adventure.png 2>/dev/null || true
           cp /tmp/probe/world_side.png /tmp/shots_out/world_side.png 2>/dev/null || true
           cp /tmp/probe/player.png /tmp/shots_out/player.png 2>/dev/null || true
           cp /tmp/probe/player_flat.png /tmp/shots_out/player_flat.png 2>/dev/null || true

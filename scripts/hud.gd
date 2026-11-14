@@ -5,6 +5,7 @@ extends CanvasLayer
 
 const TOUCH := preload("res://scripts/touch_controls.gd")
 const UI := preload("res://scripts/ui_style.gd")
+const AdventureMenu := preload("res://scripts/adventure_menu.gd")
 const PerformanceMonitor := preload("res://scripts/performance/performance_monitor.gd")
 ## Loaded at runtime rather than preloaded: a preload that fails to resolve
 ## reports only "could not resolve script" against *this* file, which hides the
@@ -27,6 +28,7 @@ var _pause_panel: PanelContainer
 var _pause_dimmer: ColorRect
 var _quality_btn: Button
 var _perf_monitor: Control
+var _adventure_menu: Control
 var _toast_tween: Tween
 
 
@@ -134,6 +136,10 @@ func _build() -> void:
 	_compass.add_theme_constant_override("shadow_offset_y", 2)
 	top_right.add_child(_compass)
 
+	var journal_btn := _round_button("✦", Vector2(46, 46))
+	journal_btn.tooltip_text = "Adventure journal (J)"
+	journal_btn.pressed.connect(_open_adventure)
+	top_right.add_child(journal_btn)
 	var pause_btn := _round_button("II", Vector2(46, 46))
 	pause_btn.pressed.connect(_pause)
 	top_right.add_child(pause_btn)
@@ -313,6 +319,9 @@ func _build() -> void:
 	back.pressed.connect(func(): Game.quit_to_menu())
 	wv.add_child(back)
 
+	_adventure_menu = AdventureMenu.new()
+	root.add_child(_adventure_menu)
+
 
 func _panel_style() -> StyleBoxFlat:
 	return UI.panel(24.0)
@@ -465,6 +474,17 @@ func _resume() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_J:
+		if _adventure_menu != null and _adventure_menu.visible:
+			_adventure_menu.call("close_menu")
+		elif not Game.is_paused:
+			_open_adventure()
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("pause") and _adventure_menu != null and _adventure_menu.visible:
+		_adventure_menu.call("close_menu")
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
 		_toggle_perf_monitor()
 		get_viewport().set_input_as_handled()
@@ -475,6 +495,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			_pause()
 		get_viewport().set_input_as_handled()
+
+
+func _open_adventure() -> void:
+	if _adventure_menu != null and not Game.is_paused and not Game.has_won:
+		_adventure_menu.call("open_menu", "Character")
 
 
 func _toggle_perf_monitor() -> void:

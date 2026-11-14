@@ -516,6 +516,47 @@ func _run() -> void:
 		_log("INFO" if paused_ok and not Game.is_paused and dimmer != null and not dimmer.visible else "FAIL",
 			"celestial pause overlay and resume: %s" % str(paused_ok and not Game.is_paused))
 
+	# Exercise all offline screens and the transaction/save boundaries.
+	var menu := world.get_node_or_null("HUD/Root/AdventureMenu")
+	if menu == null:
+		_log("FAIL", "adventure menu missing")
+	else:
+		menu.call("open_menu", "Character")
+		var screens_ok := menu.visible and Game.is_paused
+		for page in ["Character", "Inventory", "Map", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story"]:
+			menu.call("_select", page)
+			var body: VBoxContainer = menu.get("_body")
+			if body == null or body.get_child_count() == 0:
+				screens_ok = false
+		menu.call("close_menu")
+		_log("INFO" if screens_ok and not Game.is_paused else "FAIL", "offline adventure screens and close: %s" % str(screens_ok))
+	var old_coins := Game.coins
+	var old_starlight := Game.starlight
+	var old_potions := Game.potions
+	var old_levels := Game.character_levels.duplicate()
+	var old_items := Game.collectibles.duplicate(true)
+	var old_wishes := Game.wish_count
+	Game.coins = 100
+	Game.starlight = 30
+	Game.character_levels[0] = 1
+	var shop_ok := Game.buy_potion() and Game.coins == 75
+	var level_ok := Game.upgrade_character(0) and Game.coins == 25 and Game.character_levels[0] == 2
+	var item := Game.make_wish()
+	var wish_ok := item != "" and Game.starlight == 0
+	Game.coins = 0
+	Game.load_collection()
+	var save_ok := Game.coins == 25 and Game.character_levels[0] == 2
+	Game.coins = old_coins
+	Game.starlight = old_starlight
+	Game.potions = old_potions
+	for i in range(Game.character_levels.size()):
+		Game.character_levels[i] = old_levels[i]
+	Game.collectibles = old_items
+	Game.wish_count = old_wishes
+	Game.save_collection()
+	_log("INFO" if shop_ok and level_ok and wish_ok and save_ok else "FAIL",
+		"offline transactions: shop=%s level=%s wish=%s save=%s" % [str(shop_ok), str(level_ok), str(wish_ok), str(save_ok)])
+
 	# --- pixel checks -----------------------------------------------------
 	# A headless run has no framebuffer, so this only reports on a real device /
 	# xvfb run. That is fine: the structural checks above still gate CI.
@@ -540,6 +581,13 @@ func _run() -> void:
 		_finish(_fail)
 		return
 	img.save_png(out_dir.path_join("world.png"))
+	if menu != null:
+		menu.call("open_menu", "Character")
+		await get_tree().create_timer(0.2, true).timeout
+		var journal_img := get_viewport().get_texture().get_image()
+		if journal_img != null and not journal_img.is_empty():
+			journal_img.save_png(out_dir.path_join("adventure.png"))
+		menu.call("close_menu")
 	if hud != null:
 		hud.call("_pause")
 		await get_tree().create_timer(0.2, true).timeout

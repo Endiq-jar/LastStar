@@ -16,6 +16,7 @@ signal game_won()
 signal respawned()
 ## Emitted when the player casts a Wander spell. player.gd performs the effect.
 signal spell_cast(id: String, data: Dictionary)
+signal collection_changed()
 
 const TOTAL_SIGILS := 12
 const MAX_STAMINA := 100.0
@@ -138,11 +139,22 @@ var wander: Wander
 var touch_move: Vector2 = Vector2.ZERO
 var touch_active: bool = false
 
+## Offline collection persists independently of a single expedition.
+const COLLECTION_FILE := "user://collection.cfg"
+const WISH_ITEMS := ["Moonstone", "Starflower", "Sunshard", "Stormglass"]
+var coins := 150
+var starlight := 30
+var potions := 2
+var character_levels: Array[int] = [1, 1, 1]
+var collectibles: Dictionary = {}
+var wish_count := 0
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	load_quality()
 	reset_run()
+	load_collection()
 
 
 func reset_run() -> void:
@@ -231,7 +243,7 @@ func spend_energy(amount: float) -> bool:
 
 
 func attack_power() -> float:
-	return float(character()["attack"])
+	return float(character()["attack"]) * (1.0 + 0.12 * float(character_levels[party_index] - 1))
 
 
 func switch_character(index: int) -> void:
@@ -265,6 +277,10 @@ func collect_sigil() -> void:
 	if has_won:
 		return
 	sigils_collected += 1
+	coins += 20
+	starlight += 5
+	save_collection()
+	collection_changed.emit()
 	add_energy(14.0)
 	sigils_changed.emit(sigils_collected, TOTAL_SIGILS)
 	_refresh_quest()
@@ -277,6 +293,9 @@ func collect_sigil() -> void:
 
 func register_slime() -> void:
 	slimes_defeated += 1
+	coins += 5
+	save_collection()
+	collection_changed.emit()
 	add_energy(6.0)
 	_refresh_quest()
 
@@ -285,6 +304,9 @@ func activate_waypoint(statue_name: String, pos: Vector3) -> void:
 	if not waypoints_seen.has(statue_name):
 		waypoints_seen[statue_name] = true
 		waypoints_activated += 1
+		coins += 15
+		save_collection()
+		collection_changed.emit()
 	last_waypoint_name = statue_name
 	checkpoint = pos
 	has_checkpoint = true
@@ -334,6 +356,84 @@ func quit_to_menu() -> void:
 	is_paused = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().change_scene_to_file(MENU_PATH)
+
+
+func save_collection() -> bool:
+	var cfg := ConfigFile.new()
+	cfg.set_value("collection", "coins", coins)
+	cfg.set_value("collection", "starlight", starlight)
+	cfg.set_value("collection", "potions", potions)
+	cfg.set_value("collection", "levels", character_levels)
+	cfg.set_value("collection", "items", collectibles)
+	cfg.set_value("collection", "wishes", wish_count)
+	var err := cfg.save(COLLECTION_FILE)
+	if err != OK:
+		push_warning("LastStar: could not save the offline collection (%d)" % err)
+	return err == OK
+
+
+func load_collection() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(COLLECTION_FILE) != OK:
+		return
+	coins = maxi(0, int(cfg.get_value("collection", "coins", 150)))
+	starlight = maxi(0, int(cfg.get_value("collection", "starlight", 30)))
+	potions = maxi(0, int(cfg.get_value("collection", "potions", 2)))
+	wish_count = maxi(0, int(cfg.get_value("collection", "wishes", 0)))
+	var levels = cfg.get_value("collection", "levels", [1, 1, 1])
+	if levels is Array and levels.size() == PARTY.size():
+		for i in range(PARTY.size()):
+			character_levels[i] = clampi(int(levels[i]), 1, 10)
+	var saved_items = cfg.get_value("collection", "items", {})
+	if saved_items is Dictionary:
+		collectibles = saved_items
+	collection_changed.emit()
+
+
+func buy_potion() -> bool:
+	if coins < 25:
+		return false
+	coins -= 25
+	potions += 1
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func use_potion() -> bool:
+	if potions <= 0 or current_hp() >= max_hp():
+		return false
+	potions -= 1
+	heal(300.0)
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func upgrade_character(index: int) -> bool:
+	if index < 0 or index >= PARTY.size() or character_levels[index] >= 10:
+		return false
+	var cost := character_levels[index] * 50
+	if coins < cost:
+		return false
+	coins -= cost
+	character_levels[index] += 1
+	save_collection()
+	collection_changed.emit()
+	stats_changed.emit()
+	return true
+
+
+func make_wish() -> String:
+	if starlight < 30:
+		return ""
+	starlight -= 30
+	var item: String = WISH_ITEMS[randi_range(0, WISH_ITEMS.size() - 1)]
+	collectibles[item] = int(collectibles.get(item, 0)) + 1
+	wish_count += 1
+	save_collection()
+	collection_changed.emit()
+	return item
 
 
 func quality_name() -> String:
