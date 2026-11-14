@@ -630,6 +630,7 @@ func _run() -> void:
 	Game.potions = old_potions
 	Game.collectibles = old_items
 	Game.save_collection()
+	Game.sigils_changed.emit(Game.sigils_collected, Game.TOTAL_SIGILS)
 	Game.call("_refresh_quest")
 	_log("INFO" if story_ok and no_duplicate and drop_ok else "FAIL", "story persistence=%s duplicate prevention=%s drop recovery=%s" % [str(story_ok), str(no_duplicate), str(drop_ok)])
 	var old_jump: int = Game.key_for_action("jump")
