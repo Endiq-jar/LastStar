@@ -437,8 +437,11 @@ func _press_jump() -> void:
 
 
 func _emit_action(action: String) -> void:
-	Input.action_press(action)
-	Input.action_release(action)
+	# action_press changes polling state but does not dispatch an input event.
+	# Send HUD actions directly so the explicit attack button still works.
+	var player := get_tree().get_first_node_in_group("player")
+	if player != null and player.has_method("combat_action"):
+		player.call("combat_action", action)
 
 
 func _pause() -> void:

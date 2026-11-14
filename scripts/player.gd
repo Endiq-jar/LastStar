@@ -517,12 +517,37 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event.is_action_pressed("party_next"):
 		Game.next_character()
-	if event.is_action_pressed("attack"):
-		_do_attack()
+	if _is_world_attack_input(event):
+		combat_action("attack")
 	if event.is_action_pressed("skill"):
-		_do_skill()
+		combat_action("skill")
 	if event.is_action_pressed("burst"):
-		_do_burst()
+		combat_action("burst")
+
+
+func _is_world_attack_input(event: InputEvent) -> bool:
+	# Godot converts a finger tap into a left mouse click for the UI. That
+	# synthetic click must not also trigger a world attack on every touch.
+	if event is InputEventMouseButton and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return false
+	return event.is_action_pressed("attack")
+
+
+func combat_action(action: String) -> void:
+	if Game.is_paused or Game.has_won:
+		return
+	match action:
+		"attack":
+			if _gliding:
+				_gliding = false
+				_diving = true
+				velocity.y = -30.0
+			else:
+				_do_attack()
+		"skill":
+			_do_skill()
+		"burst":
+			_do_burst()
 
 
 func _physics_process(delta: float) -> void:
@@ -578,12 +603,6 @@ func _physics_process(delta: float) -> void:
 	# Hold jump in the air to open the wings.
 	if not on_floor and not _gliding and Input.is_action_pressed("jump") and velocity.y < -3.0 and not _double_jump_used:
 		_gliding = true
-
-	# Plunge: attack while falling from a glide.
-	if _gliding and Input.is_action_just_pressed("attack"):
-		_gliding = false
-		_diving = true
-		velocity.y = -30.0
 
 	if _diving and on_floor:
 		_diving = false

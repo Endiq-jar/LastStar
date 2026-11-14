@@ -43,33 +43,14 @@ const CARD_WIDTH := 0.52
 const CARD_HEIGHT := 0.54
 
 const CHUNK_SIZE := 26.0          ## metres per chunk
-## Radius, in chunks. 5 * 26 = 130 m, which with the shader's dissolve put a
-## visible arc of bare terrain at the edge of the meadow. Raised to 7 (182 m) so
-## the field runs past the point where blades stop being resolvable.
-const VIEW_CHUNKS := 7
-## Instances per 26 m chunk.
-##
-## Counts of CARDS, so the number that matters is cards per square metre. A chunk
-## is 676 m2, and the card is 0.71 m of painted grass - the same paint, on the
-## same kind of card, as the old meadow this restores.
-##
-## The old meadow's own numbers, from c7b415f: BLADES_NEAR 14000, i.e. 20.7
-## cards/m2, with a 0.62 x 0.56 m quad. That is the density its frame shows, and
-## the sheet is a top-heavy tuft whose solid base is a *quarter* of its height, so
-## at 0.73 m tall every card puts 0.18 m of opaque paint on the ground. Just
-## under a quarter of the frame's pixels are that base, and if the cards are too
-## sparse to overlap you do not get a carpet - you get green boxes with tufts
-## sticking out of them, which is exactly what this looked like at 9.2/m2.
-##
-## Each tuft is one camera-facing quad (2 triangles). The density falls off
-## across near, mid and far rings; quality tiers scale all three counts.
-## The 0.52 x 0.54 m card keeps the painted tuft's proportions.
-##
-## It is the largest line item in the frame, so quality tier 1 multiplies all
-## three tiers by 0.35 and the far ring is deliberately sparse.
-const BLADES_NEAR := 10000        ## instances in a chunk adjacent to the player
-const BLADES_MID := 3600
-const BLADES_FAR := 500
+## Radius in chunks (156 m). Near chunks are prioritised and the outer ring
+## uses fewer instances so it remains affordable on mobile.
+const VIEW_CHUNKS := 6
+## Instances per 26 m chunk before quality scaling. One two-triangle
+## camera-facing card per tuft; density decreases with distance.
+const BLADES_NEAR := 4500        ## instances in a chunk adjacent to the player
+const BLADES_MID := 1800
+const BLADES_FAR := 300
 ## Hard cap on live chunks. Must be at least (2*VIEW_CHUNKS+1)^2 or the field
 ## silently stops growing: the cap was written for a radius of 5 and stayed at 81
 ## when the radius became 7, which needs 225. Without this the outer ring would
@@ -93,6 +74,8 @@ var _pending: Array[Vector2i] = []
 var _blade_mesh: Mesh
 var _material: ShaderMaterial
 var _last_center := Vector2i(9999, 9999)
+var _last_camera_forward := Vector2.ZERO
+var _camera_check := 0.0
 var _build_budget := 1             ## chunks built per frame, to avoid hitches
 ## Multiplies every tier's instance count. This is the real density control.
 ##
@@ -181,7 +164,7 @@ func _add_quad(st: SurfaceTool, a: Vector3, b: Vector3, normal: Vector3) -> void
 		st.add_vertex(verts[i])
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _player == null or _terrain == null:
 		return
 	# Push the camera position for the near-blade cull. The shader cannot read a
@@ -193,6 +176,16 @@ func _process(_delta: float) -> void:
 	if center != _last_center:
 		_last_center = center
 		_queue_around(center)
+	# Chunks previously skipped behind the camera need a retry when turning.
+	_camera_check += delta
+	if _camera_check >= 0.5:
+		_camera_check = 0.0
+		var cam := get_viewport().get_camera_3d()
+		if cam != null:
+			var direction := Vector2(-cam.global_basis.z.x, -cam.global_basis.z.z).normalized()
+			if _last_camera_forward == Vector2.ZERO or direction.dot(_last_camera_forward) < 0.92:
+				_last_camera_forward = direction
+				_queue_around(center)
 	# Build a few chunks per frame so streaming never causes a visible hitch.
 	var built := 0
 	while built < _build_budget and not _pending.is_empty():
@@ -221,27 +214,31 @@ func _chunk_of(p: Vector3) -> Vector2i:
 	return Vector2i(floori(p.x / CHUNK_SIZE), floori(p.z / CHUNK_SIZE))
 
 
+func _tier_for_chunk(key: Vector2i, center: Vector2i) -> int:
+	var dist := Vector2(key - center).length()
+	return 0 if dist <= 1.5 else (1 if dist <= 3.0 else 2)
+
+
 func _queue_around(center: Vector2i) -> void:
+	# A chunk's density is selected when it is built. When the player moves,
+	# replace batches that crossed a density boundary, including far -> near.
+	for key in _chunks.keys():
+		var d: Vector2i = key - center
+		var node: MultiMeshInstance3D = _chunks[key]
+		if Vector2(d).length() > float(VIEW_CHUNKS) + 1.5 or int(node.get_meta("grass_tier", -1)) != _tier_for_chunk(key, center):
+			if is_instance_valid(node):
+				node.queue_free()
+			_chunks.erase(key)
 	_pending.clear()
 	for dz in range(-VIEW_CHUNKS, VIEW_CHUNKS + 1):
 		for dx in range(-VIEW_CHUNKS, VIEW_CHUNKS + 1):
 			var key := center + Vector2i(dx, dz)
-			# Circular view so corners do not double the work.
 			if Vector2(dx, dz).length() > float(VIEW_CHUNKS) + 0.25:
 				continue
-			if not _chunks.has(key):
+			if not _chunks.has(key) and not _behind_camera(key):
 				_pending.append(key)
-	# Build the visible ground near the player first, not the far edge of the ring.
 	_pending.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
 		return (a - center).length_squared() < (b - center).length_squared())
-	# Drop chunks that fell out of range.
-	for key in _chunks.keys():
-		var d: Vector2i = key - center
-		if Vector2(d).length() > float(VIEW_CHUNKS) + 1.5:
-			var node: MultiMeshInstance3D = _chunks[key]
-			if is_instance_valid(node):
-				node.queue_free()
-			_chunks.erase(key)
 
 
 ## True when a chunk lies entirely behind the camera and so cannot draw.
@@ -266,12 +263,12 @@ func _behind_camera(key: Vector2i) -> bool:
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return false
-	var fwd := -cam.global_basis.z
-	var c := Vector3((float(key.x) + 0.5) * CHUNK_SIZE, 0.0,
+	var fwd := Vector2(-cam.global_basis.z.x, -cam.global_basis.z.z).normalized()
+	var c := Vector2((float(key.x) + 0.5) * CHUNK_SIZE,
 		(float(key.y) + 0.5) * CHUNK_SIZE)
 	# Half-diagonal of a chunk, so the test covers every corner of it.
 	var reach := CHUNK_SIZE * 0.7072
-	return (c - cam.global_position).dot(fwd) < -(reach + SIGHT_CULL_MARGIN)
+	return (c - Vector2(cam.global_position.x, cam.global_position.z)).dot(fwd) < -(reach + SIGHT_CULL_MARGIN)
 
 
 func _build_chunk(key: Vector2i) -> void:
@@ -286,6 +283,7 @@ func _build_chunk(key: Vector2i) -> void:
 	var center := _chunk_of(_player.global_position) if _player != null else _last_center
 	var d := key - center
 	var dist := Vector2(d).length()
+	var tier := _tier_for_chunk(key, center)
 	var count := BLADES_FAR
 	if dist <= 1.5:
 		count = BLADES_NEAR
@@ -336,6 +334,8 @@ func _build_chunk(key: Vector2i) -> void:
 			_tried += 1
 			var x := origin_x + (float(gx) + rng.randf()) * cell
 			var z := origin_z + (float(gz) + rng.randf()) * cell
+			if _terrain.has_method("is_path") and _terrain.is_path(x, z):
+				continue
 			# surface_height_at(), not get_height_at(): the grass has to sit on the
 			# bumpy mesh the camera actually sees, not on the smooth analytic field
 			# the collision uses. Those differ by up to the sagitta of a 3 m triangle,
@@ -380,6 +380,7 @@ func _build_chunk(key: Vector2i) -> void:
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "Grass_%d_%d" % [key.x, key.y]
 	mmi.multimesh = multimesh
+	mmi.set_meta("grass_tier", tier)
 	if _material != null:
 		_push_view_params()
 		mmi.material_override = _material

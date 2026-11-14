@@ -158,6 +158,8 @@ func _build_chunk(key: Vector2i) -> void:
 	for i in range(wanted):
 		var x := origin_x + _rng.randf() * chunk_size
 		var z := origin_z + _rng.randf() * chunk_size
+		if _terrain.has_method("is_path") and _terrain.is_path(x, z):
+			continue
 
 		# Density variation: a noise field thins the field in patches. Below the
 		# threshold, skip - which is what produces natural clearings instead of

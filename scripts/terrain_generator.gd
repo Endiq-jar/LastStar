@@ -276,6 +276,12 @@ func surface_height_at(x: float, z: float) -> float:
 	return h + surface_noise.get_noise_2d(x, z) * SURFACE_DETAIL
 
 
+## Matches terrain_anime.gdshader: a winding path runs north/south near spawn.
+## Grass avoids its center; the shader softly blends the edges into the meadow.
+func is_path(x: float, z: float) -> bool:
+	return absf(x - (18.0 + 10.0 * sin(z * 0.012))) < 3.9
+
+
 ## Steepness at a point, as a true gradient: metres of rise per metre of run.
 func get_slope_at(x: float, z: float) -> float:
 	const SAMPLE := 3.0
@@ -633,6 +639,7 @@ func _terrain_material() -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = load("res://shaders/terrain/terrain_anime.gdshader")
 	m.set_shader_parameter("meadow_tex", _load_tex("res://textures/terrain/meadow.webp"))
+	m.set_shader_parameter("path_tex", _load_tex("res://textures/terrain/path.webp"))
 	m.set_shader_parameter("rock_tex", _load_tex("res://textures/terrain/rock.webp"))
 	m.set_shader_parameter("sand_tex", _load_tex("res://textures/terrain/sand.webp"))
 	m.set_shader_parameter("macro_tex", _load_tex("res://textures/terrain/macro.webp"))

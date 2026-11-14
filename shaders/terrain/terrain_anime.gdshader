@@ -14,6 +14,7 @@ render_mode cull_back, diffuse_lambert, specular_toon, depth_draw_opaque;
 // wet, reflective bands near the waterline. Tuned for mobile (3 samples).
 
 uniform sampler2D meadow_tex : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D path_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D rock_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D sand_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
@@ -109,6 +110,13 @@ void fragment() {
 	// large open area from going dead.
 	float brush = smoothstep(0.40, 0.62, texture(macro_tex, v_world.xz * 0.028).r);
 	grass *= mix(0.88, 1.10, brush);
+
+	// Winding yellow-soil trail; matches TerrainGenerator.is_path(). It is
+	// blended into the ground before shoreline, cliff and snow layers.
+	float path_distance = abs(v_world.x - (18.0 + 10.0 * sin(v_world.z * 0.012)));
+	float path_mask = 1.0 - smoothstep(3.0, 4.2, path_distance);
+	vec3 path_col = texture(path_tex, v_world.xz * 0.13).rgb;
+	grass = mix(grass, path_col, path_mask);
 
 	// Rock: warm grey, cooler in shadowed bands.
 	vec3 rock_col = rock_tint.rgb * mix(0.66, 1.0, patch);

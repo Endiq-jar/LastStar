@@ -127,6 +127,8 @@ func _pick(terrain: Node, rng: RandomNumberGenerator, min_h: float, max_h: float
 		attempts += 1
 		var x := rng.randf_range(-SPREAD, SPREAD)
 		var z := rng.randf_range(-SPREAD, SPREAD)
+		if terrain.has_method("is_path") and terrain.is_path(x, z):
+			continue
 		# Bumped surface, so trees and rocks sit in the visible ground rather
 		# than hovering over it (see TerrainGenerator.surface_height_at).
 		var h: float = terrain.surface_height_at(x, z) if terrain.has_method("surface_height_at") \

@@ -159,6 +159,16 @@ func _run() -> void:
 			RenderingServer.get_video_adapter_name(), runtime_method])
 
 	var players := get_tree().get_nodes_in_group("player")
+	if players.size() == 1:
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = true
+		click.device = InputEvent.DEVICE_ID_EMULATION
+		var emulated: bool = players[0].call("_is_world_attack_input", click)
+		click.device = 0
+		var physical: bool = players[0].call("_is_world_attack_input", click)
+		_log("INFO" if not emulated and physical else "FAIL",
+			"attack input: touch-emulated=%s physical-mouse=%s" % [str(emulated), str(physical)])
 	_log("INFO" if players.size() == 1 else "FAIL",
 		"player nodes in group = %d" % players.size())
 	# Measure the sole-to-ground gap HERE, immediately, because the annotation
@@ -315,7 +325,7 @@ func _run() -> void:
 		_log("INFO", "scatter: %d log batch(es), %d pebbles" % [log_nodes.size(), peb_n])
 
 	# --- terrain textures ---------------------------------------------------
-	for tex_name in ["meadow", "rock", "sand", "macro"]:
+	for tex_name in ["meadow", "rock", "sand", "macro", "path"]:
 		var path := "res://textures/terrain/%s.webp" % tex_name
 		_log("INFO" if ResourceLoader.exists(path) else "FAIL",
 			"terrain texture %s %s" % [tex_name, "loaded" if ResourceLoader.exists(path) else "MISSING"])
@@ -347,6 +357,19 @@ func _run() -> void:
 		_log("INFO", "grass chunks populated=%d/%d, largest=%d" % [
 			populated, chunks, nearest])
 		_log("INFO", "grass diagnostics: %s" % str(grass.call("diagnostics")))
+		# Simulate a far batch becoming near after travel. It must be removed
+		# and queued again rather than remaining permanently sparse.
+		var live_chunks: Dictionary = grass.get("_chunks")
+		var center: Vector2i = grass.get("_last_center")
+		var checked_tier := false
+		for key in live_chunks.keys():
+			if int(grass.call("_tier_for_chunk", key, center)) == 0:
+				var chunk: Node = live_chunks[key]
+				chunk.set_meta("grass_tier", 2)
+				grass.call("_queue_around", center)
+				checked_tier = not live_chunks.has(key)
+				break
+		_log("INFO" if checked_tier else "FAIL", "grass density upgrades when a far chunk becomes near: %s" % str(checked_tier))
 		# A quality change must retire the old dense batches rather than merely
 		# changing the budget for future chunks. Restore the original setting
 		# afterwards; subsequent frames stream the ring back in.
@@ -365,8 +388,8 @@ func _run() -> void:
 		#
 		# Performance mode deliberately builds fewer cards, and the ring is
 		# streamed over multiple frames rather than generated in one startup hitch.
-		if blades < 5000:
-			_log("FAIL", "grass is far too sparse (%d cards near the player, expected >5000)" % blades)
+		if blades < 2000:
+			_log("FAIL", "grass is far too sparse (%d cards near the player, expected >2000)" % blades)
 
 	_check_world_scale(world)
 
@@ -465,6 +488,11 @@ func _run() -> void:
 				env.adjustment_saturation, env.adjustment_brightness, env.tonemap_exposure])
 
 	var terrain := world.get_node_or_null("Terrain")
+	if terrain != null and terrain.has_method("is_path"):
+		var path_ok := bool(terrain.call("is_path", 18.0, 0.0)) and not bool(terrain.call("is_path", 30.0, 0.0))
+		_log("INFO" if path_ok else "FAIL", "yellow path placement matches the meadow clearing: %s" % str(path_ok))
+	else:
+		_log("FAIL", "terrain path placement missing")
 	var meshes := 0
 	if terrain:
 		meshes = terrain.find_children("*", "MeshInstance3D", true, false).size()

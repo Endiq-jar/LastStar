@@ -38,7 +38,7 @@ produces an installable APK on every push.
 | **Day / night** | Sun angle, colour and ambient light drift over time; campfire and crystal lights carry the night |
 | **Environment (rendered)** | ![wide](docs/render_wide.webp) ![gameplay](docs/render_world.webp) |
 | **Character (rendered, front)** | ![front](docs/render_player.webp) |
-| **Grass** | The original hand-painted tuft is drawn on a single upright, camera-facing alpha-cut card, **2 triangles per instance**. Its UVs put the roots on the ground and the tips at the top. The field streams in chunks, thins with distance, and has **no wind animation**. The meadow ground texture is solid `#7FBF5A`; lighting and terrain variation affect its displayed color |
+| **Grass** | The original hand-painted tuft is drawn on a single upright, camera-facing alpha-cut card, **2 triangles per instance**. Its UVs put the roots on the ground and the tips at the top. The field streams in chunks, refreshes density as you travel, thins with distance, and has **no wind animation**. A winding yellow-soil path is kept clear of grass. The meadow ground texture is solid `#7FBF5A`; lighting and terrain variation affect its displayed color |
 | **Mobile UI** | Touch joystick + right-side camera drag + on-screen action buttons, plus a **Quality** toggle (Balanced / Performance / High) |
 
 ### Controls
