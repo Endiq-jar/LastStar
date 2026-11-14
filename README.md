@@ -248,22 +248,26 @@ system: billboard impostors, asynchronous resource/texture streaming, thermal
 management, per-option graphics controls and pooled combat effects remain future
 work. The grass cards stay static; the existing foliage shader has its own wind.
 
-### Home and offline inventory
+### Home, story and inventory
 
-The game opens at Home: choose Play, Wardrobe, Profile, Settings or Shop.
-During play, use the bottom Inventory, Map and Journal buttons (or J for the
-journal). The map lists waypoints; activate a statue to unlock fast travel.
+Home has Play, Wardrobe, Profile, Settings and Shop. During play, use the bottom
+Inventory and Journal buttons; the map has been removed. Story sigils, slime
+count, activated waypoints and the last respawn checkpoint persist locally.
+Starting Play resumes those objectives; it restores health and starts the player
+at the entrance, while the saved waypoint remains the respawn checkpoint.
 
-Inventory begins with 10 slots. Each potion and each treasure uses one slot.
-Purchase backpacks in the home shop with earned coins and equip them in the home
-wardrobe: the Trail backpack adds 5 slots, and the Explorer backpack adds 10.
-You cannot receive potions or wish rewards when full, or equip a smaller pack
-if its capacity would be exceeded. Older over-capacity collections are retained;
-use potions or equip a larger pack to make space. Backpacks don't yet change the
-character's 3D appearance.
+Inventory starts with 10 slots, with an icon for each potion or treasure. Select
+an item to use or drop it; dropped items remain in the world and are saved until
+picked up. Sort by item type or name. Purchase backpacks in the home shop with
+coins earned in play and equip them in Wardrobe for 5 or 10 additional slots.
+You cannot equip a smaller backpack if your inventory would exceed its capacity.
+Backpacks are visible on the character; Wardrobe also offers three outfit colour
+styles. The cape, hanging panels and backpack have lightweight motion-following
+articulation, not full physical cloth collision or a skinned cloth simulation.
 
-Coins, starlight, potions, levels, backpack ownership/equipment, wish count and
-collectibles save locally in `user://collection.cfg`. Expedition progress resets
-on a new journey. Wishes and the shop use only earned currency; there are no
-online accounts or real-money purchases. The story is a journal entry, not
-branching NPC dialogue.
+Settings provide graphics quality, master/ambience/effects audio levels, camera
+sensitivity and keyboard rebinding for movement, jump, sprint, skill, burst and
+party switching. These settings save locally. Touch layout, mouse bindings and
+individual graphics features are not customizable yet; there is no music track.
+Coins, supplies, levels, story progress, wardrobe and dropped items are saved in
+`user://collection.cfg`. Wishes and the shop use only in-game currency.

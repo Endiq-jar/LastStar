@@ -17,6 +17,7 @@ func _ready() -> void:
 	Game.set_paused(false)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	Game.reset_run()
+	Game.load_collection()
 	_build_background()
 	_style_menu()
 	start_btn.pressed.connect(_on_start)

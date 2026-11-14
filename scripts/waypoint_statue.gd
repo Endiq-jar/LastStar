@@ -117,6 +117,10 @@ func _ready() -> void:
 	label.modulate = Color(0.9, 0.97, 1.0, 0.9)
 	add_child(label)
 
+	if Game.waypoints_seen.has(statue_name):
+		_activated = true
+		for wing in _wings:
+			wing.rotation.z = deg_to_rad(-22.0 * signf(wing.rotation.z))
 	body_entered.connect(_on_body_entered)
 
 

@@ -523,7 +523,7 @@ func _run() -> void:
 	else:
 		menu.call("open_menu", "Character")
 		var screens_ok: bool = menu.visible and Game.is_paused
-		for page in ["Character", "Inventory", "Map", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story"]:
+		for page in ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story"]:
 			menu.call("_select", page)
 			var body: VBoxContainer = menu.get("_body")
 			if body == null or body.get_child_count() == 0:
@@ -577,6 +577,65 @@ func _run() -> void:
 	_log("INFO" if shop_ok and level_ok and wish_ok and save_ok else "FAIL",
 		"offline transactions: shop=%s level=%s wish=%s save=%s" % [str(shop_ok), str(level_ok), str(wish_ok), str(save_ok)])
 
+	# Story progress and dropped items must survive reloading without duplicating
+	# sigil rewards, or discarding items when the inventory is full.
+	var saved_sigils := Game.sigils_seen.duplicate(true)
+	var saved_count := Game.sigils_collected
+	var saved_slimes := Game.slimes_defeated
+	var saved_waypoints := Game.waypoints_seen.duplicate(true)
+	var saved_waypoint_count := Game.waypoints_activated
+	var saved_checkpoint := Game.checkpoint
+	var saved_has_checkpoint := Game.has_checkpoint
+	var saved_waypoint_name := Game.last_waypoint_name
+	var saved_complete := Game.story_complete
+	var saved_drops := Game.dropped_items.duplicate(true)
+	var saved_next_drop := Game.next_drop_id
+	Game.sigils_seen = {}
+	Game.sigils_collected = 0
+	Game.slimes_defeated = 3
+	Game.waypoints_seen = {"Probe waypoint": true}
+	Game.waypoints_activated = 1
+	Game.has_checkpoint = true
+	Game.checkpoint = Vector3(10, 20, 30)
+	Game.last_waypoint_name = "Probe waypoint"
+	Game.story_complete = false
+	Game.collect_sigil("probe_sigil")
+	var reward_coins := Game.coins
+	Game.collect_sigil("probe_sigil")
+	var no_duplicate := Game.sigils_collected == 1 and Game.coins == reward_coins
+	Game.potions = 2
+	Game.collectibles = {}
+	Game.dropped_items = {}
+	var drop_id: String = Game.drop_item("Potion", Vector3(3, 2, 1))
+	Game.sigils_seen = {}
+	Game.slimes_defeated = 0
+	Game.waypoints_seen = {}
+	Game.dropped_items = {}
+	Game.load_collection()
+	var story_ok := Game.sigils_seen.has("probe_sigil") and Game.sigils_collected == 1 and Game.slimes_defeated == 3 and Game.waypoints_seen.has("Probe waypoint") and Game.checkpoint == Vector3(10, 20, 30)
+	var drop_ok := drop_id != "" and Game.dropped_items.has(drop_id) and Game.recover_drop(drop_id) and Game.potions == 2
+	Game.sigils_seen = saved_sigils
+	Game.sigils_collected = saved_count
+	Game.slimes_defeated = saved_slimes
+	Game.waypoints_seen = saved_waypoints
+	Game.waypoints_activated = saved_waypoint_count
+	Game.checkpoint = saved_checkpoint
+	Game.has_checkpoint = saved_has_checkpoint
+	Game.last_waypoint_name = saved_waypoint_name
+	Game.story_complete = saved_complete
+	Game.dropped_items = saved_drops
+	Game.next_drop_id = saved_next_drop
+	Game.coins = old_coins
+	Game.starlight = old_starlight
+	Game.potions = old_potions
+	Game.collectibles = old_items
+	Game.save_collection()
+	Game.call("_refresh_quest")
+	_log("INFO" if story_ok and no_duplicate and drop_ok else "FAIL", "story persistence=%s duplicate prevention=%s drop recovery=%s" % [str(story_ok), str(no_duplicate), str(drop_ok)])
+	var old_jump: int = Game.key_for_action("jump")
+	var settings_ok := Game.rebind_action("jump", KEY_K) and Game.key_for_action("jump") == KEY_K and not Game.rebind_action("move_forward", KEY_K) and Game.rebind_action("jump", old_jump)
+	_log("INFO" if settings_ok else "FAIL", "key remapping and conflict prevention: %s" % str(settings_ok))
+
 	# --- pixel checks -----------------------------------------------------
 	# A headless run has no framebuffer, so this only reports on a real device /
 	# xvfb run. That is fine: the structural checks above still gate CI.
@@ -604,7 +663,7 @@ func _run() -> void:
 	# Capture every gameplay journal page, including the bottom of scrollable
 	# pages. These are real UI states, not mockups or stitched images.
 	if menu != null:
-		for page in ["Inventory", "Map", "Character", "Quests", "Wish", "Level Up", "Story"]:
+		for page in ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story"]:
 			menu.call("open_menu", page)
 			await _capture_ui(out_dir, "game_" + page.to_lower().replace(" ", "_"), menu)
 			menu.call("close_menu")

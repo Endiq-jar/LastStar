@@ -89,6 +89,7 @@ func _ready() -> void:
 	_scatter_landmarks()
 	_spawn_waypoints()
 	_spawn_sigils()
+	_restore_drops()
 	_spawn_enemies()
 	_build_entity_culler()
 	_add_audio()
@@ -1142,12 +1143,34 @@ func _spawn_sigils() -> void:
 		if too_close:
 			continue
 		used.append(Vector3(x, y, z))
+		var sigil_id := "Sigil_%d" % placed
+		if Game.sigils_seen.has(sigil_id):
+			placed += 1
+			continue
 		var sigil := Area3D.new()
 		sigil.set_script(SigilScript)
 		sigil.position = Vector3(x, y + 0.6, z)
-		sigil.name = "Sigil_%d" % placed
+		sigil.name = sigil_id
 		_collectibles.add_child(sigil)
 		placed += 1
+
+
+func _restore_drops() -> void:
+	for id in Game.dropped_items:
+		spawn_dropped_item(str(id))
+
+
+func spawn_dropped_item(id: String) -> void:
+	if not Game.dropped_items.has(id):
+		return
+	var data: Dictionary = Game.dropped_items[id]
+	if not data.get("position") is Vector3:
+		return
+	var drop := Area3D.new()
+	drop.set_script(load("res://scripts/dropped_item.gd"))
+	drop.set("drop_id", id)
+	drop.position = data["position"]
+	_collectibles.add_child(drop)
 
 
 func _spawn_enemies() -> void:

@@ -167,7 +167,7 @@ func _build() -> void:
 	navigation.alignment = BoxContainer.ALIGNMENT_CENTER
 	navigation.add_theme_constant_override("separation", 8)
 	bottom_center.add_child(navigation)
-	for entry in [["Inventory", "Inventory"], ["Map", "Map"], ["Journal", "Character"]]:
+	for entry in [["Inventory", "Inventory"], ["Journal", "Character"]]:
 		var button := Button.new()
 		button.name = entry[0] + "Button"
 		button.text = entry[0]

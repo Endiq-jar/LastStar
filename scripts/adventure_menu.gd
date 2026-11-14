@@ -3,9 +3,9 @@ extends Control
 
 signal closed
 const UI := preload("res://scripts/ui_style.gd")
-const TABS := ["Character", "Inventory", "Map", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story", "Wardrobe"]
+const TABS := ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story", "Wardrobe"]
 const HOME_TABS := ["Wardrobe", "Profile", "Settings", "Shop"]
-const GAME_TABS := ["Inventory", "Map", "Character", "Quests", "Wish", "Level Up", "Story"]
+const GAME_TABS := ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story"]
 var home_mode := false
 
 var _body: VBoxContainer
@@ -13,6 +13,16 @@ var _header: Label
 var _balance: Label
 var _tab := "Character"
 var _status := ""
+var _selected_item := ""
+var _sort_alphabetical := false
+var _binding_action := ""
+const ITEM_ICONS := {
+	"Potion": preload("res://icons/items/potion.svg"),
+	"Moonstone": preload("res://icons/items/moonstone.svg"),
+	"Starflower": preload("res://icons/items/starflower.svg"),
+	"Sunshard": preload("res://icons/items/sunshard.svg"),
+	"Stormglass": preload("res://icons/items/stormglass.svg"),
+}
 
 
 func _ready() -> void:
@@ -97,6 +107,7 @@ func open_menu(tab: String = "Character") -> void:
 
 
 func close_menu() -> void:
+	_binding_action = ""
 	visible = false
 	if not home_mode:
 		Game.set_paused(false)
@@ -142,7 +153,6 @@ func _refresh() -> void:
 	match _tab:
 		"Character": _character()
 		"Inventory": _inventory()
-		"Map": _map()
 		"Quests": _quests()
 		"Wish": _wish()
 		"Level Up": _level_up()
@@ -176,72 +186,79 @@ func _inventory() -> void:
 	var used: int = Game.inventory_used()
 	var capacity: int = Game.inventory_capacity()
 	_line("INVENTORY   %d / %d SLOTS" % [used, capacity], 22, UI.ACCENT)
-	_line("Each potion or treasure uses one slot. Equip a backpack from the home wardrobe for more room.")
+	_line("Select an icon to use or drop an item. Each item occupies one slot.")
 	if used > capacity:
-		_line("Your existing collection exceeds capacity. No items were lost; equip a larger backpack or use potions.", 16, UI.ACCENT)
+		_line("Your existing collection exceeds capacity. No items were lost.", 16, UI.ACCENT)
+	_action("Sort: %s  ·  tap to change" % ("Name" if _sort_alphabetical else "Type"), _toggle_sort)
 	var entries: Array[String] = []
 	for i in range(Game.potions):
 		entries.append("Potion")
 	for item in Game.WISH_ITEMS:
 		for i in range(maxi(0, int(Game.collectibles.get(item, 0)))):
 			entries.append(str(item))
+	if _sort_alphabetical:
+		entries.sort()
+	if not entries.has(_selected_item):
+		_selected_item = ""
 	var grid := GridContainer.new()
 	grid.columns = 5
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
 	_body.add_child(grid)
 	for i in range(maxi(capacity, used)):
-		var slot := PanelContainer.new()
-		slot.custom_minimum_size = Vector2(120, 55)
+		var slot := Button.new()
+		slot.custom_minimum_size = Vector2(80, 64)
 		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		slot.add_theme_stylebox_override("panel", UI.panel(8.0, 0.72))
-		var label := Label.new()
-		label.text = entries[i] if i < entries.size() else "Empty"
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		label.add_theme_font_size_override("font_size", 14)
-		label.add_theme_color_override("font_color", UI.TEXT if i < entries.size() else Color(0.6, 0.6, 0.7))
-		slot.add_child(label)
+		UI.button(slot)
+		if i < entries.size():
+			var item: String = entries[i]
+			slot.icon = ITEM_ICONS[item]
+			slot.expand_icon = true
+			slot.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			slot.tooltip_text = item
+			slot.pressed.connect(_select_item.bind(item))
+		else:
+			slot.disabled = true
+			slot.tooltip_text = "Empty slot"
 		grid.add_child(slot)
-	_action("Use healing potion (%d owned)" % Game.potions, _use_potion, Game.potions > 0 and Game.current_hp() < Game.max_hp())
+	if _selected_item != "":
+		_line("Selected: %s" % _selected_item, 17, UI.ACCENT)
+		if _selected_item == "Potion":
+			_action("Use healing potion", _use_potion, Game.current_hp() < Game.max_hp())
+		_action("Drop one %s into the world" % _selected_item, _drop_selected, get_tree().get_first_node_in_group("player") != null)
+
+
+func _toggle_sort() -> void:
+	_sort_alphabetical = not _sort_alphabetical
+	_refresh()
+
+
+func _select_item(item: String) -> void:
+	_selected_item = item
+	_refresh()
+
+
+func _drop_selected() -> void:
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null or _selected_item == "":
+		return
+	var position := player.global_position + player.global_basis.z * 3.0
+	var world := player.get_parent()
+	var terrain := world.get_node_or_null("Terrain")
+	if terrain != null:
+		position.y = float(terrain.call("get_height_at", position.x, position.z)) + 0.5
+	var id: String = Game.drop_item(_selected_item, position)
+	if id != "" and world.has_method("spawn_dropped_item"):
+		world.call("spawn_dropped_item", id)
+		_status = "Dropped nearby. Walk over it to pick it up."
+	else:
+		_status = "Unable to drop item."
+	_refresh()
 
 
 func _use_potion() -> void:
 	_status = "Potion used." if Game.use_potion() else "No potion needed or available."
 	_refresh()
-
-
-func _map() -> void:
-	_line("WAYPOINTS", 14, UI.ACCENT)
-	_line("Activate a statue in the world to unlock fast travel. Distance is measured from your current location.")
-	var player := get_tree().get_first_node_in_group("player") as Node3D
-	for waypoint in get_tree().get_nodes_in_group("waypoint"):
-		if not (waypoint is Node3D):
-			continue
-		var place: Node3D = waypoint
-		var place_name := str(place.get("statue_name"))
-		var unlocked := Game.waypoints_seen.has(place_name)
-		var distance := int(player.global_position.distance_to(place.global_position)) if player != null else 0
-		_action("✦  %s   ·   %dm   ·   %s" % [place_name, distance, "Teleport" if unlocked else "Locked"], _teleport.bind(place), unlocked and player != null)
-
-
-func _teleport(waypoint: Node3D) -> void:
-	var player := get_tree().get_first_node_in_group("player") as CharacterBody3D
-	if player == null or not is_instance_valid(waypoint):
-		return
-	var place_name := str(waypoint.get("statue_name"))
-	if not Game.waypoints_seen.has(place_name):
-		return
-	var target := waypoint.global_position + Vector3(3.0, 0.0, 3.0)
-	var world := player.get_parent()
-	var terrain := world.get_node_or_null("Terrain")
-	if terrain != null:
-		target.y = float(terrain.call("get_height_at", target.x, target.z))
-		terrain.call("_rebuild_collision", Vector2(target.x, target.z))
-		terrain.call("_refresh", Vector2(target.x, target.z), false)
-	player.call("_snap_to_ground", target)
-	close_menu()
-	Game.toast.emit("Travelled to %s" % place_name)
 
 
 func _quests() -> void:
@@ -293,6 +310,9 @@ func _shop() -> void:
 
 
 func _wardrobe() -> void:
+	_line("OUTFIT COLOUR", 23, UI.ACCENT)
+	for i in range(3):
+		_action("%s%s" % [["Original", "Moonlit blue", "Rose dusk"][i], "  ·  Equipped" if i == Game.outfit_style else ""], _set_outfit.bind(i), i != Game.outfit_style)
 	_line("BACKPACKS", 23, UI.ACCENT)
 	_line("Equipping a backpack increases inventory capacity. Buy backpacks in the home shop.")
 	for i in Game.owned_backpacks:
@@ -300,6 +320,12 @@ func _wardrobe() -> void:
 		var fits: bool = Game.inventory_used() <= 10 + Game.BACKPACK_BONUS[i]
 		var suffix := "Equipped" if equipped else ("Equip" if fits else "Too many items")
 		_action("%s  ·  %d slots  ·  %s" % [Game.BACKPACK_NAMES[i], 10 + Game.BACKPACK_BONUS[i], suffix], _equip_backpack.bind(i), not equipped and fits)
+
+
+func _set_outfit(index: int) -> void:
+	Game.set_outfit_style(index)
+	_status = "Outfit colour changed."
+	_refresh()
 
 
 func _equip_backpack(index: int) -> void:
@@ -322,16 +348,76 @@ func _profile() -> void:
 	_line("Active character: %s  ·  Level %d" % [Game.character()["name"], Game.character_levels[Game.party_index]])
 	_line("This expedition: %d sigils  ·  %d slimes  ·  %d waypoints" % [Game.sigils_collected, Game.slimes_defeated, Game.waypoints_activated])
 	_line("Offline collection: %d wishes  ·  %d different treasures" % [Game.wish_count, Game.collectibles.size()])
-	_line("Coins, starlight, levels, potions and treasures are saved on this device. Expedition objectives reset when you start a new journey.")
+	_line("Coins, starlight, levels, potions and treasures are saved on this device. Story objectives and waypoints are saved on this device.")
 
 
 func _settings() -> void:
 	_line("GRAPHICS", 23, UI.ACCENT)
-	_line("Current quality: %s. Balanced and Performance use dynamic 3D resolution." % Game.quality_name())
+	_line("Current quality: %s" % Game.quality_name())
 	_action("Change graphics quality", _change_quality)
+	_line("AUDIO", 23, UI.ACCENT)
+	for bus in ["Master", "Ambience", "SFX"]:
+		var index := AudioServer.get_bus_index(bus)
+		if index >= 0:
+			var value := 0.0 if AudioServer.is_bus_mute(index) else db_to_linear(AudioServer.get_bus_volume_db(index))
+			_slider(bus, value, 0.0, 1.0, _set_bus.bind(bus))
 	_line("CONTROLS", 23, UI.ACCENT)
-	_line("WASD move  ·  Shift sprint  ·  Space jump/glide  ·  LMB attack  ·  E skill  ·  Q burst  ·  T switch  ·  J journal  ·  Esc pause")
-	_line("Touch: left joystick, right-side camera drag, and on-screen action buttons.")
+	_slider("Camera sensitivity", Game.camera_sensitivity, 0.25, 2.0, Game.set_sensitivity)
+	_line("Select a keyboard action, then press a key. Escape cancels. Touch controls remain available.")
+	if _binding_action != "":
+		_line("Press a key for %s (Escape cancels)" % _binding_action.replace("_", " "), 17, UI.ACCENT)
+	for action in Game.REBIND_ACTIONS:
+		_action("%s   ·   %s" % [action.replace("_", " ").capitalize(), OS.get_keycode_string(Game.key_for_action(action))], _begin_binding.bind(action))
+	_action("Restore default keys", _reset_bindings)
+
+
+func _slider(title: String, value: float, minimum: float, maximum: float, callback: Callable) -> void:
+	var row := HBoxContainer.new()
+	_body.add_child(row)
+	var label := Label.new()
+	label.text = title
+	label.custom_minimum_size = Vector2(190, 0)
+	row.add_child(label)
+	var slider := HSlider.new()
+	slider.min_value = minimum
+	slider.max_value = maximum
+	slider.step = 0.05
+	slider.value = value
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.custom_minimum_size.y = 36
+	slider.value_changed.connect(callback)
+	row.add_child(slider)
+
+
+func _set_bus(value: float, bus: String) -> void:
+	Game.set_bus_level(bus, value)
+
+
+func _begin_binding(action: String) -> void:
+	_binding_action = action
+	_refresh()
+
+
+func _reset_bindings() -> void:
+	_binding_action = ""
+	Game.reset_keys()
+	_status = "Default keys restored."
+	_refresh()
+
+
+func _input(event: InputEvent) -> void:
+	if not visible or _binding_action == "" or not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var key := event.physical_keycode if event.physical_keycode != 0 else event.keycode
+	if key == KEY_ESCAPE:
+		_status = "Key binding cancelled."
+	elif Game.rebind_action(_binding_action, key):
+		_status = "Key binding saved."
+	else:
+		_status = "Key unavailable or already assigned."
+	_binding_action = ""
+	get_viewport().set_input_as_handled()
+	_refresh()
 
 
 func _change_quality() -> void:

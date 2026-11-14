@@ -149,7 +149,7 @@ func _on_body_entered(body: Node3D) -> void:
 	# but there is no reason to keep running sin() and a smoke check every frame
 	# for a sigil that no longer exists in the world.
 	set_process(false)
-	Game.collect_sigil()
+	Game.collect_sigil(name)
 	FX.heal_burst(get_parent(), global_position + Vector3(0, 0.8, 0), _color)
 	_play_chime()
 	var amb := get_tree().get_first_node_in_group("ambience")
@@ -164,6 +164,7 @@ func _on_body_entered(body: Node3D) -> void:
 func _play_chime() -> void:
 	var player := AudioStreamPlayer3D.new()
 	player.stream = _make_chime()
+	player.bus = "SFX"
 	player.volume_db = -4.0
 	player.max_distance = 40.0
 	get_parent().add_child(player)

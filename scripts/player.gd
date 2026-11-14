@@ -112,6 +112,7 @@ func _ready() -> void:
 	Game.respawned.connect(_on_respawn)
 	Game.spell_cast.connect(_on_spell_cast)
 	Game.character_changed.connect(_on_character_changed)
+	Game.collection_changed.connect(_update_equipment)
 	Game.game_won.connect(_on_game_won)
 	if not Game.is_mobile():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -405,6 +406,12 @@ func _apply_rig_colors() -> void:
 	element_id = int(data["element_id"])
 
 
+func _update_equipment() -> void:
+	var pack := _rig_part("backpack")
+	if pack != null:
+		pack.visible = Game.equipped_backpack > 0
+
+
 func _on_character_changed(_index: int) -> void:
 	_apply_rig_colors()
 
@@ -501,8 +508,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
 		if drag.position.x > get_viewport().get_visible_rect().size.x * 0.40:
-			_target_yaw -= drag.relative.x * MOUSE_SENS * STICK_SENS
-			_target_pitch -= drag.relative.y * MOUSE_SENS * STICK_SENS
+			_target_yaw -= drag.relative.x * MOUSE_SENS * STICK_SENS * Game.camera_sensitivity
+			_target_pitch -= drag.relative.y * MOUSE_SENS * STICK_SENS * Game.camera_sensitivity
 			_target_pitch = clampf(_target_pitch, -1.15, 0.62)
 
 
@@ -511,8 +518,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		_target_yaw -= event.relative.x * MOUSE_SENS
-		_target_pitch -= event.relative.y * MOUSE_SENS
+		_target_yaw -= event.relative.x * MOUSE_SENS * Game.camera_sensitivity
+		_target_pitch -= event.relative.y * MOUSE_SENS * Game.camera_sensitivity
 		_target_pitch = clampf(_target_pitch, -1.15, 0.62)
 
 	if event.is_action_pressed("party_next"):
@@ -672,6 +679,19 @@ func _update_animation(delta: float, speed: float, on_floor: bool, sprinting: bo
 	var leg_r := _rig_part("leg_r")
 	var torso := _rig_part("torso")
 	var wings := _rig_part("wings")
+	# Cheap joint-like secondary motion on hanging cloth and backpack. This is
+	# intentionally not a collision-based cloth simulation.
+	var follow := 1.0 - exp(-7.0 * delta)
+	var swing_target := clampf(speed * 0.045 + absf(velocity.y) * 0.012, 0.0, 0.45)
+	var cape_root := _rig_part("cape_root")
+	if cape_root != null:
+		cape_root.rotation.x = lerpf(cape_root.rotation.x, -swing_target, follow)
+	var pack := _rig_part("backpack")
+	if pack != null:
+		pack.rotation.x = lerpf(pack.rotation.x, -swing_target * 0.35, follow)
+	for panel in rig.get("cloth_panels", []):
+		if is_instance_valid(panel):
+			panel.rotation.x = lerpf(panel.rotation.x, swing_target * 0.35, follow)
 
 	if torso == null or arm_l == null or arm_r == null or leg_l == null or leg_r == null:
 		return
