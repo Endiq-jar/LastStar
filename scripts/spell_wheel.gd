@@ -11,6 +11,7 @@ extends Control
 ## cooldown sweep, an empty-slot state and a press-and-hold gesture, none of
 ## which a plain Button gives us.
 
+const UI := preload("res://scripts/ui_style.gd")
 const ICON_DIR := "res://icons/actions/"
 const SLOT_SIZE := 84.0
 const BOOK_SIZE := 78.0
@@ -235,12 +236,12 @@ func _build_book_button() -> void:
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.10, 0.14, 0.26, 0.80)
+	sb.bg_color = Color(0.12, 0.10, 0.25, 0.88)
 	sb.border_width_left = 2
 	sb.border_width_top = 2
 	sb.border_width_right = 2
 	sb.border_width_bottom = 2
-	sb.border_color = Color(1.0, 0.88, 0.55, 0.85)
+	sb.border_color = Color(0.76, 0.75, 0.98, 0.88)
 	sb.corner_radius_top_left = int(BOOK_SIZE * 0.5)
 	sb.corner_radius_top_right = int(BOOK_SIZE * 0.5)
 	sb.corner_radius_bottom_left = int(BOOK_SIZE * 0.5)
@@ -273,21 +274,7 @@ func _build_editor() -> void:
 	_editor.offset_right = 230
 	_editor.offset_top = -220
 	_editor.offset_bottom = 220
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.09, 0.16, 0.97)
-	sb.border_width_left = 2
-	sb.border_width_top = 2
-	sb.border_width_right = 2
-	sb.border_width_bottom = 2
-	sb.border_color = Color(0.55, 0.85, 1.0, 0.8)
-	sb.corner_radius_top_left = 16
-	sb.corner_radius_top_right = 16
-	sb.corner_radius_bottom_left = 16
-	sb.corner_radius_bottom_right = 16
-	sb.content_margin_left = 18
-	sb.content_margin_top = 14
-	sb.content_margin_right = 18
-	sb.content_margin_bottom = 14
+	var sb := UI.panel(18.0)
 	_editor.add_theme_stylebox_override("panel", sb)
 
 	var v := VBoxContainer.new()
@@ -295,9 +282,9 @@ func _build_editor() -> void:
 	_editor.add_child(v)
 
 	_editor_title = Label.new()
-	_editor_title.text = "Spell slot"
+	_editor_title.text = "✦  SPELL SLOT"
 	_editor_title.add_theme_font_size_override("font_size", 21)
-	_editor_title.add_theme_color_override("font_color", Color(1.0, 0.92, 0.7))
+	_editor_title.add_theme_color_override("font_color", UI.TEXT)
 	v.add_child(_editor_title)
 
 	var scroll := ScrollContainer.new()
@@ -314,6 +301,7 @@ func _build_editor() -> void:
 	close.text = "Close"
 	close.custom_minimum_size = Vector2(0, 46)
 	close.add_theme_font_size_override("font_size", 18)
+	UI.button(close)
 	close.pressed.connect(_on_editor_close)
 	v.add_child(close)
 
@@ -342,6 +330,7 @@ func _open_editor(slot_index: int) -> void:
 func _editor_row(id: String, label: String, data) -> Button:
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(0, 56)
+	UI.button(b)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.add_theme_font_size_override("font_size", 18)
 	var equipped_here: bool = id != "" and wander.equipped_at(_editor_slot) == id
@@ -470,12 +459,12 @@ func _draw_sweep(canvas: Control, i: int) -> void:
 
 func _slot_style(has_spell: bool, ready_now: bool = true) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.12, 0.22, 0.82) if has_spell else Color(0.08, 0.10, 0.16, 0.45)
+	sb.bg_color = Color(0.12, 0.10, 0.27, 0.86) if has_spell else Color(0.09, 0.08, 0.18, 0.55)
 	var border := Color(0.75, 0.9, 1.0, 0.75)
 	if has_spell and ready_now:
-		border = Color(1.0, 0.9, 0.6, 0.95)
+		border = Color(0.80, 0.77, 1.0, 0.95)
 	elif has_spell:
-		border = Color(0.45, 0.6, 0.8, 0.7)
+		border = Color(0.47, 0.44, 0.70, 0.7)
 	sb.border_width_left = 2
 	sb.border_width_top = 2
 	sb.border_width_right = 2

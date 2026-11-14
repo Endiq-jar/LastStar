@@ -47,7 +47,7 @@ SOFTWARE.
 ## Third-party art assets
 
 The game is otherwise procedural (terrain, characters, VFX and UI are generated
-in code), with two intentional exceptions - both CC0, both from the same author:
+in code), with the exceptions listed below:
 
 * **Nature models** — *Ultimate Stylized Nature Pack* by
   **[Quaternius](https://quaternius.com)**, CC0-1.0 (public domain). Twenty-one
@@ -76,4 +76,10 @@ in code), with two intentional exceptions - both CC0, both from the same author:
 *Genshin Impact* is a trademark of HoYoverse / miHoYo. LastStar is an independent,
 fan-inspired project. It ships **no** HoYoverse assets (no models, textures, audio, story text
 or data of any kind) and is not affiliated with or endorsed by HoYoverse.
-All characters (Sora, Ember, Volt) and all art are original and procedurally generated.
+All characters (Sora, Ember, Volt) are original. The title illustration is AI-generated; third-party CC0 assets are credited above.
+
+## Title artwork
+
+`assets/ui/celestial_title.webp` is an AI-generated illustration created for
+LastStar's title screen. It is a decorative background, not a depiction of a
+playable location currently in the game.

@@ -2,6 +2,8 @@ extends PanelContainer
 ## Developer overlay. Engine monitors are estimates, not Android system RAM or
 ## GPU timestamps. Frame samples are collected only while this panel is open.
 
+const UI := preload("res://scripts/ui_style.gd")
+
 var _label: Label
 var _frames: Array[float] = []
 var _refresh_timer := 0.0
@@ -16,12 +18,7 @@ func _ready() -> void:
 	self.offset_right = -15
 	self.offset_bottom = 345
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.02, 0.04, 0.07, 0.88)
-	style.content_margin_left = 12
-	style.content_margin_right = 12
-	style.content_margin_top = 8
-	style.content_margin_bottom = 8
+	var style := UI.panel(12.0, 0.92)
 	add_theme_stylebox_override("panel", style)
 	_label = Label.new()
 	_label.add_theme_font_size_override("font_size", 15)

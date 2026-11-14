@@ -11,7 +11,7 @@ all rendered with a mobile-friendly renderer and shipped through an automatic CI
 produces an installable APK on every push.
 
 > **This is an original, fan-inspired project.** It contains **no Genshin Impact assets** — no
-> characters, models, textures, audio or data. Everything you see is generated procedurally in
+> characters, models, textures, audio or data. Much of the project is generated procedurally in
 > GDScript (characters, props, terrain, sky, sound effects) or is a **CC0 public-domain** art
 > asset from Quaternius' stylized packs — the valley's trees, grass, plants and rocks and the
 > cloth the world is dressed in. Every file and its licence is listed in `CREDITS.md`.

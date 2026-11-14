@@ -504,11 +504,24 @@ func _run() -> void:
 			"sun visible=%s energy=%.2f rot=%s" % [
 				str(sun.visible), sun.light_energy, str(sun.rotation_degrees)])
 
+	# Pause menu controls and overlay must still work after restyling.
+	var hud := world.get_node_or_null("HUD")
+	if hud == null:
+		_log("FAIL", "HUD missing")
+	else:
+		hud.call("_pause")
+		var dimmer := hud.get_node_or_null("Root/PauseDimmer") as ColorRect
+		var paused_ok := Game.is_paused and dimmer != null and dimmer.visible
+		hud.call("_resume")
+		_log("INFO" if paused_ok and not Game.is_paused and dimmer != null and not dimmer.visible else "FAIL",
+			"celestial pause overlay and resume: %s" % str(paused_ok and not Game.is_paused))
+
 	# --- pixel checks -----------------------------------------------------
 	# A headless run has no framebuffer, so this only reports on a real device /
 	# xvfb run. That is fine: the structural checks above still gate CI.
 	if DisplayServer.get_name() == "headless":
 		_log("INFO", "headless server - skipping pixel capture")
+		await _check_title_screen(world, out_dir, false)
 		_finish(_fail)
 		return
 
@@ -527,6 +540,13 @@ func _run() -> void:
 		_finish(_fail)
 		return
 	img.save_png(out_dir.path_join("world.png"))
+	if hud != null:
+		hud.call("_pause")
+		await get_tree().create_timer(0.2, true).timeout
+		var pause_img := get_viewport().get_texture().get_image()
+		if pause_img != null and not pause_img.is_empty():
+			pause_img.save_png(out_dir.path_join("pause.png"))
+		hud.call("_resume")
 
 	# What is actually under the camera's feet?
 	#
@@ -798,7 +818,31 @@ func _run() -> void:
 			_log("WARN", "wide view is overexposed (mean luma %.2f)" % s3["luma"])
 		_report_frame_cost(world)
 
+	await _check_title_screen(world, out_dir, true)
 	_finish(_fail)
+
+
+func _check_title_screen(world: Node, out_dir: String, capture: bool) -> void:
+	## Instantiate the real menu, exercise its wiring, and capture the actual UI.
+	world.queue_free()
+	await get_tree().process_frame
+	var menu_scene := load("res://scenes/main_menu.tscn") as PackedScene
+	if menu_scene == null:
+		_log("FAIL", "title screen scene missing")
+		return
+	var menu := menu_scene.instantiate()
+	get_tree().root.add_child(menu)
+	await get_tree().process_frame
+	var art := menu.get_node_or_null("CelestialBackground") as TextureRect
+	var button := menu.get_node_or_null("LeftPanel/Panel/VBox/StartButton") as Button
+	var ok := art != null and art.texture != null and button != null and not button.pressed.get_connections().is_empty()
+	_log("INFO" if ok else "FAIL", "celestial title art and start button wired: %s" % str(ok))
+	if capture:
+		await get_tree().create_timer(0.2).timeout
+		var title_img := get_viewport().get_texture().get_image()
+		if title_img != null and not title_img.is_empty():
+			title_img.save_png(out_dir.path_join("title.png"))
+	menu.queue_free()
 
 
 func _clear_frame(world: Node) -> void:
