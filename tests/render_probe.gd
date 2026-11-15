@@ -773,6 +773,37 @@ func _run() -> void:
 	var stream_ok: bool = settlement_manager != null and settlement_manager.get("_sites").size() == 14 and not get_tree().get_nodes_in_group("story_npc").is_empty()
 	_log("INFO" if village_ok and stream_ok else "FAIL", "settlement quest persistence=%s streamed sites=%s" % [str(village_ok), str(stream_ok)])
 
+	# Exercise the real UI → active pickup → returned reward path at Ashvale.
+	var quest_ui_ok := false
+	if settlement_manager != null and menu != null:
+		var loaded: Dictionary = settlement_manager.get("_loaded")
+		if loaded.has("ashvale"):
+			var settlement: Node = loaded["ashvale"]
+			var quest_item: Node = null
+			for child in settlement.get_children():
+				if child.get_script() != null and child.get_script().resource_path == "res://scripts/settlement_item.gd" and child.get("quest_kind") == "main":
+					quest_item = child
+					break
+			if quest_item != null:
+				var saved_quests := Game.settlement_quests.duplicate(true)
+				var saved_coins := Game.coins
+				Game.settlement_quests.erase("ashvale:main")
+				menu.set("dialogue_site_id", "ashvale")
+				menu.call("open_menu", "Dialogue")
+				menu.call("_accept_settlement", "main")
+				quest_ui_ok = Game.settlement_quest_status("ashvale", "main") == "active" and quest_item.visible
+				quest_item.call("_on_body_entered", world.get_node("Player"))
+				quest_ui_ok = quest_ui_ok and Game.settlement_quest_status("ashvale", "main") == "found" and not quest_item.visible
+				menu.call("_complete_settlement", "main")
+				quest_ui_ok = quest_ui_ok and Game.settlement_quest_status("ashvale", "main") == "done" and Game.coins == saved_coins + 25
+				menu.call("close_menu")
+				menu.set("dialogue_site_id", "")
+				Game.settlement_quests = saved_quests
+				Game.coins = saved_coins
+				Game.save_collection()
+				Game.collection_changed.emit()
+	_log("INFO" if quest_ui_ok else "FAIL", "resident dialogue, pickup and return: %s" % str(quest_ui_ok))
+
 	# --- pixel checks -----------------------------------------------------
 	# A headless run has no framebuffer, so this only reports on a real device /
 	# xvfb run. That is fine: the structural checks above still gate CI.
