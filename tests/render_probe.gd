@@ -933,7 +933,7 @@ func _run() -> void:
 		await get_tree().process_frame
 		await get_tree().physics_frame
 		if DisplayServer.get_name() != "headless":
-			await _capture_ui(out_dir, "ashvale_hollow", null)
+			await _capture_ui(out_dir, "game_ashvale_hollow", null)
 		var warden := hollow.get("boss") as Node3D
 		if warden == null:
 			hollow_ok = false
