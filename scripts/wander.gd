@@ -142,6 +142,8 @@ const CATALOGUE := {
 var slots: Array[String] = ["ember_shot", "gale_palm", "", "", ""]
 ## id -> mastery level
 var levels: Dictionary = {}
+const RESEARCH_ELEMENTS := ["Wind", "Fire", "Lightning"]
+const RESEARCH_COLORS := [Color(0.45, 0.95, 0.8), Color(1.0, 0.55, 0.25), Color(0.72, 0.6, 1.0)]
 ## id -> seconds remaining on cooldown (0 = ready)
 var cooldowns: Dictionary = {}
 
@@ -153,7 +155,7 @@ func _init() -> void:
 
 
 func learn(id: String) -> bool:
-	if not CATALOGUE.has(id) or known(id):
+	if spell(id).is_empty() or known(id):
 		return false
 	levels[id] = 1
 	progress_changed.emit()
@@ -163,10 +165,10 @@ func learn(id: String) -> bool:
 
 func restore(saved_levels: Dictionary, saved_slots: Array) -> void:
 	# Ignore unrecognised data; starter spells are always available.
-	for id in CATALOGUE:
-		if saved_levels.has(id):
+	for id in saved_levels:
+		if not spell(str(id)).is_empty():
 			levels[id] = clampi(int(saved_levels[id]), 1, MAX_SPELL_LEVEL)
-			levels[id + "_xp"] = clampi(int(saved_levels.get(id + "_xp", 0)), 0, 180)
+			levels[str(id) + "_xp"] = clampi(int(saved_levels.get(str(id) + "_xp", 0)), 0, 180)
 	if saved_slots.size() == MAX_SLOTS:
 		var used: Array[String] = []
 		for i in range(MAX_SLOTS):
@@ -179,12 +181,53 @@ func restore(saved_levels: Dictionary, saved_slots: Array) -> void:
 				slots[i] = ""
 
 
+static func research_id(first: int, second: int, shape: int, reach: int, intensity: int) -> String:
+	if first < 0 or first > 2 or second < 0 or second > 2 or shape < 0 or shape > 1 or reach < 0 or reach > 1 or intensity < 0 or intensity > 1:
+		return ""
+	return "research_%d_%d_%d_%d_%d" % [first, second, shape, reach, intensity]
+
+
 func spell(id: String) -> Dictionary:
-	return CATALOGUE.get(id, {})
+	if CATALOGUE.has(id):
+		return CATALOGUE[id]
+	var parts := id.split("_")
+	if parts.size() != 6 or parts[0] != "research":
+		return {}
+	for i in range(1, 6):
+		if not parts[i].is_valid_int():
+			return {}
+	var a := int(parts[1])
+	var b := int(parts[2])
+	var shape := int(parts[3])
+	var reach := int(parts[4])
+	var intensity := int(parts[5])
+	if research_id(a, b, shape, reach, intensity) != id:
+		return {}
+	var shape_name := "Pulse" if shape == 1 else "Focused"
+	return {
+		"name": "%s / %s %s %s %s" % [RESEARCH_ELEMENTS[a], RESEARCH_ELEMENTS[b], shape_name, "Long" if reach else "Close", "Strong" if intensity else "Efficient"],
+		"category": "Elemental", "element": a, "secondary_element": b,
+		"color": RESEARCH_COLORS[a].lerp(RESEARCH_COLORS[b], 0.5),
+		"icon": ["aqua", "ember", "arcane"][a],
+		"cost": 12.0 + shape * 4.0 + reach * 5.0 + intensity * 8.0,
+		"cooldown": 2.0 + shape * 1.0 + intensity * 0.8,
+		"power": 1.2 + intensity * 1.0,
+		"radius": (4.0 + reach * 2.0) if shape == 1 else 0.0,
+		"range": (5.0 + reach * 4.0) if shape == 1 else (10.0 + reach * 12.0),
+		"desc": "Experimental two-element spell. Both elements affect damage.",
+	}
+
+
+func known_ids() -> Array[String]:
+	var result: Array[String] = []
+	for id in levels:
+		if known(str(id)):
+			result.append(str(id))
+	return result
 
 
 func known(id: String) -> bool:
-	return id != "" and levels.has(id) and CATALOGUE.has(id)
+	return id != "" and levels.has(id) and not spell(id).is_empty()
 
 
 func level_of(id: String) -> int:

@@ -485,6 +485,19 @@ func save_wander() -> void:
 	save_collection()
 
 
+func research_spell(first: int, second: int, shape: int, reach: int, intensity: int) -> String:
+	if wander == null or not bool(guard_story.get("seal_done", false)) or starlight < 10:
+		return ""
+	var id := Wander.research_id(first, second, shape, reach, intensity)
+	if id == "" or wander.known(id):
+		return ""
+	starlight -= 10
+	# learn() emits progress_changed, saving currency and the new spell together.
+	wander.learn(id)
+	collection_changed.emit()
+	return id
+
+
 func guard_accept(quest: String, answer: String = "") -> bool:
 	if not ["seal", "hollow"].has(quest) or bool(guard_story.get(quest + "_accepted", false)):
 		return false

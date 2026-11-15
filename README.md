@@ -283,8 +283,8 @@ quest choices and completion are saved locally.
 
 `docs/Resources.txt` is the full design brief. This is an initial Godot
 implementation, not the complete 14-settlement, 190-quest, 100-spell game.
-Spell crafting, companions, dungeons, bosses, and the wider story remain to
-be developed; the current settlement is not a full Ashvale. Basic controller
+Full spell experimentation, companions, dungeons, bosses, and the wider story
+remain to be developed; the current settlement is not a full Ashvale. Basic controller
 bindings are available, but have not yet been validated on physical devices.
 
 ### Additional combat controls
@@ -293,3 +293,12 @@ Dodge with C or the HUD button (20 stamina, brief invulnerability). Heavy attack
 with R or the HUD button (15 stamina). Keyboard 1–5 casts the assigned Wander
 slots. The Story page also lets you choose a slot and equip known spells. Basic
 controller bindings are listed in Settings; platform mappings may vary.
+
+### Experimental Wander research
+
+Complete Ilyra’s first main quest, then open Journal → Story. Combine Wind, Fire
+and Lightning with a focused or pulse shape, close or long reach, and efficient
+or strong power. A new recipe costs 10 starlight; its two elements affect slime
+reactions, and its shape, reach, power, Light cost and cooldown change gameplay.
+Created spells can be assigned to slots and persist with their mastery. This is
+a limited research system, not the complete creation/evolution design.

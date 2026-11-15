@@ -703,6 +703,49 @@ func _run() -> void:
 		Game.shield_points = shield_before
 	_log("INFO" if mapped and combat_ok else "FAIL", "controller mappings=%s heavy attack and dodge=%s" % [str(mapped), str(combat_ok)])
 
+	# Research is gated by story and earned starlight, creates a real castable
+	# recipe, and persists the parameters, mastery and equipped slot.
+	var research_guard := Game.guard_story.duplicate(true)
+	var research_starlight := Game.starlight
+	var research_levels := Game.wander.levels.duplicate(true)
+	var research_slots := Game.wander.slots.duplicate()
+	var research_saved_levels := Game.wander_levels.duplicate(true)
+	var research_saved_slots := Game.wander_slots.duplicate()
+	Game.guard_story = {}
+	Game.starlight = 30
+	var locked := Game.research_spell(0, 1, 1, 1, 1) == "" and Game.starlight == 30
+	Game.guard_story["seal_done"] = true
+	var recipe_id: String = Game.research_spell(0, 1, 1, 1, 1)
+	var recipe_data: Dictionary = Game.wander.spell(recipe_id)
+	var created := recipe_id != "" and Game.starlight == 20 and Game.wander.known(recipe_id)
+	var no_double := Game.research_spell(0, 1, 1, 1, 1) == "" and Game.starlight == 20
+	var shape_ok := int(recipe_data.get("secondary_element", -1)) == 1 and float(recipe_data.get("radius", 0.0)) == 6.0 and float(recipe_data.get("cost", 0.0)) == 29.0
+	Game.wander.set_slot(3, recipe_id)
+	Game.load_collection()
+	var research_book := Wander.new()
+	research_book.restore(Game.wander_levels, Game.wander_slots)
+	var research_saved := research_book.known(recipe_id) and research_book.equipped_at(3) == recipe_id
+	var reaction_ok := true
+	var enemies := get_tree().get_nodes_in_group("enemy")
+	if not enemies.is_empty():
+		var enemy: Node = enemies[0]
+		var enemy_hp: float = enemy.get("hp")
+		var enemy_element: int = enemy.get("element")
+		var first_mult: float = enemy.call("_reaction_multiplier", 0)
+		var second_mult: float = enemy.call("_reaction_multiplier", 1)
+		enemy.call("take_combined_hit", 1.0, 0, 1, Vector3.ZERO)
+		reaction_ok = is_equal_approx(enemy.get("hp"), enemy_hp - (first_mult + second_mult) * 0.5)
+		enemy.set("hp", enemy_hp)
+		enemy.set("element", enemy_element)
+	Game.guard_story = research_guard
+	Game.starlight = research_starlight
+	Game.wander.levels = research_levels
+	Game.wander.slots.assign(research_slots)
+	Game.wander_levels = research_saved_levels
+	Game.wander_slots = research_saved_slots
+	Game.save_collection()
+	_log("INFO" if locked and created and no_double and shape_ok and research_saved and reaction_ok else "FAIL", "spell research locked=%s created=%s duplicate=%s shape=%s saved=%s combined=%s" % [str(locked), str(created), str(no_double), str(shape_ok), str(research_saved), str(reaction_ok)])
+
 	# --- pixel checks -----------------------------------------------------
 	# A headless run has no framebuffer, so this only reports on a real device /
 	# xvfb run. That is fine: the structural checks above still gate CI.

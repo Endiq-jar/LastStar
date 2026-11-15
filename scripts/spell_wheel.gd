@@ -319,7 +319,7 @@ func _open_editor(slot_index: int) -> void:
 	# Clear-slot option
 	_editor_list.add_child(_editor_row("", "Empty slot", null))
 
-	for id in wander.CATALOGUE.keys():
+	for id in wander.known_ids():
 		if not wander.known(id):
 			continue
 		var data: Dictionary = wander.spell(id)

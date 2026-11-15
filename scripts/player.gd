@@ -941,10 +941,16 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 		# Cone in front of the caster, widened for area spells.
 		var aim := to_enemy.normalized().dot(forward)
 		var in_cone := aim > 0.45
+		if id.begins_with("research_") and radius > 0.0:
+			in_cone = false
 		var in_area := radius > 0.0 and dist < radius
 		var along := dist < maxf(reach, radius)
 		if (in_cone and along) or in_area:
-			if enemy.has_method("take_hit"):
+			if data.has("secondary_element") and enemy.has_method("take_combined_hit"):
+				enemy.take_combined_hit(power, element, int(data["secondary_element"]), forward)
+				hit_any = true
+				hit_point = target.global_position
+			elif enemy.has_method("take_hit"):
 				enemy.take_hit(power, element, forward)
 				hit_any = true
 				hit_point = target.global_position

@@ -366,31 +366,38 @@ func _pick_wander() -> void:
 	_wander_timer = randf_range(3.0, 6.0)
 
 
+func _reaction_multiplier(hit_element: int) -> float:
+	if hit_element == element:
+		return 0.55
+	if (hit_element == 0 and element == 1) or (hit_element == 1 and element == 0):
+		return 1.6
+	return 1.25
+
+
 func take_hit(power: float, hit_element: int, dir: Vector3) -> void:
+	var color := ELEMENT_COLORS[hit_element] if hit_element >= 0 and hit_element < ELEMENT_COLORS.size() else Color(0.65, 0.85, 1.0)
+	_apply_hit(power * _reaction_multiplier(hit_element), color, dir)
+
+
+func take_combined_hit(power: float, first: int, second: int, dir: Vector3) -> void:
+	var a := ELEMENT_COLORS[clampi(first, 0, ELEMENT_COLORS.size() - 1)]
+	var b := ELEMENT_COLORS[clampi(second, 0, ELEMENT_COLORS.size() - 1)]
+	var multiplier := (_reaction_multiplier(first) + _reaction_multiplier(second)) * 0.5
+	_apply_hit(power * multiplier, a.lerp(b, 0.5), dir)
+
+
+func _apply_hit(dmg: float, color: Color, dir: Vector3) -> void:
 	if _dead:
 		return
-	# Elemental reactions: same element = resisted, different = empowered.
-	var mult := 1.0
-	if hit_element == element:
-		mult = 0.55
-	elif (hit_element == 0 and element == 1) or (hit_element == 1 and element == 0):
-		mult = 1.6  # swirl-like reaction
-	elif hit_element != element:
-		mult = 1.25
-	var dmg := power * mult
 	hp -= dmg
-
-	FX.elemental_damage_number(get_parent(), global_position + Vector3(0, 1.4, 0), dmg, ELEMENT_COLORS[hit_element])
-	FX.hit_flash(get_parent(), global_position + Vector3(0, 0.8, 0), ELEMENT_COLORS[hit_element])
+	FX.elemental_damage_number(get_parent(), global_position + Vector3(0, 1.4, 0), dmg, color)
+	FX.hit_flash(get_parent(), global_position + Vector3(0, 0.8, 0), color)
 	Game.add_energy(5.0)
-
 	if dir.length() > 0.01:
 		velocity += dir.normalized() * 5.0 + Vector3(0, 3.0, 0)
-
 	var tw := create_tween()
 	tw.tween_property(_mesh_root, "scale", Vector3(1.35, 0.7, 1.35), 0.08)
 	tw.tween_property(_mesh_root, "scale", Vector3.ONE, 0.16)
-
 	if hp <= 0.0:
 		_die()
 
