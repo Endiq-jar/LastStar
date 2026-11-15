@@ -157,7 +157,18 @@ var settlement_quests: Dictionary = {}
 const SETTLEMENT_DATA := preload("res://scripts/settlement_data.gd")
 var wander_levels: Dictionary = {}
 var wander_slots: Array = []
+# Coins in older saves are displayed as Ane; retain the save key for migration.
 var outfit_style := 0
+var owned_outfits: Array = [0, 1, 2]
+var owned_weapons: Array = []
+var equipped_weapon := ""
+var owned_cosmetics: Array = []
+var equipped_cosmetic := ""
+var owned_blueprints: Array = []
+const WEAPON_NAMES := {"trail_blade": "Trail Blade", "leaf_blade": "Leaf Blade"}
+const COSMETIC_NAMES := {"star_pin": "Star hairpin", "moon_pin": "Moon hairpin"}
+const BLUEPRINT_ID := "research_0_1_0_0_0"
+const OUTFIT_NAMES := ["Original", "Moonlit blue", "Rose dusk", "Forest traveller", "Sunrise traveller"]
 var camera_sensitivity := 1.0
 const REBIND_ACTIONS := ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "skill", "burst", "party_next", "dodge", "heavy_attack"]
 var _default_keys: Dictionary = {}
@@ -275,7 +286,7 @@ func spend_energy(amount: float) -> bool:
 
 
 func attack_power() -> float:
-	return float(character()["attack"]) * (1.0 + 0.12 * float(character_levels[party_index] - 1))
+	return float(character()["attack"]) * (1.0 + 0.12 * float(character_levels[party_index] - 1)) * (1.15 if equipped_weapon != "" and character()["weapon"] == "sword" else 1.0)
 
 
 func switch_character(index: int) -> void:
@@ -408,6 +419,12 @@ func save_collection() -> bool:
 	cfg.set_value("collection", "owned_backpacks", owned_backpacks)
 	cfg.set_value("collection", "equipped_backpack", equipped_backpack)
 	cfg.set_value("collection", "outfit_style", outfit_style)
+	cfg.set_value("collection", "owned_outfits", owned_outfits)
+	cfg.set_value("collection", "owned_weapons", owned_weapons)
+	cfg.set_value("collection", "equipped_weapon", equipped_weapon)
+	cfg.set_value("collection", "owned_cosmetics", owned_cosmetics)
+	cfg.set_value("collection", "equipped_cosmetic", equipped_cosmetic)
+	cfg.set_value("collection", "owned_blueprints", owned_blueprints)
 	cfg.set_value("story", "sigils_seen", sigils_seen)
 	cfg.set_value("story", "sigils_collected", sigils_collected)
 	cfg.set_value("story", "slimes_defeated", slimes_defeated)
@@ -461,7 +478,32 @@ func load_collection() -> void:
 	starlight = maxi(0, int(cfg.get_value("collection", "starlight", 30)))
 	potions = maxi(0, int(cfg.get_value("collection", "potions", 2)))
 	wish_count = maxi(0, int(cfg.get_value("collection", "wishes", 0)))
-	outfit_style = clampi(int(cfg.get_value("collection", "outfit_style", 0)), 0, 2)
+	owned_outfits = [0, 1, 2]
+	var outfits = cfg.get_value("collection", "owned_outfits", [])
+	if outfits is Array:
+		for i in outfits:
+			if int(i) >= 0 and int(i) < OUTFIT_NAMES.size() and not owned_outfits.has(int(i)):
+				owned_outfits.append(int(i))
+	outfit_style = int(cfg.get_value("collection", "outfit_style", 0))
+	if not owned_outfits.has(outfit_style):
+		outfit_style = 0
+	var weapons = cfg.get_value("collection", "owned_weapons", [])
+	owned_weapons = weapons if weapons is Array else []
+	equipped_weapon = str(cfg.get_value("collection", "equipped_weapon", ""))
+	if not owned_weapons.has(equipped_weapon) or not WEAPON_NAMES.has(equipped_weapon):
+		equipped_weapon = ""
+	var cosmetics = cfg.get_value("collection", "owned_cosmetics", [])
+	owned_cosmetics = cosmetics if cosmetics is Array else []
+	equipped_cosmetic = str(cfg.get_value("collection", "equipped_cosmetic", ""))
+	if not owned_cosmetics.has(equipped_cosmetic) or not COSMETIC_NAMES.has(equipped_cosmetic):
+		equipped_cosmetic = ""
+	var blueprints = cfg.get_value("collection", "owned_blueprints", [])
+	owned_blueprints = blueprints if blueprints is Array else []
+	# Grant unique rewards for quests completed before the rewards update.
+	for site in SETTLEMENT_DATA.SITES:
+		for index in range(SETTLEMENT_DATA.RESIDENT_COUNT):
+			if settlement_quest_status(site["id"], "main", index) == "done" or settlement_quest_status(site["id"], "side", index) == "done":
+				_grant_resident_reward(index)
 	owned_backpacks = [0]
 	var saved_packs = cfg.get_value("collection", "owned_backpacks", [0])
 	if saved_packs is Array:
@@ -541,10 +583,24 @@ func complete_settlement_quest(site_id: String, kind: String, resident_index: in
 		coins += 25
 	else:
 		starlight += 10
+	_grant_resident_reward(resident_index)
 	save_collection()
 	collection_changed.emit()
 	return true
 
+
+func _grant_resident_reward(index: int) -> void:
+	match index % 6:
+		0:
+			if not owned_weapons.has("trail_blade"): owned_weapons.append("trail_blade")
+		1:
+			if not owned_blueprints.has(BLUEPRINT_ID): owned_blueprints.append(BLUEPRINT_ID)
+		2:
+			if not owned_cosmetics.has("star_pin"): owned_cosmetics.append("star_pin")
+		3:
+			if not owned_outfits.has(3): owned_outfits.append(3)
+		4:
+			if not owned_weapons.has("leaf_blade"): owned_weapons.append("leaf_blade")
 
 func guard_accept(quest: String, answer: String = "") -> bool:
 	if not ["seal", "hollow"].has(quest) or bool(guard_story.get(quest + "_accepted", false)):
@@ -590,10 +646,67 @@ func inventory_used() -> int:
 
 
 func set_outfit_style(index: int) -> void:
-	outfit_style = clampi(index, 0, 2)
+	if not owned_outfits.has(index):
+		return
+	outfit_style = index
 	save_collection()
 	collection_changed.emit()
 	character_changed.emit(party_index)
+
+
+func settlement_reward_text(kind: String, index: int) -> String:
+	var base := "25 Ane" if kind == "main" else "10 starlight"
+	var extras := ["Trail Blade", "Wind / Fire spell blueprint", "Star hairpin", "Forest traveller outfit", "Leaf Blade", ""]
+	var extra: String = extras[index % 6]
+	return base + (" + " + extra + " (unique)" if extra != "" else "")
+
+
+func equip_reward_weapon(id: String) -> bool:
+	if id != "" and (not WEAPON_NAMES.has(id) or not owned_weapons.has(id)):
+		return false
+	equipped_weapon = id
+	save_collection()
+	collection_changed.emit()
+	character_changed.emit(party_index)
+	return true
+
+
+func equip_reward_cosmetic(id: String) -> bool:
+	if id != "" and (not COSMETIC_NAMES.has(id) or not owned_cosmetics.has(id)):
+		return false
+	equipped_cosmetic = id
+	save_collection()
+	collection_changed.emit()
+	character_changed.emit(party_index)
+	return true
+
+
+func buy_reward_cosmetic(id: String) -> bool:
+	if id != "moon_pin" or owned_cosmetics.has(id) or coins < 100:
+		return false
+	coins -= 100
+	owned_cosmetics.append(id)
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func buy_reward_outfit() -> bool:
+	if owned_outfits.has(4) or coins < 150:
+		return false
+	coins -= 150
+	owned_outfits.append(4)
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func learn_reward_blueprint(id: String) -> bool:
+	if id != BLUEPRINT_ID or not owned_blueprints.has(id) or wander == null or not wander.learn(id):
+		return false
+	save_wander()
+	collection_changed.emit()
+	return true
 
 
 func buy_backpack(index: int) -> bool:

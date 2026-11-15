@@ -842,6 +842,43 @@ func _run() -> void:
 				house_ok = door_hit.is_empty() and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
 	_log("INFO" if resident_ok and quest_ui_ok and house_ok else "FAIL", "20 residents=%s independent quest=%s enterable house=%s" % [str(resident_ok), str(quest_ui_ok), str(house_ok)])
 
+	# Quest rewards survive saves, can be used, and cannot be claimed twice.
+	var old_rewards := {"quests": Game.settlement_quests.duplicate(true), "coins": Game.coins, "starlight": Game.starlight, "weapons": Game.owned_weapons.duplicate(), "weapon": Game.equipped_weapon, "outfits": Game.owned_outfits.duplicate(), "outfit": Game.outfit_style, "cosmetics": Game.owned_cosmetics.duplicate(), "cosmetic": Game.equipped_cosmetic, "blueprints": Game.owned_blueprints.duplicate(), "levels": Game.wander.levels.duplicate(true), "slots": Game.wander.slots.duplicate()}
+	Game.owned_weapons = []
+	Game.owned_cosmetics = []
+	Game.owned_blueprints = []
+	Game.owned_outfits = [0, 1, 2]
+	var rewards_ok := true
+	for i in range(5):
+		var key: String = "ashvale:main" if i == 0 else "ashvale:%d:main" % i
+		Game.settlement_quests[key] = "found"
+		rewards_ok = Game.complete_settlement_quest("ashvale", "main", i) and rewards_ok
+		rewards_ok = not Game.complete_settlement_quest("ashvale", "main", i) and rewards_ok
+	rewards_ok = rewards_ok and Game.owned_weapons.has("trail_blade") and Game.owned_weapons.has("leaf_blade") and Game.owned_blueprints.has(Game.BLUEPRINT_ID) and Game.owned_cosmetics.has("star_pin") and Game.owned_outfits.has(3)
+	rewards_ok = Game.equip_reward_weapon("trail_blade") and Game.equip_reward_cosmetic("star_pin") and rewards_ok
+	Game.set_outfit_style(3)
+	Game.load_collection()
+	rewards_ok = rewards_ok and Game.equipped_weapon == "trail_blade" and Game.equipped_cosmetic == "star_pin" and Game.outfit_style == 3 and Game.owned_blueprints.has(Game.BLUEPRINT_ID)
+	if not Game.wander.known(Game.BLUEPRINT_ID):
+		rewards_ok = Game.learn_reward_blueprint(Game.BLUEPRINT_ID) and rewards_ok
+	rewards_ok = rewards_ok and Game.wander.known(Game.BLUEPRINT_ID)
+	Game.settlement_quests = old_rewards["quests"]
+	Game.coins = old_rewards["coins"]
+	Game.starlight = old_rewards["starlight"]
+	Game.owned_weapons = old_rewards["weapons"]
+	Game.equipped_weapon = old_rewards["weapon"]
+	Game.owned_outfits = old_rewards["outfits"]
+	Game.outfit_style = old_rewards["outfit"]
+	Game.owned_cosmetics = old_rewards["cosmetics"]
+	Game.equipped_cosmetic = old_rewards["cosmetic"]
+	Game.owned_blueprints = old_rewards["blueprints"]
+	Game.wander.levels = old_rewards["levels"]
+	Game.wander.slots.assign(old_rewards["slots"])
+	Game.save_wander()
+	Game.character_changed.emit(Game.party_index)
+	Game.collection_changed.emit()
+	_log("INFO" if rewards_ok else "FAIL", "quest reward persistence, equipment and blueprint=%s" % str(rewards_ok))
+
 	# The compact HUD list opens from its button and shows independent NPC quests.
 	var quest_box_ok := false
 	if hud != null:

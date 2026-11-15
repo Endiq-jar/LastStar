@@ -3,7 +3,7 @@ extends RefCounted
 ## with an inverted-hull outline pass. Returns the rig nodes the player script
 ## animates (arms, legs, torso, head, cape/wings, weapon anchor).
 ##
-## Everything is generated in code: no external models, no licensed assets.
+## Character geometry is generated in code; reward swords use a credited texture.
 
 const TOON_SHADER := preload("res://shaders/character/anime_toon.gdshader")
 const OUTLINE_SHADER := preload("res://shaders/character/outline.gdshader")
@@ -124,6 +124,10 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		outfit_col = outfit_col.lerp(Color(0.20, 0.36, 0.62), 0.65)
 	elif Game.outfit_style == 2:
 		outfit_col = outfit_col.lerp(Color(0.58, 0.28, 0.36), 0.65)
+	elif Game.outfit_style == 3:
+		outfit_col = outfit_col.lerp(Color(0.17, 0.48, 0.30), 0.8)
+	elif Game.outfit_style == 4:
+		outfit_col = outfit_col.lerp(Color(0.74, 0.42, 0.16), 0.8)
 	var outfit := _toon(outfit_col)
 	var accent_col: Color = data["outfit_accent"]
 	var accent := _toon(accent_col, 0.45)
@@ -196,6 +200,20 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	head.name = "Head"
 	head.position = Vector3(0, 1.62, 0)
 	torso.add_child(head)
+	# Original low-poly hair ornaments, attached to the animated head.
+	if Game.equipped_cosmetic != "":
+		var pin := TorusMesh.new()
+		pin.inner_radius = 0.025
+		pin.outer_radius = 0.055
+		pin.rings = 12
+		pin.ring_segments = 5
+		var pin_mat := _toon(Color(0.95, 0.76, 0.30) if Game.equipped_cosmetic == "star_pin" else Color(0.65, 0.82, 0.98))
+		var ornament := _no_shadow(_add(head, pin, pin_mat, Vector3(0.13, 0.08, -0.12), "RewardHairpin"))
+		ornament.rotation_degrees = Vector3(75, 0, 20)
+		var jewel := SphereMesh.new()
+		jewel.radius = 0.025
+		jewel.height = 0.05
+		_no_shadow(_add(head, jewel, pin_mat, Vector3(0.13, 0.08, -0.16)))
 
 	var skull := SphereMesh.new()
 	skull.radius = 0.155
@@ -400,7 +418,10 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	weapon_anchor.name = "Weapon"
 	weapon_anchor.position = Vector3(0.24, 1.10, -0.10)
 	torso.add_child(weapon_anchor)
-	_build_weapon(weapon_anchor, str(data["weapon"]), element_glow, accent)
+	if str(data["weapon"]) == "sword" and Game.equipped_weapon != "":
+		_build_reward_sword(weapon_anchor, Game.equipped_weapon)
+	else:
+		_build_weapon(weapon_anchor, str(data["weapon"]), element_glow, accent)
 
 	var glow := OmniLight3D.new()
 	glow.name = "ElementLight"
@@ -426,6 +447,25 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		"weapon": weapon_anchor,
 		"glow": glow,
 	}
+
+
+static func _build_reward_sword(anchor: Node3D, id: String) -> void:
+	# Palette texture from Kickin' It Studios; geometry is made here.
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = preload("res://assets/weapons/kickin_weapon_texture.png")
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	var blade := PrismMesh.new()
+	blade.size = Vector3(0.12 if id == "leaf_blade" else 0.085, 0.8, 0.035)
+	var blade_node := _no_shadow(_add(anchor, blade, mat, Vector3(0, -0.55, 0), "RewardBlade"))
+	blade_node.rotation_degrees.z = 180
+	var guard := BoxMesh.new()
+	guard.size = Vector3(0.24, 0.045, 0.07)
+	_no_shadow(_add(anchor, guard, _toon(Color(0.68, 0.48, 0.17)), Vector3(0, -0.17, 0)))
+	var grip := CylinderMesh.new()
+	grip.top_radius = 0.025
+	grip.bottom_radius = 0.03
+	grip.height = 0.20
+	_no_shadow(_add(anchor, grip, _toon(Color(0.22, 0.13, 0.08)), Vector3(0, -0.06, 0)))
 
 
 static func _build_weapon(anchor: Node3D, kind: String, glow: StandardMaterial3D, accent: ShaderMaterial) -> void:

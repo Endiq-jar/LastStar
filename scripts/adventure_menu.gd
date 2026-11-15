@@ -69,6 +69,12 @@ func _build() -> void:
 	_header.add_theme_font_size_override("font_size", 25)
 	_header.add_theme_color_override("font_color", UI.TEXT)
 	bar.add_child(_header)
+	var ane_icon := TextureRect.new()
+	ane_icon.texture = preload("res://icons/items/ane.svg")
+	ane_icon.custom_minimum_size = Vector2(25, 25)
+	ane_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ane_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	bar.add_child(ane_icon)
 	_balance = Label.new()
 	_balance.add_theme_font_size_override("font_size", 16)
 	_balance.add_theme_color_override("font_color", UI.ACCENT)
@@ -161,7 +167,7 @@ func _refresh() -> void:
 		_body.remove_child(child)
 		child.queue_free()
 	_header.text = "✦  %s" % _tab.to_upper()
-	_balance.text = "✧ %d starlight    ◇ %d coins     " % [Game.starlight, Game.coins]
+	_balance.text = "✧ %d starlight    ◇ %d Ane     " % [Game.starlight, Game.coins]
 	match _tab:
 		"Character": _character()
 		"Inventory": _inventory()
@@ -196,6 +202,15 @@ func _switch(index: int) -> void:
 
 
 func _inventory() -> void:
+	_line("QUEST EQUIPMENT & BLUEPRINTS", 20, UI.ACCENT)
+	_line("Unique rewards are stored separately and do not take backpack slots. Blades affect sword users only (+15% attack).")
+	_action("Default weapon%s" % (" · Equipped" if Game.equipped_weapon == "" else ""), _equip_reward_weapon.bind(""), Game.equipped_weapon != "")
+	for id in Game.owned_weapons:
+		if Game.WEAPON_NAMES.has(id):
+			_action("%s%s" % [Game.WEAPON_NAMES[id], " · Equipped" if Game.equipped_weapon == id else " · Equip"], _equip_reward_weapon.bind(id), Game.equipped_weapon != id)
+	if Game.owned_blueprints.has(Game.BLUEPRINT_ID):
+		var known: bool = Game.wander != null and Game.wander.known(Game.BLUEPRINT_ID)
+		_action("Wind / Fire blueprint · %s" % ("Learned" if known else "Learn spell"), _learn_blueprint, Game.wander != null and not known)
 	var used: int = Game.inventory_used()
 	var capacity: int = Game.inventory_capacity()
 	_line("INVENTORY   %d / %d SLOTS" % [used, capacity], 22, UI.ACCENT)
@@ -338,29 +353,36 @@ func _level_up() -> void:
 	for i in range(Game.PARTY.size()):
 		var level: int = Game.character_levels[i]
 		var cost := level * 50
-		var suffix := "MAX LEVEL" if level >= 10 else "%d coins" % cost
+		var suffix := "MAX LEVEL" if level >= 10 else "%d Ane" % cost
 		_action("%s   ·   Lv. %d   →   %s" % [Game.PARTY[i]["name"], level, suffix], _upgrade.bind(i), level < 10 and Game.coins >= cost)
 
 
 func _upgrade(index: int) -> void:
-	_status = "%s levelled up!" % Game.PARTY[index]["name"] if Game.upgrade_character(index) else "Not enough coins or already at max level."
+	_status = "%s levelled up!" % Game.PARTY[index]["name"] if Game.upgrade_character(index) else "Not enough Ane or already at max level."
 	_refresh()
 
 
 func _shop() -> void:
 	_line("THE WANDERER'S SHOP", 23, UI.ACCENT)
-	_line("Offline supplies only. Coins are earned by playing.")
-	_action("Healing potion   ·   25 coins", _buy_potion, Game.coins >= 25 and Game.inventory_used() < Game.inventory_capacity())
+	_line("Offline supplies only. Ane are earned by playing.")
+	_action("Healing potion   ·   25 Ane", _buy_potion, Game.coins >= 25 and Game.inventory_used() < Game.inventory_capacity())
 	_line("Potions require an empty inventory slot.")
+	_action("Moon hairpin · %s" % ("Owned" if Game.owned_cosmetics.has("moon_pin") else "100 Ane"), _buy_moon_pin, not Game.owned_cosmetics.has("moon_pin") and Game.coins >= 100)
+	_action("Sunrise traveller outfit · %s" % ("Owned" if Game.owned_outfits.has(4) else "150 Ane"), _buy_sunrise_outfit, not Game.owned_outfits.has(4) and Game.coins >= 150)
 	for i in range(1, Game.BACKPACK_NAMES.size()):
 		var owned: bool = Game.owned_backpacks.has(i)
-		_action("%s  ·  +%d slots  ·  %s" % [Game.BACKPACK_NAMES[i], Game.BACKPACK_BONUS[i], "Owned" if owned else "%d coins" % Game.BACKPACK_PRICES[i]], _buy_backpack.bind(i), not owned and Game.coins >= Game.BACKPACK_PRICES[i])
+		_action("%s  ·  +%d slots  ·  %s" % [Game.BACKPACK_NAMES[i], Game.BACKPACK_BONUS[i], "Owned" if owned else "%d Ane" % Game.BACKPACK_PRICES[i]], _buy_backpack.bind(i), not owned and Game.coins >= Game.BACKPACK_PRICES[i])
 
 
 func _wardrobe() -> void:
 	_line("OUTFIT COLOUR", 23, UI.ACCENT)
-	for i in range(3):
-		_action("%s%s" % [["Original", "Moonlit blue", "Rose dusk"][i], "  ·  Equipped" if i == Game.outfit_style else ""], _set_outfit.bind(i), i != Game.outfit_style)
+	for i in Game.owned_outfits:
+		_action("%s%s" % [Game.OUTFIT_NAMES[i], "  ·  Equipped" if i == Game.outfit_style else ""], _set_outfit.bind(i), i != Game.outfit_style)
+	_line("HAIR ACCESSORIES", 23, UI.ACCENT)
+	_action("No hairpin%s" % (" · Equipped" if Game.equipped_cosmetic == "" else ""), _equip_reward_cosmetic.bind(""), Game.equipped_cosmetic != "")
+	for id in Game.owned_cosmetics:
+		if Game.COSMETIC_NAMES.has(id):
+			_action("%s%s" % [Game.COSMETIC_NAMES[id], " · Equipped" if Game.equipped_cosmetic == id else " · Equip"], _equip_reward_cosmetic.bind(id), Game.equipped_cosmetic != id)
 	_line("BACKPACKS", 23, UI.ACCENT)
 	_line("Equipping a backpack increases inventory capacity. Buy backpacks in the home shop.")
 	for i in Game.owned_backpacks:
@@ -387,7 +409,7 @@ func _buy_backpack(index: int) -> void:
 
 
 func _buy_potion() -> void:
-	_status = "Potion added to your inventory." if Game.buy_potion() else "Not enough coins."
+	_status = "Potion added to your inventory." if Game.buy_potion() else "Not enough Ane."
 	_refresh()
 
 
@@ -396,7 +418,7 @@ func _profile() -> void:
 	_line("Active character: %s  ·  Level %d" % [Game.character()["name"], Game.character_levels[Game.party_index]])
 	_line("This expedition: %d sigils  ·  %d slimes  ·  %d waypoints" % [Game.sigils_collected, Game.slimes_defeated, Game.waypoints_activated])
 	_line("Offline collection: %d wishes  ·  %d different treasures" % [Game.wish_count, Game.collectibles.size()])
-	_line("Coins, starlight, levels, potions and treasures are saved on this device. Story objectives and waypoints are saved on this device.")
+	_line("Ane, starlight, levels, potions and treasures are saved on this device. Story objectives and waypoints are saved on this device.")
 
 
 func _settings() -> void:
@@ -529,12 +551,12 @@ func _settlement_dialogue() -> void:
 		var item: String = str(resident[kind])
 		match status:
 			"available":
-				_line("%s quest: Could you find my %s? Look for my labelled glowing item near this settlement." % [title, item])
+				_line("%s quest: Could you find my %s? Look for my labelled glowing item near this settlement. Reward: %s." % [title, item, Game.settlement_reward_text(kind, dialogue_resident_index)])
 				_action("Accept %s quest · %s" % [title.to_lower(), item], _accept_settlement.bind(kind))
 			"active":
 				_line("%s quest: Find my labelled %s near the settlement and bring it back." % [title, item])
 			"found":
-				_action("Return %s · reward %s" % [item, "25 coins" if kind == "main" else "10 starlight"], _complete_settlement.bind(kind))
+				_action("Return %s · reward %s" % [item, Game.settlement_reward_text(kind, dialogue_resident_index)], _complete_settlement.bind(kind))
 			"done":
 				_line("%s quest: Thank you for returning the %s." % [title, item])
 
@@ -615,4 +637,29 @@ func _equip_wander(id: String) -> void:
 		_status = "Spell slot updated."
 	else:
 		_status = "Unable to equip spell."
+	_refresh()
+
+
+func _equip_reward_weapon(id: String) -> void:
+	_status = "Weapon equipped for sword users." if Game.equip_reward_weapon(id) else "Weapon unavailable."
+	_refresh()
+
+
+func _equip_reward_cosmetic(id: String) -> void:
+	_status = "Hair accessory changed." if Game.equip_reward_cosmetic(id) else "Accessory unavailable."
+	_refresh()
+
+
+func _learn_blueprint() -> void:
+	_status = "Spell learned. Assign it in Story or the spell wheel." if Game.learn_reward_blueprint(Game.BLUEPRINT_ID) else "Spell already learned or unavailable."
+	_refresh()
+
+
+func _buy_moon_pin() -> void:
+	_status = "Moon hairpin purchased. Equip it in Wardrobe." if Game.buy_reward_cosmetic("moon_pin") else "Unable to purchase."
+	_refresh()
+
+
+func _buy_sunrise_outfit() -> void:
+	_status = "Sunrise outfit purchased. Equip it in Wardrobe." if Game.buy_reward_outfit() else "Unable to purchase."
 	_refresh()
