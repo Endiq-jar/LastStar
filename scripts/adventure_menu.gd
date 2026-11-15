@@ -326,13 +326,15 @@ func _quests() -> void:
 	_line("STAR GUARD JOURNAL", 23, UI.ACCENT)
 	var story := Game.guard_story
 	if not bool(story.get("seal_accepted", false)):
-		_line("Main · A Light Remembered: speak with Star Guard Ilyra near the starting shore.")
+		_line("Main · A Light Remembered: speak with Star Guard Ilyra in Ashvale.")
 	elif bool(story.get("seal_done", false)):
 		_line("Main · A Light Remembered: completed. Reward: Stone Bulwark.")
 	else:
 		_line("Main · A Light Remembered: recover a star sigil (%d / 1), then return to Ilyra." % mini(Game.sigils_collected, 1))
 	if bool(story.get("hollow_accepted", false)):
 		_line("Side · Hollow Signs: %s" % ("completed. Reward: Arc Lance." if bool(story.get("hollow_done", false)) else "defeat three slimes (%d / 3), then return to Ilyra." % mini(Game.slimes_defeated, 3)))
+	_line("ASHVALE HOLLOW", 18, UI.ACCENT)
+	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Optional challenge: find the Hollow entrance near Ashvale. Dodge the Warden's red warning circles. Defeat it for 100 Ane and 30 starlight.")
 	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
 	var any_quest := false
 	for site in SETTLEMENTS.SITES:
@@ -617,7 +619,7 @@ func _story() -> void:
 	_line("THE VALLEY REMEMBERS", 25, UI.ACCENT)
 	_line("The valley's scattered stars have fallen quiet. Sora and her companions travel between the waypoints to bring their light home.")
 	_line("✦  Recover twelve sigils and discover the landmarks of the valley.")
-	_line("Visit Star Guard Ilyra at the starting shore to begin the first playable story quests.")
+	_line("Visit Star Guard Ilyra in Ashvale to begin the first playable story quests.")
 	if Game.wander != null:
 		_line("WANDER RESEARCH", 18, UI.ACCENT)
 		if not bool(Game.guard_story.get("seal_done", false)):

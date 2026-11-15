@@ -916,6 +916,53 @@ func _run() -> void:
 	Game.collection_changed.emit()
 	_log("INFO" if rewards_ok else "FAIL", "quest reward persistence, equipment and blueprint=%s" % str(rewards_ok))
 
+	# Real entrance, two-phase telegraph combat, one-time reward, and safe exit.
+	var hollow_ok := false
+	var hollow := world.get_node_or_null("AshvaleHollow")
+	var hollow_player := world.get_node_or_null("Player") as CharacterBody3D
+	if hollow != null and hollow_player != null and settlement_manager != null:
+		var original_pos := hollow_player.global_position
+		var original_hp: float = Game.current_hp()
+		var original_coins: int = Game.coins
+		var original_light: int = Game.starlight
+		var original_clear: bool = Game.ashvale_hollow_cleared
+		Game.ashvale_hollow_cleared = false
+		var entrance: Vector3 = hollow.get("entrance")
+		hollow_player.global_position = entrance + Vector3(0, 0.2, 0)
+		hollow_ok = hollow.call("try_interact", hollow_player) and bool(hollow.get("inside"))
+		await get_tree().process_frame
+		await get_tree().physics_frame
+		var warden := hollow.get("boss") as Node3D
+		if warden == null:
+			hollow_ok = false
+		else:
+			warden.call("take_hit", 560.0, 0, Vector3.ZERO)
+			hollow_ok = hollow_ok and int(warden.get("phase")) == 2
+			warden.set("_state", "warning")
+			warden.set("_timer", 0.0)
+			warden.set("_target", hollow_player.global_position)
+			warden.call("_physics_process", 0.01)
+			hollow_ok = hollow_ok and Game.current_hp() < original_hp
+			warden.call("take_hit", 9999.0, 0, Vector3.ZERO)
+			hollow_ok = hollow_ok and Game.ashvale_hollow_cleared and Game.coins == original_coins + 100 and Game.starlight == original_light + 30
+			hollow.call("_on_defeated")
+			hollow_ok = hollow_ok and Game.coins == original_coins + 100
+			Game.ashvale_hollow_cleared = false
+			Game.load_collection()
+			hollow_ok = hollow_ok and Game.ashvale_hollow_cleared
+		var exit_point: Vector3 = hollow.get("_exit_point")
+		hollow_player.global_position = exit_point
+		hollow_ok = hollow.call("try_interact", hollow_player) and not bool(hollow.get("inside")) and hollow_ok
+		hollow_player.global_position = original_pos
+		hollow_player.velocity = Vector3.ZERO
+		Game.set_hp(original_hp)
+		Game.ashvale_hollow_cleared = original_clear
+		Game.coins = original_coins
+		Game.starlight = original_light
+		Game.save_collection()
+		Game.collection_changed.emit()
+	_log("INFO" if hollow_ok else "FAIL", "Ashvale Hollow entry, boss phases, damage and reward=%s" % str(hollow_ok))
+
 	# The compact HUD list opens from its button and shows independent NPC quests.
 	var quest_box_ok := false
 	if hud != null:

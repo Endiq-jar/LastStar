@@ -107,7 +107,7 @@ var slimes_defeated: int = 0
 var waypoints_activated: int = 0
 ## Names of every waypoint already lit, so re-touching one doesn't inflate the count.
 var waypoints_seen: Dictionary = {}
-var last_waypoint_name: String = "Starlit Shore"
+var last_waypoint_name: String = "Ashvale"
 var checkpoint: Vector3 = Vector3.ZERO
 var has_checkpoint: bool = false
 
@@ -154,6 +154,7 @@ var story_complete := false
 # First playable story slice, independent from the older sigil victory.
 var guard_story: Dictionary = {}
 var settlement_quests: Dictionary = {}
+var ashvale_hollow_cleared := false
 const SETTLEMENT_DATA := preload("res://scripts/settlement_data.gd")
 var wander_levels: Dictionary = {}
 var wander_slots: Array = []
@@ -204,7 +205,7 @@ func reset_run() -> void:
 	waypoints_seen.clear()
 	sigils_seen.clear()
 	story_complete = false
-	last_waypoint_name = "Starlit Shore"
+	last_waypoint_name = "Ashvale"
 	has_checkpoint = false
 	checkpoint = Vector3.ZERO
 	has_won = false
@@ -435,6 +436,7 @@ func save_collection() -> bool:
 	cfg.set_value("story", "complete", story_complete)
 	cfg.set_value("story", "guard_story", guard_story)
 	cfg.set_value("story", "settlement_quests", settlement_quests)
+	cfg.set_value("story", "ashvale_hollow_cleared", ashvale_hollow_cleared)
 	cfg.set_value("wander", "levels", wander_levels)
 	cfg.set_value("wander", "slots", wander_slots)
 	cfg.set_value("story", "dropped_items", dropped_items)
@@ -456,7 +458,7 @@ func load_collection() -> void:
 	var saved_waypoints = cfg.get_value("story", "waypoints_seen", {})
 	waypoints_seen = saved_waypoints if saved_waypoints is Dictionary else {}
 	waypoints_activated = waypoints_seen.size()
-	last_waypoint_name = str(cfg.get_value("story", "last_waypoint", "Starlit Shore"))
+	last_waypoint_name = str(cfg.get_value("story", "last_waypoint", "Ashvale"))
 	var saved_checkpoint = cfg.get_value("story", "checkpoint", Vector3.ZERO)
 	checkpoint = saved_checkpoint if saved_checkpoint is Vector3 else Vector3.ZERO
 	has_checkpoint = bool(cfg.get_value("story", "has_checkpoint", false)) and saved_checkpoint is Vector3
@@ -465,6 +467,7 @@ func load_collection() -> void:
 	guard_story = story_data if story_data is Dictionary else {}
 	var settlement_data = cfg.get_value("story", "settlement_quests", {})
 	settlement_quests = settlement_data if settlement_data is Dictionary else {}
+	ashvale_hollow_cleared = bool(cfg.get_value("story", "ashvale_hollow_cleared", false))
 	var levels_data = cfg.get_value("wander", "levels", {})
 	wander_levels = levels_data if levels_data is Dictionary else {}
 	var slots_data = cfg.get_value("wander", "slots", [])

@@ -82,6 +82,7 @@ func _ready() -> void:
 	_spawn_player()
 	_spawn_story_contact()
 	_spawn_settlements()
+	_spawn_ashvale_hollow()
 
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
@@ -1220,7 +1221,8 @@ func _spawn_story_contact() -> void:
 	var guard := Node3D.new()
 	guard.name = "StarGuardIlyra"
 	guard.set_script(load("res://scripts/star_guard.gd"))
-	guard.position = Vector3(5.0, _height(5.0, 6.0), 6.0)
+	var p: Vector3 = get_node("Player").position + Vector3(5, 0, 0)
+	guard.position = Vector3(p.x, _height(p.x, p.z), p.z)
 	add_child(guard)
 
 
@@ -1232,14 +1234,30 @@ func _spawn_player() -> void:
 	# the collision mesh on its first physics frame. Ask the terrain node itself
 	# for the height: _height() returns 0.0 if the terrain is not wired up yet,
 	# and spawning at y=0 on a valley floor at y=+22 buries the body underground.
-	var ground := 0.0
-	if terrain != null and terrain.has_method("get_height_at"):
-		ground = terrain.get_height_at(0.0, 6.0)
-	else:
-		ground = _height(0.0, 6.0)
-	var spawn := Vector3(0.0, ground + 6.0, 6.0)
-	player.position = spawn
+	# Resolve the exact same safe site position used by the settlement streamer.
+	var resolver := Node3D.new()
+	resolver.set_script(load("res://scripts/settlement_stream.gd"))
+	resolver.set("_world", self)
+	var data = load("res://scripts/settlement_data.gd")
+	var center: Vector2 = resolver.call("_resolve", data.SITES[0]["pos"])
+	resolver.free()
+	var spawn_xz := center + Vector2(3, 3)
+	var ground: float = _height(spawn_xz.x, spawn_xz.y)
+	player.position = Vector3(spawn_xz.x, ground + 6.0, spawn_xz.y)
 	add_child(player)
+
+
+func _spawn_ashvale_hollow() -> void:
+	var manager := get_node_or_null("Settlements")
+	if manager == null: return
+	var sites: Array = manager.get("_sites")
+	if sites.is_empty(): return
+	var hollow := Node3D.new()
+	hollow.name = "AshvaleHollow"
+	hollow.set_script(load("res://scripts/ashvale_hollow.gd"))
+	add_child(hollow)
+	hollow.add_to_group("hollow_entrance")
+	hollow.call("setup", self, get_node("Player"), sites[0]["resolved"])
 
 
 func _build_grass_field() -> void:

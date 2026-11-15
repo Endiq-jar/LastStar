@@ -223,7 +223,7 @@ func _build() -> void:
 
 	var talk := Button.new()
 	talk.name = "TalkButton"
-	talk.text = "Talk"
+	talk.text = "Talk / Use"
 	talk.custom_minimum_size = Vector2(82, 42)
 	UI.button(talk)
 	talk.pressed.connect(_talk_to_guard)
@@ -589,6 +589,9 @@ func _talk_to_guard() -> void:
 		return
 	var player := get_tree().get_first_node_in_group("player") as Node3D
 	if player == null:
+		return
+	var hollow := get_tree().get_first_node_in_group("hollow_entrance")
+	if hollow != null and hollow.call("try_interact", player):
 		return
 	var nearest: Node3D = null
 	var distance := 8.0
