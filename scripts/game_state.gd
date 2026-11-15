@@ -165,7 +165,7 @@ var equipped_weapon := ""
 var owned_cosmetics: Array = []
 var equipped_cosmetic := ""
 var owned_blueprints: Array = []
-const WEAPON_NAMES := {"trail_blade": "Trail Blade", "leaf_blade": "Leaf Blade"}
+const WEAPONS := preload("res://scripts/weapon_catalog.gd")
 const COSMETIC_NAMES := {"star_pin": "Star hairpin", "moon_pin": "Moon hairpin"}
 const BLUEPRINT_ID := "research_0_1_0_0_0"
 const OUTFIT_NAMES := ["Original", "Moonlit blue", "Rose dusk", "Forest traveller", "Sunrise traveller"]
@@ -286,7 +286,7 @@ func spend_energy(amount: float) -> bool:
 
 
 func attack_power() -> float:
-	return float(character()["attack"]) * (1.0 + 0.12 * float(character_levels[party_index] - 1)) * (1.15 if equipped_weapon != "" and character()["weapon"] == "sword" else 1.0)
+	return float(character()["attack"]) * (1.0 + 0.12 * float(character_levels[party_index] - 1)) * (1.0 + WEAPONS.bonus(equipped_weapon) if character()["weapon"] == "sword" else 1.0)
 
 
 func switch_character(index: int) -> void:
@@ -490,7 +490,7 @@ func load_collection() -> void:
 	var weapons = cfg.get_value("collection", "owned_weapons", [])
 	owned_weapons = weapons if weapons is Array else []
 	equipped_weapon = str(cfg.get_value("collection", "equipped_weapon", ""))
-	if not owned_weapons.has(equipped_weapon) or not WEAPON_NAMES.has(equipped_weapon):
+	if not owned_weapons.has(equipped_weapon) or WEAPONS.index_for_id(equipped_weapon) < 0:
 		equipped_weapon = ""
 	var cosmetics = cfg.get_value("collection", "owned_cosmetics", [])
 	owned_cosmetics = cosmetics if cosmetics is Array else []
@@ -502,6 +502,8 @@ func load_collection() -> void:
 	# Grant unique rewards for quests completed before the rewards update.
 	for site in SETTLEMENT_DATA.SITES:
 		for index in range(SETTLEMENT_DATA.RESIDENT_COUNT):
+			if settlement_quest_status(site["id"], "main", index) == "done":
+				_grant_quest_weapon(site["id"], index)
 			if settlement_quest_status(site["id"], "main", index) == "done" or settlement_quest_status(site["id"], "side", index) == "done":
 				_grant_resident_reward(index)
 	owned_backpacks = [0]
@@ -581,12 +583,19 @@ func complete_settlement_quest(site_id: String, kind: String, resident_index: in
 	settlement_quests[_settlement_quest_key(site_id, kind, resident_index)] = "done"
 	if kind == "main":
 		coins += 25
+		_grant_quest_weapon(site_id, resident_index)
 	else:
 		starlight += 10
 	_grant_resident_reward(resident_index)
 	save_collection()
 	collection_changed.emit()
 	return true
+
+
+func _grant_quest_weapon(site_id: String, index: int) -> void:
+	var id := WEAPONS.quest_weapon(site_id, index)
+	if id != "" and not owned_weapons.has(id):
+		owned_weapons.append(id)
 
 
 func _grant_resident_reward(index: int) -> void:
@@ -654,15 +663,20 @@ func set_outfit_style(index: int) -> void:
 	character_changed.emit(party_index)
 
 
-func settlement_reward_text(kind: String, index: int) -> String:
+func settlement_reward_text(kind: String, index: int, site_id: String) -> String:
 	var base := "25 Ane" if kind == "main" else "10 starlight"
 	var extras := ["Trail Blade", "Wind / Fire spell blueprint", "Star hairpin", "Forest traveller outfit", "Leaf Blade", ""]
 	var extra: String = extras[index % 6]
-	return base + (" + " + extra + " (unique)" if extra != "" else "")
+	var weapon := WEAPONS.name_for_id(WEAPONS.quest_weapon(site_id, index)) if kind == "main" else ""
+	if weapon != "":
+		base += " + " + weapon + " (unique)"
+	if extra != "" and extra != weapon:
+		base += " + " + extra + " (unique)"
+	return base
 
 
 func equip_reward_weapon(id: String) -> bool:
-	if id != "" and (not WEAPON_NAMES.has(id) or not owned_weapons.has(id)):
+	if id != "" and (WEAPONS.index_for_id(id) < 0 or not owned_weapons.has(id)):
 		return false
 	equipped_weapon = id
 	save_collection()

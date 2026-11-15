@@ -464,22 +464,61 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 
 
 static func _build_reward_sword(anchor: Node3D, id: String) -> void:
-	# Palette texture from Kickin' It Studios; geometry is made here.
-	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = preload("res://assets/weapons/kickin_weapon_texture.png")
-	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	var blade := PrismMesh.new()
-	blade.size = Vector3(0.12 if id == "leaf_blade" else 0.085, 0.8, 0.035)
-	var blade_node := _no_shadow(_add(anchor, blade, mat, Vector3(0, -0.55, 0), "RewardBlade"))
-	blade_node.rotation_degrees.z = 180
-	var guard := BoxMesh.new()
-	guard.size = Vector3(0.24, 0.045, 0.07)
-	_no_shadow(_add(anchor, guard, _toon(Color(0.68, 0.48, 0.17)), Vector3(0, -0.17, 0)))
-	var grip := CylinderMesh.new()
-	grip.top_radius = 0.025
-	grip.bottom_radius = 0.03
-	grip.height = 0.20
-	_no_shadow(_add(anchor, grip, _toon(Color(0.22, 0.13, 0.08)), Vector3(0, -0.06, 0)))
+	# Ten silhouettes and ten palettes share lightweight procedural parts. The
+	# palette texture is from Kickin' It Studios; the geometry is original.
+	var catalog := preload("res://scripts/weapon_catalog.gd")
+	var index: int = catalog.index_for_id(id)
+	if index < 0:
+		return
+	var shape: int = index % 10
+	var palette: int = index / 10
+	var metal := StandardMaterial3D.new()
+	metal.albedo_texture = preload("res://assets/weapons/kickin_weapon_texture.png")
+	metal.albedo_color = catalog.COLORS[palette]
+	metal.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	var trim := _toon(catalog.COLORS[palette].lerp(Color(0.86, 0.65, 0.26), 0.55))
+	var leather := _toon(Color(0.22, 0.13, 0.08))
+	var shaft := CylinderMesh.new()
+	shaft.top_radius = 0.025
+	shaft.bottom_radius = 0.03
+	shaft.height = 0.67 if shape >= 5 else 0.20
+	_no_shadow(_add(anchor, shaft, leather, Vector3(0, -0.30 if shape >= 5 else -0.06, 0), "RewardGrip"))
+	if shape < 5:
+		var blade := PrismMesh.new()
+		var widths := [0.085, 0.11, 0.17, 0.045, 0.075]
+		var lengths := [0.8, 1.0, 0.65, 0.9, 0.48]
+		blade.size = Vector3(widths[shape], lengths[shape], 0.035)
+		var blade_node := _no_shadow(_add(anchor, blade, metal, Vector3(0, -0.17 - lengths[shape] * 0.5, 0), "RewardBlade"))
+		blade_node.rotation_degrees.z = 180
+		var guard := BoxMesh.new()
+		guard.size = Vector3(0.16 + shape * 0.025, 0.045, 0.07)
+		_no_shadow(_add(anchor, guard, trim, Vector3(0, -0.17, 0)))
+	elif shape == 5 or shape == 8:
+		# Axe / glaive have a broad offset cutting head.
+		var head := PrismMesh.new()
+		head.size = Vector3(0.25 if shape == 5 else 0.18, 0.34 if shape == 5 else 0.42, 0.045)
+		var head_node := _no_shadow(_add(anchor, head, metal, Vector3(0.10, -0.63, 0), "RewardBlade"))
+		head_node.rotation_degrees.z = 180
+	elif shape == 6:
+		var hammer := BoxMesh.new()
+		hammer.size = Vector3(0.31, 0.15, 0.13)
+		_no_shadow(_add(anchor, hammer, metal, Vector3(0, -0.61, 0), "RewardBlade"))
+	elif shape == 7:
+		var point := PrismMesh.new()
+		point.size = Vector3(0.10, 0.36, 0.035)
+		var point_node := _no_shadow(_add(anchor, point, metal, Vector3(0, -0.77, 0), "RewardBlade"))
+		point_node.rotation_degrees.z = 180
+	else:
+		var mace := SphereMesh.new()
+		mace.radius = 0.13
+		mace.height = 0.26
+		mace.radial_segments = 8
+		mace.rings = 4
+		_no_shadow(_add(anchor, mace, metal, Vector3(0, -0.68, 0), "RewardBlade"))
+	var jewel := SphereMesh.new()
+	jewel.radius = 0.035
+	jewel.height = 0.07
+	_no_shadow(_add(anchor, jewel, trim, Vector3(0, 0.05, 0), "WeaponPommel"))
 
 
 static func _build_weapon(anchor: Node3D, kind: String, glow: StandardMaterial3D, accent: ShaderMaterial) -> void:

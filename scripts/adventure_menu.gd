@@ -17,6 +17,7 @@ var _balance: Label
 var _tab := "Character"
 var _status := ""
 var _selected_item := ""
+var _show_weapons := false
 var _sort_alphabetical := false
 var _binding_action := ""
 var _close_button: Button
@@ -203,11 +204,14 @@ func _switch(index: int) -> void:
 
 func _inventory() -> void:
 	_line("QUEST EQUIPMENT & BLUEPRINTS", 20, UI.ACCENT)
-	_line("Unique rewards are stored separately and do not take backpack slots. Blades affect sword users only (+15% attack).")
-	_action("Default weapon%s" % (" · Equipped" if Game.equipped_weapon == "" else ""), _equip_reward_weapon.bind(""), Game.equipped_weapon != "")
-	for id in Game.owned_weapons:
-		if Game.WEAPON_NAMES.has(id):
-			_action("%s%s" % [Game.WEAPON_NAMES[id], " · Equipped" if Game.equipped_weapon == id else " · Equip"], _equip_reward_weapon.bind(id), Game.equipped_weapon != id)
+	_line("Weapons are stored separately from backpack slots. They use the sword user's melee attacks; other characters keep their own weapons.")
+	_action("Weapons · %d / %d owned · %s" % [Game.owned_weapons.size(), Game.WEAPONS.COUNT, "Hide" if _show_weapons else "Show"], _toggle_weapons)
+	if _show_weapons:
+		_action("Default weapon%s" % (" · Equipped" if Game.equipped_weapon == "" else ""), _equip_reward_weapon.bind(""), Game.equipped_weapon != "")
+		for number in range(Game.WEAPONS.COUNT):
+			var id: String = Game.WEAPONS.id_for_index(number)
+			if Game.owned_weapons.has(id):
+				_action("%s · +%d%% attack%s" % [Game.WEAPONS.name_for_id(id), roundi(Game.WEAPONS.bonus(id) * 100.0), " · Equipped" if Game.equipped_weapon == id else " · Equip"], _equip_reward_weapon.bind(id), Game.equipped_weapon != id)
 	if Game.owned_blueprints.has(Game.BLUEPRINT_ID):
 		var known: bool = Game.wander != null and Game.wander.known(Game.BLUEPRINT_ID)
 		_action("Wind / Fire blueprint · %s" % ("Learned" if known else "Learn spell"), _learn_blueprint, Game.wander != null and not known)
@@ -551,12 +555,12 @@ func _settlement_dialogue() -> void:
 		var item: String = str(resident[kind])
 		match status:
 			"available":
-				_line("%s quest: Could you find my %s? Look for my labelled glowing item near this settlement. Reward: %s." % [title, item, Game.settlement_reward_text(kind, dialogue_resident_index)])
+				_line("%s quest: Could you find my %s? Look for my labelled glowing item near this settlement. Reward: %s." % [title, item, Game.settlement_reward_text(kind, dialogue_resident_index, dialogue_site_id)])
 				_action("Accept %s quest · %s" % [title.to_lower(), item], _accept_settlement.bind(kind))
 			"active":
 				_line("%s quest: Find my labelled %s near the settlement and bring it back." % [title, item])
 			"found":
-				_action("Return %s · reward %s" % [item, Game.settlement_reward_text(kind, dialogue_resident_index)], _complete_settlement.bind(kind))
+				_action("Return %s · reward %s" % [item, Game.settlement_reward_text(kind, dialogue_resident_index, dialogue_site_id)], _complete_settlement.bind(kind))
 			"done":
 				_line("%s quest: Thank you for returning the %s." % [title, item])
 
@@ -662,4 +666,9 @@ func _buy_moon_pin() -> void:
 
 func _buy_sunrise_outfit() -> void:
 	_status = "Sunrise outfit purchased. Equip it in Wardrobe." if Game.buy_reward_outfit() else "Unable to purchase."
+	_refresh()
+
+
+func _toggle_weapons() -> void:
+	_show_weapons = not _show_weapons
 	_refresh()

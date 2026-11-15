@@ -862,6 +862,31 @@ func _run() -> void:
 	if not Game.wander.known(Game.BLUEPRINT_ID):
 		rewards_ok = Game.learn_reward_blueprint(Game.BLUEPRINT_ID) and rewards_ok
 	rewards_ok = rewards_ok and Game.wander.known(Game.BLUEPRINT_ID)
+	# All 100 IDs, display names and quest locations must be unique and valid.
+	var weapon_catalog_ok := true
+	var ids := {}
+	var names := {}
+	for site_index in range(5):
+		for i in range(20):
+			var site_id: String = SETTLEMENTS.SITES[site_index]["id"]
+			var id: String = Game.WEAPONS.quest_weapon(site_id, i)
+			var expected_index := site_index * 20 + i
+			var display: String = Game.WEAPONS.name_for_id(id)
+			weapon_catalog_ok = weapon_catalog_ok and id == Game.WEAPONS.id_for_index(expected_index) and Game.WEAPONS.index_for_id(id) == expected_index and not ids.has(id) and not names.has(display) and Game.WEAPONS.bonus(id) > 0.0
+			ids[id] = true
+			names[display] = true
+			Game.call("_grant_quest_weapon", site_id, i)
+	weapon_catalog_ok = weapon_catalog_ok and ids.size() == 100 and names.size() == 100 and Game.owned_weapons.size() == 100 and not Game.equip_reward_weapon("weapon_999")
+	weapon_catalog_ok = Game.equip_reward_weapon("weapon_099") and weapon_catalog_ok
+	Game.load_collection()
+	weapon_catalog_ok = weapon_catalog_ok and Game.owned_weapons.size() == 100 and Game.equipped_weapon == "weapon_099"
+	var builder = load("res://scripts/character_builder.gd")
+	for shape in range(10):
+		var anchor := Node3D.new()
+		builder._build_reward_sword(anchor, Game.WEAPONS.id_for_index(shape))
+		weapon_catalog_ok = weapon_catalog_ok and anchor.get_node_or_null("RewardBlade") != null
+		anchor.free()
+	_log("INFO" if weapon_catalog_ok else "FAIL", "100 weapon catalogue, quest coverage, equipment and saves=%s" % str(weapon_catalog_ok))
 	Game.settlement_quests = old_rewards["quests"]
 	Game.coins = old_rewards["coins"]
 	Game.starlight = old_rewards["starlight"]
