@@ -6,6 +6,7 @@ extends CanvasLayer
 const TOUCH := preload("res://scripts/touch_controls.gd")
 const UI := preload("res://scripts/ui_style.gd")
 const AdventureMenu := preload("res://scripts/adventure_menu.gd")
+const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
 const PerformanceMonitor := preload("res://scripts/performance/performance_monitor.gd")
 ## Loaded at runtime rather than preloaded: a preload that fails to resolve
 ## reports only "could not resolve script" against *this* file, which hides the
@@ -15,6 +16,8 @@ const SPELL_WHEEL_PATH := "res://scripts/spell_wheel.gd"
 
 var _spell_wheel: Control
 var _quest_label: Label
+var _quest_box: PanelContainer
+var _quest_list: Label
 var _compass: Label
 var _stamina: ProgressBar
 var _energy: ProgressBar
@@ -41,6 +44,7 @@ func _ready() -> void:
 	Game.stats_changed.connect(_refresh_stats)
 	Game.character_changed.connect(_on_character_changed)
 	Game.quest_changed.connect(_on_quest_changed)
+	Game.collection_changed.connect(_refresh_quest_box)
 	Game.toast.connect(_on_toast)
 	Game.game_won.connect(_on_game_won)
 	_refresh_stats()
@@ -136,9 +140,46 @@ func _build() -> void:
 	_compass.add_theme_constant_override("shadow_offset_y", 2)
 	top_right.add_child(_compass)
 
+	var quest_button := Button.new()
+	quest_button.name = "QuestsButton"
+	quest_button.text = "Quests"
+	quest_button.custom_minimum_size = Vector2(88, 46)
+	UI.button(quest_button)
+	quest_button.pressed.connect(_toggle_quest_box)
+	top_right.add_child(quest_button)
+
 	var pause_btn := _round_button("II", Vector2(46, 46))
 	pause_btn.pressed.connect(_pause)
 	top_right.add_child(pause_btn)
+
+	# Compact, scrollable quest list; the game continues while it is open.
+	_quest_box = PanelContainer.new()
+	_quest_box.name = "QuestBox"
+	_quest_box.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_quest_box.offset_left = -370
+	_quest_box.offset_right = -22
+	_quest_box.offset_top = 76
+	_quest_box.offset_bottom = 370
+	_quest_box.add_theme_stylebox_override("panel", UI.panel(12.0, 0.96))
+	_quest_box.visible = false
+	root.add_child(_quest_box)
+	var box_contents := VBoxContainer.new()
+	_quest_box.add_child(box_contents)
+	var box_heading := Label.new()
+	box_heading.text = "QUESTS"
+	box_heading.add_theme_color_override("font_color", UI.ACCENT)
+	box_heading.add_theme_font_size_override("font_size", 18)
+	box_contents.add_child(box_heading)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box_contents.add_child(scroll)
+	_quest_list = Label.new()
+	_quest_list.name = "QuestList"
+	_quest_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_quest_list.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_quest_list.add_theme_font_size_override("font_size", 15)
+	scroll.add_child(_quest_list)
 
 	# ---- bottom-left: the Wander spell wheel ---------------------------
 	# (The old party-swap strip used to live here. Party switching is on the
@@ -669,6 +710,7 @@ func _on_sigils_changed(collected: int, total: int) -> void:
 
 func _on_quest_changed(text: String) -> void:
 	_quest_label.text = text
+	_refresh_quest_box()
 
 
 func _on_toast(text: String) -> void:
@@ -689,3 +731,31 @@ func _on_game_won() -> void:
 		Game.slimes_defeated, Game.waypoints_activated,
 	]
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _toggle_quest_box() -> void:
+	_quest_box.visible = not _quest_box.visible
+	_refresh_quest_box()
+
+
+func _refresh_quest_box() -> void:
+	if _quest_box == null or not _quest_box.visible:
+		return
+	var lines: Array[String] = []
+	var story: Dictionary = Game.guard_story
+	if bool(story.get("seal_accepted", false)):
+		var status := "Completed" if bool(story.get("seal_done", false)) else "Recover a star sigil (%d/1), then return to Ilyra" % mini(Game.sigils_collected, 1)
+		lines.append("Ilyra · A Light Remembered\n%s" % status)
+	if bool(story.get("hollow_accepted", false)):
+		var status := "Completed" if bool(story.get("hollow_done", false)) else "Defeat slimes (%d/3), then return to Ilyra" % mini(Game.slimes_defeated, 3)
+		lines.append("Ilyra · Hollow Signs\n%s" % status)
+	for site in SETTLEMENTS.SITES:
+		for index in range(SETTLEMENTS.RESIDENT_COUNT):
+			for kind in ["main", "side"]:
+				var state: String = Game.settlement_quest_status(site["id"], kind, index)
+				if state == "available":
+					continue
+				var resident: Dictionary = SETTLEMENTS.resident(site["id"], index)
+				var detail: String = "Find nearby" if state == "active" else ("Return to resident" if state == "found" else "Completed")
+				lines.append("%s · %s · %s\n%s: %s" % [site["name"], resident["name"], kind.capitalize(), resident[kind], detail])
+	_quest_list.text = "\n\n".join(lines) if not lines.is_empty() else "No quests accepted yet. Talk to residents to find quests."
