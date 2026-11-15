@@ -25,7 +25,7 @@ func _ready() -> void:
 		_head_mesh.height = 0.38
 		_limb_mesh = BoxMesh.new()
 		_limb_mesh.size = Vector3(0.18, 0.55, 0.21)
-	var color_index := abs((site_id + str(resident_index)).hash()) % 12
+	var color_index: int = abs((site_id + str(resident_index)).hash()) % 12
 	if not _clothes.has(color_index):
 		var cloth := StandardMaterial3D.new()
 		cloth.albedo_color = Color.from_hsv(float(color_index) / 12.0, 0.38, 0.62)
