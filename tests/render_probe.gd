@@ -803,6 +803,13 @@ func _run() -> void:
 			menu.call("open_menu", page)
 			await _capture_ui(out_dir, "game_" + page.to_lower().replace(" ", "_"), menu)
 			menu.call("close_menu")
+		# Show unlocked research as a separate, clearly named review state.
+		var original_guard := Game.guard_story.duplicate(true)
+		Game.guard_story["seal_done"] = true
+		menu.call("open_menu", "Story")
+		await _capture_ui(out_dir, "game_wander_research_unlocked", menu)
+		menu.call("close_menu")
+		Game.guard_story = original_guard
 	if hud != null:
 		hud.call("_pause")
 		await _capture_ui(out_dir, "pause", null)
