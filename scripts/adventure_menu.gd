@@ -12,6 +12,7 @@ var dialogue_resident_index := 0
 const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
 
 var _body: VBoxContainer
+var _tab_buttons: Dictionary = {}
 var _header: Label
 var _balance: Label
 var _tab := "Character"
@@ -81,37 +82,46 @@ func _build() -> void:
 	_balance.add_theme_color_override("font_color", UI.ACCENT)
 	bar.add_child(_balance)
 	var close := Button.new()
-	close.text = "✕"
+	close.text = ""
+	close.tooltip_text = "Close"
+	UI.icon(close, "Close")
 	close.custom_minimum_size = Vector2(48, 42)
 	UI.button(close)
 	close.pressed.connect(close_menu)
 	bar.add_child(close)
 	_close_button = close
+	# Persistent navigation rail mirrors the reference while keeping every
+	# existing tab and the scrollable content area intact.
+	var content := HBoxContainer.new()
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 16)
+	layout.add_child(content)
 	var tabs: Array = HOME_TABS if home_mode else GAME_TABS
-	var rows := 1 if home_mode else 2
-	for row_index in range(rows):
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		layout.add_child(row)
-		var start := row_index * 4
-		for i in range(start, mini(start + 4, tabs.size())):
-			var tab := Button.new()
-			tab.text = tabs[i]
-			tab.custom_minimum_size = Vector2(0, 40)
-			tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			tab.add_theme_font_size_override("font_size", 15)
-			UI.button(tab)
-			tab.pressed.connect(_select.bind(tabs[i]))
-			row.add_child(tab)
+	var rail := VBoxContainer.new()
+	rail.custom_minimum_size.x = 160
+	rail.add_theme_constant_override("separation", 5)
+	content.add_child(rail)
+	for page in tabs:
+		var tab := Button.new()
+		tab.name = page.replace(" ", "") + "Tab"
+		tab.text = page
+		tab.custom_minimum_size = Vector2(0, 44)
+		tab.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		tab.add_theme_font_size_override("font_size", 15)
+		UI.icon(tab, page)
+		UI.button(tab)
+		tab.pressed.connect(_select.bind(page))
+		rail.add_child(tab)
+		_tab_buttons[page] = tab
 	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	layout.add_child(scroll)
+	content.add_child(scroll)
 	_body = VBoxContainer.new()
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.add_theme_constant_override("separation", 10)
 	scroll.add_child(_body)
-
 
 func open_menu(tab: String = "Character") -> void:
 	if not TABS.has(tab):
@@ -157,8 +167,24 @@ func _action(text: String, callback: Callable, enabled: bool = true) -> void:
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.disabled = not enabled
 	UI.button(button)
+	UI.icon(button, _action_icon(text))
 	button.pressed.connect(callback)
 	_body.add_child(button)
+
+
+func _action_icon(text: String) -> String:
+	var lower := text.to_lower()
+	if lower.contains("potion"): return "Potion"
+	if lower.contains("weapon") or lower.contains("blade") or lower.contains("sword"): return "Weapon"
+	if lower.contains("outfit") or lower.contains("traveller") or lower.contains("hairpin"): return "Clothing"
+	if lower.contains("backpack"): return "Backpack"
+	if lower.contains("quest") or lower.contains("blueprint") or lower.contains("spell"): return "Quests"
+	if _tab == "Settings": return "Settings"
+	if _tab == "Shop": return "Shop"
+	if _tab == "Wardrobe": return "Wardrobe"
+	if _tab == "Character": return "Character"
+	if _tab == "Inventory": return "Inventory"
+	return "Wish" if _tab == "Wish" else "Story"
 
 
 func _refresh() -> void:
@@ -167,6 +193,8 @@ func _refresh() -> void:
 	for child in _body.get_children():
 		_body.remove_child(child)
 		child.queue_free()
+	for page in _tab_buttons:
+		UI.button(_tab_buttons[page], page == _tab)
 	_header.text = "✦  %s" % _tab.to_upper()
 	_balance.text = "✧ %d starlight    ◇ %d Ane     " % [Game.starlight, Game.coins]
 	match _tab:

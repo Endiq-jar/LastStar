@@ -49,6 +49,7 @@ func _build_home_navigation() -> void:
 		button.custom_minimum_size = Vector2(0, 42)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		UI.button(button)
+		UI.icon(button, page)
 		button.pressed.connect(_open_home_page.bind(page))
 		grid.add_child(button)
 	_home_menu = AdventureMenu.new()
@@ -85,6 +86,8 @@ func _style_menu() -> void:
 	get_node("LeftPanel/Panel/VBox/Spacer").visible = false
 	panel.add_theme_stylebox_override("panel", UI.panel(28.0, 0.84))
 	UI.button(start_btn, true)
+	UI.icon(start_btn, "Play")
+	UI.icon(quit_btn, "Return")
 	UI.button(quality_btn)
 	UI.button(quit_btn)
 

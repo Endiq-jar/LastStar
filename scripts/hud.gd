@@ -145,10 +145,13 @@ func _build() -> void:
 	quest_button.text = "Quests"
 	quest_button.custom_minimum_size = Vector2(88, 46)
 	UI.button(quest_button)
+	UI.icon(quest_button, "Quests")
 	quest_button.pressed.connect(_toggle_quest_box)
 	top_right.add_child(quest_button)
 
-	var pause_btn := _round_button("II", Vector2(46, 46))
+	var pause_btn := _round_button("", Vector2(46, 46))
+	UI.icon(pause_btn, "Pause")
+	pause_btn.tooltip_text = "Pause"
 	pause_btn.pressed.connect(_pause)
 	top_right.add_child(pause_btn)
 
@@ -214,6 +217,7 @@ func _build() -> void:
 		button.text = entry[0]
 		button.custom_minimum_size = Vector2(82, 42)
 		UI.button(button)
+		UI.icon(button, "Quests" if entry[0] == "Journal" else entry[0])
 		button.pressed.connect(_open_adventure.bind(entry[1]))
 		navigation.add_child(button)
 

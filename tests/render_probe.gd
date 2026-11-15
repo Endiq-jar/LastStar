@@ -529,8 +529,20 @@ func _run() -> void:
 			var body: VBoxContainer = menu.get("_body")
 			if body == null or body.get_child_count() == 0:
 				screens_ok = false
+		var rail: Dictionary = menu.get("_tab_buttons")
+		var nav_icons_ok := rail.size() == 6
+		for page in rail:
+			var tab: Button = rail[page]
+			nav_icons_ok = nav_icons_ok and tab.icon != null and not tab.pressed.get_connections().is_empty()
+		menu.call("_select", "Settings")
+		var settings_body: VBoxContainer = menu.get("_body")
+		var settings_icon_found := false
+		for child in settings_body.get_children():
+			if child is Button and child.icon != null:
+				settings_icon_found = true
 		menu.call("close_menu")
 		_log("INFO" if screens_ok and not Game.is_paused else "FAIL", "offline adventure screens and close: %s" % str(screens_ok))
+		_log("INFO" if nav_icons_ok and settings_icon_found else "FAIL", "interface icons and navigation rail: %s" % str(nav_icons_ok and settings_icon_found))
 	var old_coins := Game.coins
 	var old_starlight := Game.starlight
 	var old_potions := Game.potions
