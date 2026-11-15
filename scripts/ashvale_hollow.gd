@@ -58,6 +58,10 @@ func _enter() -> void:
 			var tile := FLOOR.instantiate() as Node3D
 			tile.position = Vector3(x * 4, 0, z * 4)
 			chamber.add_child(tile)
+			var ceiling := FLOOR.instantiate() as Node3D
+			ceiling.position = Vector3(x * 4, 5.0, z * 4)
+			ceiling.rotation.x = PI
+			chamber.add_child(ceiling)
 	for i in range(-2, 3):
 		for side in [-1, 1]:
 			var wall := WALL.instantiate() as Node3D
@@ -79,12 +83,15 @@ func _enter() -> void:
 			chamber.add_child(torch)
 	var exit_label := Label3D.new()
 	exit_label.text = "F / Talk · Leave Hollow"
-	exit_label.position = Vector3(0, 2.0, 7.5)
+	exit_label.position = Vector3(7, 2.2, 8)
 	exit_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	exit_label.font_size = 48
-	exit_label.pixel_size = 0.006
+	exit_label.pixel_size = 0.0025
 	chamber.add_child(exit_label)
-	_exit_point = chamber.global_position + Vector3(0, 0, 7.5)
+	var exit_marker := TORCH.instantiate() as Node3D
+	exit_marker.position = Vector3(7, 1.2, 8)
+	chamber.add_child(exit_marker)
+	_exit_point = chamber.global_position + Vector3(7, 0, 8)
 	player.global_position = chamber.global_position + Vector3(0, 0.2, 7.0)
 	player.velocity = Vector3.ZERO
 	if not Game.ashvale_hollow_cleared:
@@ -92,7 +99,7 @@ func _enter() -> void:
 		boss.position = Vector3(0, 0.15, -4)
 		chamber.add_child(boss)
 		boss.connect("defeated", _on_defeated)
-		Game.toast.emit("Hollow Warden ahead. Watch the red circles and dodge!")
+		Game.toast.emit("Warden ahead. Dodge red circles! Exit is marked at the rear right.")
 	else:
 		_add_chest()
 		Game.toast.emit("Ashvale Hollow is cleared. Leave when ready.")
