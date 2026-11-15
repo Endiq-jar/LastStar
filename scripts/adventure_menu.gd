@@ -8,6 +8,7 @@ const HOME_TABS := ["Wardrobe", "Profile", "Settings", "Shop"]
 const GAME_TABS := ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story"]
 var home_mode := false
 var dialogue_site_id := ""
+var dialogue_resident_index := 0
 const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
 
 var _body: VBoxContainer
@@ -288,13 +289,15 @@ func _quests() -> void:
 	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
 	var any_quest := false
 	for site in SETTLEMENTS.SITES:
-		for kind in ["main", "side"]:
-			var state: String = Game.settlement_quest_status(site["id"], kind)
-			if state == "available":
-				continue
-			any_quest = true
-			var detail := "Find nearby" if state == "active" else ("Return to resident" if state == "found" else "Complete")
-			_line("%s · %s · %s: %s" % [site["name"], kind.capitalize(), site[kind], detail])
+		for index in range(SETTLEMENTS.RESIDENT_COUNT):
+			var resident := SETTLEMENTS.resident(site["id"], index)
+			for kind in ["main", "side"]:
+				var state: String = Game.settlement_quest_status(site["id"], kind, index)
+				if state == "available":
+					continue
+				any_quest = true
+				var detail := "Find nearby" if state == "active" else ("Return to resident" if state == "found" else "Complete")
+				_line("%s · %s · %s · %s: %s" % [site["name"], resident["name"], kind.capitalize(), resident[kind], detail])
 	if not any_quest:
 		_line("Speak with residents in settlements to discover local quests.")
 	_line("TRAVEL NOTES", 18, UI.ACCENT)
@@ -514,18 +517,22 @@ func _settlement_dialogue() -> void:
 	if site.is_empty():
 		_line("This resident is unavailable.")
 		return
-	_line("%s  ·  %s" % [site["npc"], site["name"]], 25, UI.ACCENT)
-	_line("%s — %s" % [site["role"], site["lore"]])
+	var resident := SETTLEMENTS.resident(dialogue_site_id, dialogue_resident_index)
+	if resident.is_empty():
+		_line("This resident is unavailable.")
+		return
+	_line("%s  ·  %s" % [resident["name"], site["name"]], 25, UI.ACCENT)
+	_line("%s — %s" % [resident["role"], site["lore"]])
 	for kind in ["main", "side"]:
-		var status: String = Game.settlement_quest_status(dialogue_site_id, kind)
+		var status: String = Game.settlement_quest_status(dialogue_site_id, kind, dialogue_resident_index)
 		var title := "Main" if kind == "main" else "Side"
-		var item: String = str(site[kind])
+		var item: String = str(resident[kind])
 		match status:
 			"available":
-				_line("%s quest: Could you find my %s? It lies just %s of this settlement." % [title, item, "north" if kind == "main" else "east"])
+				_line("%s quest: Could you find my %s? Look for my labelled glowing item near this settlement." % [title, item])
 				_action("Accept %s quest · %s" % [title.to_lower(), item], _accept_settlement.bind(kind))
 			"active":
-				_line("%s quest: Find the %s just %s of the settlement and bring it back." % [title, item, "north" if kind == "main" else "east"])
+				_line("%s quest: Find my labelled %s near the settlement and bring it back." % [title, item])
 			"found":
 				_action("Return %s · reward %s" % [item, "25 coins" if kind == "main" else "10 starlight"], _complete_settlement.bind(kind))
 			"done":
@@ -533,12 +540,12 @@ func _settlement_dialogue() -> void:
 
 
 func _accept_settlement(kind: String) -> void:
-	_status = "Quest accepted. Look for the glowing item near the settlement." if Game.accept_settlement_quest(dialogue_site_id, kind) else "Quest already accepted."
+	_status = "Quest accepted. Look for the glowing item near the settlement." if Game.accept_settlement_quest(dialogue_site_id, kind, dialogue_resident_index) else "Quest already accepted."
 	_refresh()
 
 
 func _complete_settlement(kind: String) -> void:
-	_status = "Quest complete. Reward collected." if Game.complete_settlement_quest(dialogue_site_id, kind) else "Find the item first."
+	_status = "Quest complete. Reward collected." if Game.complete_settlement_quest(dialogue_site_id, kind, dialogue_resident_index) else "Find the item first."
 	_refresh()
 
 

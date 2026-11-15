@@ -503,34 +503,40 @@ func research_spell(first: int, second: int, shape: int, reach: int, intensity: 
 	return id
 
 
-func settlement_quest_status(site_id: String, kind: String) -> String:
-	if SETTLEMENT_DATA.by_id(site_id).is_empty() or not ["main", "side"].has(kind):
+func _settlement_quest_key(site_id: String, kind: String, resident_index: int) -> String:
+	# Keep the original resident's key unchanged so existing saves migrate
+	# without resetting their quests.
+	return site_id + ":" + kind if resident_index == 0 else "%s:%d:%s" % [site_id, resident_index, kind]
+
+
+func settlement_quest_status(site_id: String, kind: String, resident_index: int = 0) -> String:
+	if SETTLEMENT_DATA.resident(site_id, resident_index).is_empty() or not ["main", "side"].has(kind):
 		return "invalid"
-	return str(settlement_quests.get(site_id + ":" + kind, "available"))
+	return str(settlement_quests.get(_settlement_quest_key(site_id, kind, resident_index), "available"))
 
 
-func accept_settlement_quest(site_id: String, kind: String) -> bool:
-	if settlement_quest_status(site_id, kind) != "available":
+func accept_settlement_quest(site_id: String, kind: String, resident_index: int = 0) -> bool:
+	if settlement_quest_status(site_id, kind, resident_index) != "available":
 		return false
-	settlement_quests[site_id + ":" + kind] = "active"
+	settlement_quests[_settlement_quest_key(site_id, kind, resident_index)] = "active"
 	save_collection()
 	collection_changed.emit()
 	return true
 
 
-func collect_settlement_item(site_id: String, kind: String) -> bool:
-	if settlement_quest_status(site_id, kind) != "active":
+func collect_settlement_item(site_id: String, kind: String, resident_index: int = 0) -> bool:
+	if settlement_quest_status(site_id, kind, resident_index) != "active":
 		return false
-	settlement_quests[site_id + ":" + kind] = "found"
+	settlement_quests[_settlement_quest_key(site_id, kind, resident_index)] = "found"
 	save_collection()
 	collection_changed.emit()
 	return true
 
 
-func complete_settlement_quest(site_id: String, kind: String) -> bool:
-	if settlement_quest_status(site_id, kind) != "found":
+func complete_settlement_quest(site_id: String, kind: String, resident_index: int = 0) -> bool:
+	if settlement_quest_status(site_id, kind, resident_index) != "found":
 		return false
-	settlement_quests[site_id + ":" + kind] = "done"
+	settlement_quests[_settlement_quest_key(site_id, kind, resident_index)] = "done"
 	if kind == "main":
 		coins += 25
 	else:

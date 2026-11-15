@@ -307,13 +307,15 @@ a limited research system, not the complete creation/evolution design.
 
 Fourteen small outposts use the settlement names in `docs/Resources.txt`. They
 are distributed across the existing streamed 10 km world, not full cities or
-new biomes. Nearby outposts stream in automatically; each has three exterior
-buildings and one named, talkable resident. Interiors are not accessible.
+new biomes. Nearby outposts stream in automatically; each has three enterable
+houses and 20 named, talkable residents. Roofs hide while you are indoors.
 Original Star Guard Ilyra remains at the starting shore.
 
-Each outpost resident offers one local main and one side quest: accept it, find
-the corresponding glowing item nearby, and return it to that resident for the
-listed reward. Quest acceptance, item collection and rewards persist locally.
+Each outpost resident offers one local main-labelled and one side quest: accept
+it, find the corresponding labelled glowing item nearby, and return it to that
+resident for the listed reward. Each resident's quest state is independent.
+Existing progress for the original resident is preserved. Quest acceptance,
+item collection and rewards persist locally.
 These are compact retrieval quests using a shared system, not the complete
 hand-authored main campaign or 165 side quests in the design brief.
 

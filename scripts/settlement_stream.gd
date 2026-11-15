@@ -7,10 +7,10 @@ const DOOR_WALL := preload("res://assets/village/Wall_Plaster_Door_Round.gltf")
 const WINDOW_WALL := preload("res://assets/village/Wall_Plaster_Window_Wide_Flat.gltf")
 const ROOF := preload("res://assets/village/Roof_RoundTiles_4x4.gltf")
 const GABLE := preload("res://assets/village/Roof_Front_Brick4.gltf")
-const DOOR := preload("res://assets/village/Door_1_Round.gltf")
 const WINDOW := preload("res://assets/village/Window_Wide_Flat1.gltf")
 const NPC := preload("res://scripts/settler.gd")
 const ITEM := preload("res://scripts/settlement_item.gd")
+const HOUSE := preload("res://scripts/village_house.gd")
 const LOAD_DISTANCE := 230.0
 const UNLOAD_DISTANCE := 290.0
 
@@ -28,6 +28,7 @@ func setup(world: Node3D, player: Node3D) -> void:
 		var entry: Dictionary = site.duplicate(true)
 		entry["resolved"] = _resolve(site["pos"])
 		_sites.append(entry)
+	Game.collection_changed.connect(_sync_items)
 	_update_stream()
 
 
@@ -81,6 +82,7 @@ func _update_stream() -> void:
 		var distance: float = p.distance_to(site["resolved"])
 		if distance < LOAD_DISTANCE and not _loaded.has(id):
 			_loaded[id] = _build_site(site)
+			_sync_items_for_site(site, _loaded[id])
 		elif distance > UNLOAD_DISTANCE and _loaded.has(id):
 			var old: Node = _loaded[id]
 			_loaded.erase(id)
@@ -105,19 +107,70 @@ func _build_site(site: Dictionary) -> Node3D:
 		house.position = Vector3(p.x, high + 0.08, p.y)
 		root.add_child(house)
 		_add_foundation(house, high - low + 0.4)
-	var npc := NPC.new()
-	npc.set("site_id", str(site["id"]))
-	npc.position = Vector3(center.x, float(_world.call("_height", center.x, center.y)), center.y)
-	root.add_child(npc)
-	for kind in ["main", "side"]:
-		var offset := Vector2(0, -27) if kind == "main" else Vector2(27, 0)
-		var p: Vector2 = center + offset
-		var item := ITEM.new()
-		item.set("site_id", str(site["id"]))
-		item.set("quest_kind", kind)
-		item.position = Vector3(p.x, float(_world.call("_height", p.x, p.y)) + 1.0, p.y)
-		root.add_child(item)
+		_add_entrance_ramp(house, p, high + 0.08)
+	for index in range(DATA.RESIDENT_COUNT):
+		var pos := _resident_position(center, index)
+		var npc := NPC.new()
+		npc.name = "Resident_%02d" % index
+		npc.site_id = str(site["id"])
+		npc.resident_index = index
+		npc.position = Vector3(pos.x, float(_world.call("_height", pos.x, pos.y)), pos.y)
+		root.add_child(npc)
 	return root
+
+
+func _resident_position(center: Vector2, index: int) -> Vector2:
+	if index == 0:
+		return center
+	var slot := index - 1
+	var radius := 17.0 if slot < 10 else 25.0
+	var angle := TAU * float(slot % 10) / 10.0 + (0.18 if slot >= 10 else 0.0)
+	for attempt in range(12):
+		var a := angle + float(attempt) * 0.18
+		var pos := center + Vector2(cos(a), sin(a)) * radius
+		var near_house := false
+		for h in [Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14)]:
+			if pos.distance_to(center + h) < 5.0:
+				near_house = true
+			if pos.distance_to(center + h + Vector2(-1, -5)) < 2.5:
+				near_house = true
+		if not near_house and not bool(_world.call("_is_wet", pos.x, pos.y)):
+			return pos
+	return center + Vector2(cos(angle), sin(angle)) * radius
+
+
+func _sync_items() -> void:
+	for site in _sites:
+		var id: String = site["id"]
+		if _loaded.has(id):
+			_sync_items_for_site(site, _loaded[id])
+
+
+func _sync_items_for_site(site: Dictionary, root: Node3D) -> void:
+	var id: String = site["id"]
+	var center: Vector2 = site["resolved"]
+	for index in range(DATA.RESIDENT_COUNT):
+		for kind in ["main", "side"]:
+			var node_name := "QuestItem_%02d_%s" % [index, kind]
+			var node := root.get_node_or_null(node_name)
+			var active: bool = Game.settlement_quest_status(id, kind, index) == "active"
+			if active and node == null:
+				var p: Vector2 = center + DATA.quest_offset(index, kind)
+				# Choose nearby dry ground if the ideal placement falls in water.
+				for turn in range(8):
+					if not bool(_world.call("_is_wet", p.x, p.y)):
+						break
+					p = center + DATA.quest_offset(index, kind).rotated(float(turn + 1) * 0.15)
+				var item := ITEM.new()
+				item.name = node_name
+				item.site_id = id
+				item.resident_index = index
+				item.quest_kind = kind
+				item.position = Vector3(p.x, float(_world.call("_height", p.x, p.y)) + 1.0, p.y)
+				root.add_child(item)
+			elif not active and node != null:
+				root.remove_child(node)
+				node.queue_free()
 
 
 func _add_foundation(house: Node3D, depth: float) -> void:
@@ -142,12 +195,11 @@ func _part(parent: Node3D, scene: PackedScene, position: Vector3, yaw: float = 0
 
 
 func _house() -> Node3D:
-	var house := Node3D.new()
+	var house := HOUSE.new()
 	house.name = "VillageHouse"
-	# Original 2m modular walls arranged into 4x4m exteriors. Interiors are not
-	# yet playable; a single simple collision box keeps players out of the mesh.
+	# A genuine 1m opening centred on x=-1, z=-2; the original decorative
+	# door is omitted so there is no invisible barrier or closed door mesh.
 	_part(house, DOOR_WALL, Vector3(-1, 0, -2), PI)
-	_part(house, DOOR, Vector3(-0.45, 0, -2.02), PI)
 	_part(house, WINDOW_WALL, Vector3(1, 0, -2), PI)
 	_part(house, WINDOW, Vector3(1, 0, -2), PI)
 	for x in [-1.0, 1.0]:
@@ -155,17 +207,65 @@ func _house() -> Node3D:
 	for z in [-1.0, 1.0]:
 		_part(house, WALL, Vector3(-2, 0, z), -PI / 2)
 		_part(house, WALL, Vector3(2, 0, z), PI / 2)
-	_part(house, ROOF, Vector3(0, 3.1, 0))
-	_part(house, GABLE, Vector3(0, 3.05, 2))
-	_part(house, GABLE, Vector3(0, 3.05, -2), PI)
+	var roof := Node3D.new()
+	roof.name = "RoofParts"
+	house.add_child(roof)
+	_part(roof, ROOF, Vector3(0, 3.1, 0))
+	_part(roof, GABLE, Vector3(0, 3.05, 2))
+	_part(roof, GABLE, Vector3(0, 3.05, -2), PI)
 	var collider := StaticBody3D.new()
+	collider.name = "HouseCollision"
 	collider.collision_layer = 1
 	collider.collision_mask = 0
+	house.add_child(collider)
+	_box_collision(collider, Vector3(4, 3, 0.25), Vector3(0, 1.5, 2))
+	_box_collision(collider, Vector3(0.25, 3, 4), Vector3(-2, 1.5, 0))
+	_box_collision(collider, Vector3(0.25, 3, 4), Vector3(2, 1.5, 0))
+	_box_collision(collider, Vector3(0.5, 3, 0.25), Vector3(-1.75, 1.5, -2))
+	_box_collision(collider, Vector3(2.5, 3, 0.25), Vector3(0.75, 1.5, -2))
+	_box_collision(collider, Vector3(1, 0.6, 0.25), Vector3(-1, 2.7, -2))
+	_box_collision(collider, Vector3(4, 0.2, 4), Vector3(0, -0.1, 0))
+	var floor_mesh := MeshInstance3D.new()
+	var floor := BoxMesh.new()
+	floor.size = Vector3(3.9, 0.08, 3.9)
+	floor_mesh.mesh = floor
+	floor_mesh.position.y = 0.02
+	var floor_mat := StandardMaterial3D.new()
+	floor_mat.albedo_color = Color(0.40, 0.27, 0.18)
+	floor_mesh.material_override = floor_mat
+	house.add_child(floor_mesh)
+	return house
+
+
+func _box_collision(body: StaticBody3D, size: Vector3, position: Vector3) -> CollisionShape3D:
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(4.0, 3.4, 4.0)
+	box.size = size
 	shape.shape = box
-	shape.position.y = 1.7
-	collider.add_child(shape)
-	house.add_child(collider)
-	return house
+	shape.position = position
+	body.add_child(shape)
+	return shape
+
+
+func _add_entrance_ramp(house: Node3D, at: Vector2, floor_height: float) -> void:
+	var far_height := float(_world.call("_height", at.x - 1.0, at.y - 6.0))
+	var rise := floor_height - far_height
+	var length := sqrt(16.0 + rise * rise)
+	var angle := -atan2(rise, 4.0)
+	var body := StaticBody3D.new()
+	body.name = "EntranceRamp"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	body.position = Vector3(-1, (far_height - floor_height) * 0.5, -4)
+	body.rotation.x = angle
+	house.add_child(body)
+	_box_collision(body, Vector3(1.2, 0.18, length), Vector3(0, -0.08, 0))
+	var visual := MeshInstance3D.new()
+	var ramp := BoxMesh.new()
+	ramp.size = Vector3(1.2, 0.14, length)
+	visual.mesh = ramp
+	visual.position.y = -0.07
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.42, 0.32, 0.23)
+	visual.material_override = mat
+	body.add_child(visual)

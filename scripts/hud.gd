@@ -557,9 +557,12 @@ func _talk_to_guard() -> void:
 		Game.toast.emit("Move closer to a resident to talk.")
 		return
 	var id := ""
+	var index := 0
 	if nearest.get_script() != null and nearest.get_script().resource_path == "res://scripts/settler.gd":
 		id = str(nearest.get("site_id"))
+		index = int(nearest.get("resident_index"))
 	_adventure_menu.set("dialogue_site_id", id)
+	_adventure_menu.set("dialogue_resident_index", index)
 	_open_adventure("Dialogue")
 
 

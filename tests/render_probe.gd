@@ -773,36 +773,73 @@ func _run() -> void:
 	var stream_ok: bool = settlement_manager != null and settlement_manager.get("_sites").size() == 14 and not get_tree().get_nodes_in_group("story_npc").is_empty()
 	_log("INFO" if village_ok and stream_ok else "FAIL", "settlement quest persistence=%s streamed sites=%s" % [str(village_ok), str(stream_ok)])
 
-	# Exercise the real UI → active pickup → returned reward path at Ashvale.
+	# Twenty distinct residents in the streamed outpost, each with independent
+	# quest state. Index zero retains the old save key for existing players.
+	var resident_ok := false
 	var quest_ui_ok := false
+	var house_ok := false
 	if settlement_manager != null and menu != null:
 		var loaded: Dictionary = settlement_manager.get("_loaded")
 		if loaded.has("ashvale"):
 			var settlement: Node = loaded["ashvale"]
-			var quest_item: Node = null
+			var residents: Array[Node] = []
+			var houses: Array[Node] = []
 			for child in settlement.get_children():
-				if child.get_script() != null and child.get_script().resource_path == "res://scripts/settlement_item.gd" and child.get("quest_kind") == "main":
-					quest_item = child
-					break
+				if child.get_script() != null and child.get_script().resource_path == "res://scripts/settler.gd":
+					residents.append(child)
+				elif child.is_in_group("village_house"):
+					houses.append(child)
+			resident_ok = residents.size() == 20 and houses.size() == 3
+			var indices := {}
+			for person in residents:
+				indices[int(person.get("resident_index"))] = true
+			resident_ok = resident_ok and indices.size() == 20
+			var saved_quests := Game.settlement_quests.duplicate(true)
+			var saved_coins := Game.coins
+			Game.settlement_quests.erase("ashvale:main")
+			Game.settlement_quests.erase("ashvale:19:main")
+			menu.set("dialogue_site_id", "ashvale")
+			menu.set("dialogue_resident_index", 19)
+			menu.call("open_menu", "Dialogue")
+			menu.call("_accept_settlement", "main")
+			var quest_item := settlement.get_node_or_null("QuestItem_19_main") as Node3D
+			quest_ui_ok = Game.settlement_quest_status("ashvale", "main", 19) == "active" and Game.settlement_quest_status("ashvale", "main", 0) == "available" and quest_item != null and quest_item.visible
 			if quest_item != null:
-				var saved_quests := Game.settlement_quests.duplicate(true)
-				var saved_coins := Game.coins
-				Game.settlement_quests.erase("ashvale:main")
-				menu.set("dialogue_site_id", "ashvale")
-				menu.call("open_menu", "Dialogue")
-				menu.call("_accept_settlement", "main")
-				quest_ui_ok = Game.settlement_quest_status("ashvale", "main") == "active" and quest_item.visible
 				quest_item.call("_on_body_entered", world.get_node("Player"))
-				quest_ui_ok = quest_ui_ok and Game.settlement_quest_status("ashvale", "main") == "found" and not quest_item.visible
-				menu.call("_complete_settlement", "main")
-				quest_ui_ok = quest_ui_ok and Game.settlement_quest_status("ashvale", "main") == "done" and Game.coins == saved_coins + 25
-				menu.call("close_menu")
-				menu.set("dialogue_site_id", "")
-				Game.settlement_quests = saved_quests
-				Game.coins = saved_coins
-				Game.save_collection()
-				Game.collection_changed.emit()
-	_log("INFO" if quest_ui_ok else "FAIL", "resident dialogue, pickup and return: %s" % str(quest_ui_ok))
+				quest_ui_ok = quest_ui_ok and Game.settlement_quest_status("ashvale", "main", 19) == "found"
+			menu.call("_complete_settlement", "main")
+			quest_ui_ok = quest_ui_ok and Game.settlement_quest_status("ashvale", "main", 19) == "done" and Game.coins == saved_coins + 25
+			Game.load_collection()
+			quest_ui_ok = quest_ui_ok and Game.settlement_quest_status("ashvale", "main", 19) == "done"
+			menu.call("close_menu")
+			menu.set("dialogue_site_id", "")
+			menu.set("dialogue_resident_index", 0)
+			Game.settlement_quests = saved_quests
+			Game.coins = saved_coins
+			Game.save_collection()
+			Game.collection_changed.emit()
+			# Check actual physics shapes: an open door ray, a solid wall ray,
+			# a floor collider, and roof visibility when the player enters.
+			if not houses.is_empty():
+				await get_tree().physics_frame
+				var house := houses[0] as Node3D
+				var player := world.get_node("Player") as CharacterBody3D
+				var space := house.get_world_3d().direct_space_state
+				var door_ray := PhysicsRayQueryParameters3D.create(house.to_global(Vector3(-1, 1, -2.7)), house.to_global(Vector3(-1, 1, -1.2)), 1)
+				door_ray.exclude = [player.get_rid()]
+				var wall_ray := PhysicsRayQueryParameters3D.create(house.to_global(Vector3(0, 1, 0)), house.to_global(Vector3(2.5, 1, 0)), 1)
+				wall_ray.exclude = [player.get_rid()]
+				var door_hit := space.intersect_ray(door_ray)
+				var wall_hit := space.intersect_ray(wall_ray)
+				var old_pos := player.global_position
+				player.global_position = house.to_global(Vector3(0, 0.1, 0))
+				house.call("_process", 0.2)
+				var roof := house.get_node("RoofParts") as Node3D
+				var roof_hidden := not roof.visible
+				player.global_position = old_pos
+				house.call("_process", 0.2)
+				house_ok = door_hit.is_empty() and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
+	_log("INFO" if resident_ok and quest_ui_ok and house_ok else "FAIL", "20 residents=%s independent quest=%s enterable house=%s" % [str(resident_ok), str(quest_ui_ok), str(house_ok)])
 
 	# --- pixel checks -----------------------------------------------------
 	# A headless run has no framebuffer, so this only reports on a real device /

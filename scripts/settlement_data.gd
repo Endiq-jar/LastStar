@@ -24,3 +24,29 @@ static func by_id(id: String) -> Dictionary:
 		if site["id"] == id:
 			return site
 	return {}
+
+
+const RESIDENT_COUNT := 20
+const FIRST_NAMES := ["Ari", "Bela", "Cira", "Daren", "Eli", "Fara", "Galen", "Hana", "Iven", "Jori", "Kira", "Lio", "Maren", "Navi", "Oren", "Pera", "Quin", "Risa", "Tavi"]
+const ROLES := ["baker", "apprentice", "gardener", "mason", "traveller", "weaver", "caretaker", "scribe", "courier", "forager", "carpenter", "musician", "cook", "herbalist", "hunter", "potter", "archivist", "trader", "watcher"]
+const MAIN_ITEMS := ["supply list", "old letter", "settlement record", "guard note", "travel journal", "repair plans", "lantern order", "archive page", "sealed message", "trail sketch", "building plan", "song fragment", "provision ledger", "herb journal", "tracking notes", "trade charter", "lost chapter", "cargo list", "watch report"]
+const SIDE_ITEMS := ["bread basket", "practice charm", "seed packet", "carving tool", "travel badge", "thread bundle", "spare key", "writing pen", "satchel clasp", "gathering pouch", "woodworking gauge", "small bell", "recipe card", "flower press", "trail marker", "painted cup", "reading lens", "coin purse", "lantern hook"]
+
+
+static func resident(site_id: String, index: int) -> Dictionary:
+	var site := by_id(site_id)
+	if site.is_empty() or index < 0 or index >= RESIDENT_COUNT:
+		return {}
+	if index == 0:
+		return {"name": site["npc"], "role": site["role"], "main": site["main"], "side": site["side"]}
+	var i := index - 1
+	return {"name": FIRST_NAMES[i], "role": ROLES[i], "main": MAIN_ITEMS[i], "side": SIDE_ITEMS[i]}
+
+
+static func quest_offset(index: int, kind: String) -> Vector2:
+	if index == 0:
+		return Vector2(0, -27) if kind == "main" else Vector2(27, 0)
+	var slot := index - 1
+	var angle := TAU * float(slot % 10) / 10.0 + (PI / 10.0 if kind == "side" else 0.0)
+	var radius := 32.0 + float(slot / 10) * 11.0
+	return Vector2(sin(angle), -cos(angle)) * radius
