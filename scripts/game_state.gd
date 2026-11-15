@@ -157,7 +157,7 @@ var wander_levels: Dictionary = {}
 var wander_slots: Array = []
 var outfit_style := 0
 var camera_sensitivity := 1.0
-const REBIND_ACTIONS := ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "skill", "burst", "party_next"]
+const REBIND_ACTIONS := ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "skill", "burst", "party_next", "dodge", "heavy_attack"]
 var _default_keys: Dictionary = {}
 var dropped_items: Dictionary = {}
 var next_drop_id := 1
@@ -171,6 +171,7 @@ var equipped_backpack := 0
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	load_quality()
+	_setup_game_controls()
 	_setup_settings()
 	reset_run()
 	load_collection()
@@ -634,6 +635,46 @@ func make_wish() -> String:
 	save_collection()
 	collection_changed.emit()
 	return item
+
+
+func _setup_game_controls() -> void:
+	# Add defaults without replacing keyboard/mouse bindings from the project.
+	# Runtime setup works on desktop and Android Godot controller mappings.
+	_add_key_default("dodge", KEY_C)
+	_add_key_default("heavy_attack", KEY_R)
+	_add_key_default("journal", KEY_J)
+	for i in range(5):
+		_add_key_default("spell_%d" % (i + 1), KEY_1 + i)
+	var buttons := {
+		"jump": JOY_BUTTON_A, "dodge": JOY_BUTTON_B,
+		"attack": JOY_BUTTON_X, "skill": JOY_BUTTON_Y,
+		"sprint": JOY_BUTTON_LEFT_SHOULDER, "burst": JOY_BUTTON_RIGHT_SHOULDER,
+		"pause": JOY_BUTTON_START, "journal": JOY_BUTTON_BACK,
+		"interact": JOY_BUTTON_DPAD_UP, "party_next": JOY_BUTTON_DPAD_RIGHT,
+		"heavy_attack": JOY_BUTTON_DPAD_DOWN,
+		"spell_1": JOY_BUTTON_DPAD_LEFT,
+		"spell_4": JOY_BUTTON_RIGHT_STICK, "spell_5": JOY_BUTTON_LEFT_STICK,
+	}
+	for action in buttons:
+		var button := InputEventJoypadButton.new()
+		button.button_index = buttons[action]
+		if not InputMap.action_has_event(action, button):
+			InputMap.action_add_event(action, button)
+	for binding in [["move_left", JOY_AXIS_LEFT_X, -1.0], ["move_right", JOY_AXIS_LEFT_X, 1.0], ["move_forward", JOY_AXIS_LEFT_Y, -1.0], ["move_back", JOY_AXIS_LEFT_Y, 1.0], ["spell_2", JOY_AXIS_TRIGGER_RIGHT, 1.0], ["spell_3", JOY_AXIS_TRIGGER_LEFT, 1.0]]:
+		var axis := InputEventJoypadMotion.new()
+		axis.axis = binding[1]
+		axis.axis_value = binding[2]
+		if not InputMap.action_has_event(binding[0], axis):
+			InputMap.action_add_event(binding[0], axis)
+
+
+func _add_key_default(action: String, key: int) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action, 0.25)
+	var event := InputEventKey.new()
+	event.physical_keycode = key as Key
+	if not InputMap.action_has_event(action, event):
+		InputMap.action_add_event(action, event)
 
 
 func _setup_settings() -> void:

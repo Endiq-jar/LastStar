@@ -16,6 +16,8 @@ var _status := ""
 var _selected_item := ""
 var _sort_alphabetical := false
 var _binding_action := ""
+var _close_button: Button
+var _wander_slot := 0
 const ITEM_ICONS := {
 	"Potion": preload("res://icons/items/potion.svg"),
 	"Moonstone": preload("res://icons/items/moonstone.svg"),
@@ -69,6 +71,7 @@ func _build() -> void:
 	UI.button(close)
 	close.pressed.connect(close_menu)
 	bar.add_child(close)
+	_close_button = close
 	var tabs: Array = HOME_TABS if home_mode else GAME_TABS
 	var rows := 1 if home_mode else 2
 	for row_index in range(rows):
@@ -104,6 +107,7 @@ func open_menu(tab: String = "Character") -> void:
 	if not home_mode:
 		Game.set_paused(true)
 	_refresh()
+	_close_button.grab_focus()
 
 
 func close_menu() -> void:
@@ -375,7 +379,8 @@ func _settings() -> void:
 			_slider(bus, value, 0.0, 1.0, _set_bus.bind(bus))
 	_line("CONTROLS", 23, UI.ACCENT)
 	_slider("Camera sensitivity", Game.camera_sensitivity, 0.25, 2.0, Game.set_sensitivity)
-	_line("Select a keyboard action, then press a key. Escape cancels. Touch controls remain available.")
+	_line("Controller: left stick move · right stick look · A jump · B dodge · X attack · Y skill · shoulders sprint/burst · D-pad up talk, down heavy, right switch, left spell 1 · triggers spells 2–3 · stick clicks spells 4–5 · Start pause · Back journal.")
+	_line("Keyboard: 1–5 cast Wander slots. Select an action below, then press a key. Escape cancels. Touch controls remain available.")
 	if _binding_action != "":
 		_line("Press a key for %s (Escape cancels)" % _binding_action.replace("_", " "), 17, UI.ACCENT)
 	for action in Game.REBIND_ACTIONS:
@@ -488,7 +493,24 @@ func _story() -> void:
 	_line("✦  Recover twelve sigils and discover the landmarks of the valley.")
 	_line("Visit Star Guard Ilyra at the starting shore to begin the first playable story quests.")
 	if Game.wander != null:
-		_line("WANDER MASTERY", 18, UI.ACCENT)
+		_line("WANDER MASTERY & EQUIPMENT", 18, UI.ACCENT)
+		var equipped := Game.wander.equipped_at(_wander_slot)
+		var equipped_name: String = str(Game.wander.spell(equipped).get("name", "Empty"))
+		_action("Slot %d: %s · choose another slot" % [_wander_slot + 1, equipped_name], _cycle_wander_slot)
+		_action("Clear this spell slot", _equip_wander.bind(""), equipped != "")
 		for id in Game.wander.CATALOGUE:
 			if Game.wander.known(id):
-				_line("%s · Level %d / 30" % [Game.wander.spell(id)["name"], Game.wander.level_of(id)])
+				_action("%s · Level %d / 30 · equip in slot %d" % [Game.wander.spell(id)["name"], Game.wander.level_of(id), _wander_slot + 1], _equip_wander.bind(id))
+
+
+func _cycle_wander_slot() -> void:
+	_wander_slot = (_wander_slot + 1) % 5
+	_refresh()
+
+
+func _equip_wander(id: String) -> void:
+	if Game.wander != null and Game.wander.set_slot(_wander_slot, id):
+		_status = "Spell slot updated."
+	else:
+		_status = "Unable to equip spell."
+	_refresh()

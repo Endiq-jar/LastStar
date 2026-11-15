@@ -283,5 +283,13 @@ quest choices and completion are saved locally.
 
 `docs/Resources.txt` is the full design brief. This is an initial Godot
 implementation, not the complete 14-settlement, 190-quest, 100-spell game.
-Spell crafting, companions, dungeons, bosses, the wider story and controller
-support remain to be developed; the current settlement is not a full Ashvale.
+Spell crafting, companions, dungeons, bosses, and the wider story remain to
+be developed; the current settlement is not a full Ashvale. Basic controller
+bindings are available, but have not yet been validated on physical devices.
+
+### Additional combat controls
+
+Dodge with C or the HUD button (20 stamina, brief invulnerability). Heavy attack
+with R or the HUD button (15 stamina). Keyboard 1–5 casts the assigned Wander
+slots. The Story page also lets you choose a slot and equip known spells. Basic
+controller bindings are listed in Settings; platform mappings may vary.

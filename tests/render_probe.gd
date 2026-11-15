@@ -675,6 +675,34 @@ func _run() -> void:
 	Game.sigils_changed.emit(Game.sigils_collected, Game.TOTAL_SIGILS)
 	Game.call("_refresh_quest")
 
+	# Verify registered controller events, heavy-attack cost, and dodge i-frames.
+	var mapped := true
+	for pair in [["attack", JOY_BUTTON_X], ["dodge", JOY_BUTTON_B], ["jump", JOY_BUTTON_A], ["journal", JOY_BUTTON_BACK]]:
+		var button := InputEventJoypadButton.new()
+		button.button_index = pair[1]
+		button.pressed = true
+		if not button.is_action(pair[0]):
+			mapped = false
+	var combat_player := world.get_node_or_null("Player")
+	var combat_ok := combat_player != null
+	if combat_player != null:
+		var hp_before := Game.current_hp()
+		var stamina_before := Game.stamina
+		var shield_before := Game.shield_points
+		Game.shield_points = 0.0
+		Game.stamina = Game.MAX_STAMINA
+		combat_player.set("_dodge_time", 0.2)
+		combat_player.call("take_damage", 25.0, Vector3.ZERO)
+		combat_ok = is_equal_approx(Game.current_hp(), hp_before)
+		combat_player.set("_dodge_time", 0.0)
+		combat_player.set("_attack_cd", 0.0)
+		combat_player.call("_do_attack", true)
+		combat_ok = combat_ok and is_equal_approx(Game.stamina, Game.MAX_STAMINA - 15.0)
+		combat_player.set("_attack_cd", 0.0)
+		Game.stamina = stamina_before
+		Game.shield_points = shield_before
+	_log("INFO" if mapped and combat_ok else "FAIL", "controller mappings=%s heavy attack and dodge=%s" % [str(mapped), str(combat_ok)])
+
 	# --- pixel checks -----------------------------------------------------
 	# A headless run has no framebuffer, so this only reports on a real device /
 	# xvfb run. That is fine: the structural checks above still gate CI.

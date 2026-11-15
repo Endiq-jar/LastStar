@@ -79,6 +79,9 @@ const SPAWN_CLEARANCE := 1.6
 ## pinned to this value so she stands ON the ground rather than 3 cm above it.
 const CHARACTER_SOLE_Y := 0.05
 
+var _dodge_time := 0.0
+var _dodge_cooldown := 0.0
+var _dodge_direction := Vector3.ZERO
 var _attack_cd := 0.0
 var _skill_cd := 0.0
 var _attack_combo := 0
@@ -528,6 +531,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		Game.next_character()
 	if _is_world_attack_input(event):
 		combat_action("attack")
+	if event.is_action_pressed("dodge"):
+		combat_action("dodge")
+	if event.is_action_pressed("heavy_attack"):
+		combat_action("heavy_attack")
 	if event.is_action_pressed("skill"):
 		combat_action("skill")
 	if event.is_action_pressed("burst"):
@@ -553,6 +560,10 @@ func combat_action(action: String) -> void:
 				velocity.y = -30.0
 			else:
 				_do_attack()
+		"dodge":
+			_dodge()
+		"heavy_attack":
+			_do_attack(true)
 		"skill":
 			_do_skill()
 		"burst":
@@ -563,6 +574,14 @@ func _physics_process(delta: float) -> void:
 	if Game.is_paused:
 		return
 
+	var controllers := Input.get_connected_joypads()
+	if not controllers.is_empty():
+		var look := Vector2(Input.get_joy_axis(controllers[0], JOY_AXIS_RIGHT_X), Input.get_joy_axis(controllers[0], JOY_AXIS_RIGHT_Y))
+		if look.length() > 0.2:
+			_target_yaw -= look.x * 2.3 * Game.camera_sensitivity * delta
+			_target_pitch = clampf(_target_pitch - look.y * 2.3 * Game.camera_sensitivity * delta, -1.15, 0.62)
+	_dodge_time = maxf(0.0, _dodge_time - delta)
+	_dodge_cooldown = maxf(0.0, _dodge_cooldown - delta)
 	_yaw = lerp_angle(_yaw, _target_yaw, 1.0 - exp(-16.0 * delta))
 	_pitch = lerpf(_pitch, _target_pitch, 1.0 - exp(-16.0 * delta))
 	_pivot.rotation = Vector3(_pitch, _yaw, 0.0)
@@ -657,6 +676,9 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0.0, drag * delta * speed)
 		velocity.z = move_toward(velocity.z, 0.0, drag * delta * speed)
 
+	if _dodge_time > 0.0:
+		velocity.x = _dodge_direction.x * 13.0
+		velocity.z = _dodge_direction.z * 13.0
 	move_and_slide()
 
 	_guard_world_bounds()
@@ -770,15 +792,36 @@ func _play_sfx(method: String) -> void:
 		amb.call(method)
 
 
-func _do_attack() -> void:
+func _dodge() -> void:
+	if _dodge_cooldown > 0.0 or Game.stamina < 20.0 or not is_on_floor():
+		return
+	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if Game.touch_active and Game.touch_move.length() > 0.05:
+		input_dir = Game.touch_move
+	_dodge_direction = Basis.from_euler(Vector3(0, _yaw, 0)) * Vector3(input_dir.x, 0.0, input_dir.y)
+	if _dodge_direction.length() < 0.1:
+		_dodge_direction = -get_forward()
+	_dodge_direction = _dodge_direction.normalized()
+	_dodge_time = 0.28
+	_dodge_cooldown = 0.65
+	Game.drain_stamina(20.0)
+	_stamina_regen_hold = 0.8
+	FX.dust_puff(get_parent(), global_position, Color(0.85, 0.9, 1.0, 0.5))
+
+
+func _do_attack(heavy: bool = false) -> void:
 	if _attack_cd > 0.0 or Game.is_paused:
 		return
-	_attack_cd = 0.42
+	if heavy and Game.stamina < 15.0:
+		return
+	if heavy:
+		Game.drain_stamina(15.0)
+	_attack_cd = 0.85 if heavy else 0.42
 	_attack_combo = (_attack_combo + 1) % 3
 	_combo_reset = 1.1
 
 	var data: Dictionary = Game.character()
-	var power: float = float(data["attack"]) * (1.25 if _attack_combo == 2 else 1.0)
+	var power: float = Game.attack_power() * (2.0 if heavy else (1.25 if _attack_combo == 2 else 1.0))
 	var forward := get_forward()
 	var hit_center: Vector3 = global_position + forward * 1.45 + Vector3(0, 0.95, 0)
 
@@ -930,6 +973,9 @@ func _plunge_impact() -> void:
 
 
 func take_damage(amount: float, from: Vector3) -> void:
+	if _dodge_time > 0.0:
+		Game.toast.emit("Dodged!")
+		return
 	Game.damage(amount)
 	FX.hit_flash(get_parent(), global_position + Vector3(0, 1.0, 0), Color(1, 0.35, 0.3))
 	var push := (global_position - from)

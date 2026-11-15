@@ -171,7 +171,7 @@ func _build() -> void:
 		var button := Button.new()
 		button.name = entry[0] + "Button"
 		button.text = entry[0]
-		button.custom_minimum_size = Vector2(100, 42)
+		button.custom_minimum_size = Vector2(82, 42)
 		UI.button(button)
 		button.pressed.connect(_open_adventure.bind(entry[1]))
 		navigation.add_child(button)
@@ -179,10 +179,24 @@ func _build() -> void:
 	var talk := Button.new()
 	talk.name = "TalkButton"
 	talk.text = "Talk"
-	talk.custom_minimum_size = Vector2(100, 42)
+	talk.custom_minimum_size = Vector2(82, 42)
 	UI.button(talk)
 	talk.pressed.connect(_talk_to_guard)
 	navigation.add_child(talk)
+	var dodge := Button.new()
+	dodge.name = "DodgeButton"
+	dodge.text = "Dodge"
+	dodge.custom_minimum_size = Vector2(82, 42)
+	UI.button(dodge)
+	dodge.pressed.connect(func(): _emit_action("dodge"))
+	navigation.add_child(dodge)
+	var heavy := Button.new()
+	heavy.name = "HeavyButton"
+	heavy.text = "Heavy"
+	heavy.custom_minimum_size = Vector2(82, 42)
+	UI.button(heavy)
+	heavy.pressed.connect(func(): _emit_action("heavy_attack"))
+	navigation.add_child(heavy)
 
 	var energy_row := HBoxContainer.new()
 	energy_row.add_theme_constant_override("separation", 8)
@@ -302,7 +316,7 @@ func _build() -> void:
 	to_menu.pressed.connect(func(): Game.quit_to_menu())
 	pv.add_child(to_menu)
 	var hint := Label.new()
-	hint.text = "WASD · Shift sprint · Space jump/glide\nLMB attack · E skill · Q burst · T switch"
+	hint.text = "WASD · Shift sprint · Space jump/glide · C dodge\nLMB attack · R heavy · E skill · Q burst · 1–5 spells"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9, 0.85))
@@ -496,7 +510,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_talk_to_guard()
 		get_viewport().set_input_as_handled()
 		return
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_J:
+	if event.is_action_pressed("journal"):
 		if _adventure_menu != null and _adventure_menu.visible:
 			_adventure_menu.call("close_menu")
 		elif not Game.is_paused:
@@ -507,6 +521,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_adventure_menu.call("close_menu")
 		get_viewport().set_input_as_handled()
 		return
+	if not Game.is_paused and not Game.has_won and _spell_wheel != null:
+		for i in range(5):
+			if event.is_action_pressed("spell_%d" % (i + 1)):
+				_spell_wheel.call("_cast_slot", i)
+				get_viewport().set_input_as_handled()
+				return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
 		_toggle_perf_monitor()
 		get_viewport().set_input_as_handled()
