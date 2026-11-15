@@ -7,6 +7,8 @@ const TABS := ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "
 const HOME_TABS := ["Wardrobe", "Profile", "Settings", "Shop"]
 const GAME_TABS := ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story"]
 var home_mode := false
+var dialogue_site_id := ""
+const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
 
 var _body: VBoxContainer
 var _header: Label
@@ -283,6 +285,18 @@ func _quests() -> void:
 		_line("Main · A Light Remembered: recover a star sigil (%d / 1), then return to Ilyra." % mini(Game.sigils_collected, 1))
 	if bool(story.get("hollow_accepted", false)):
 		_line("Side · Hollow Signs: %s" % ("completed. Reward: Arc Lance." if bool(story.get("hollow_done", false)) else "defeat three slimes (%d / 3), then return to Ilyra." % mini(Game.slimes_defeated, 3)))
+	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
+	var any_quest := false
+	for site in SETTLEMENTS.SITES:
+		for kind in ["main", "side"]:
+			var state: String = Game.settlement_quest_status(site["id"], kind)
+			if state == "available":
+				continue
+			any_quest = true
+			var detail := "Find nearby" if state == "active" else ("Return to resident" if state == "found" else "Complete")
+			_line("%s · %s · %s: %s" % [site["name"], kind.capitalize(), site[kind], detail])
+	if not any_quest:
+		_line("Speak with residents in settlements to discover local quests.")
 	_line("THE VALLEY REMEMBERS", 23, UI.ACCENT)
 	_line("Recover star sigils: %d / %d" % [Game.sigils_collected, Game.TOTAL_SIGILS])
 	_line("Clear wandering slimes: %d / 6" % mini(Game.slimes_defeated, 6))
@@ -454,6 +468,9 @@ func _change_quality() -> void:
 
 
 func _dialogue() -> void:
+	if dialogue_site_id != "":
+		_settlement_dialogue()
+		return
 	_line("STAR GUARD ILYRA", 25, UI.ACCENT)
 	var story := Game.guard_story
 	if not bool(story.get("seal_accepted", false)):
@@ -480,6 +497,39 @@ func _dialogue() -> void:
 			_action("Complete Hollow Signs · learn Arc Lance", _complete_guard.bind("hollow"))
 		else:
 			_line("Please defeat three slimes. Progress: %d / 3." % mini(Game.slimes_defeated, 3))
+
+
+func _settlement_dialogue() -> void:
+	var site := SETTLEMENTS.by_id(dialogue_site_id)
+	if site.is_empty():
+		_line("This resident is unavailable.")
+		return
+	_line("%s  ·  %s" % [site["npc"], site["name"]], 25, UI.ACCENT)
+	_line("%s — %s" % [site["role"], site["lore"]])
+	for kind in ["main", "side"]:
+		var status: String = Game.settlement_quest_status(dialogue_site_id, kind)
+		var title := "Main" if kind == "main" else "Side"
+		var item: String = str(site[kind])
+		match status:
+			"available":
+				_line("%s quest: Could you find my %s? It lies close to this settlement." % [title, item])
+				_action("Accept %s quest · %s" % [title.to_lower(), item], _accept_settlement.bind(kind))
+			"active":
+				_line("%s quest: Find the %s nearby and bring it back." % [title, item])
+			"found":
+				_action("Return %s · reward %s" % [item, "25 coins" if kind == "main" else "10 starlight"], _complete_settlement.bind(kind))
+			"done":
+				_line("%s quest: Thank you for returning the %s." % [title, item])
+
+
+func _accept_settlement(kind: String) -> void:
+	_status = "Quest accepted. Look for the glowing item near the settlement." if Game.accept_settlement_quest(dialogue_site_id, kind) else "Quest already accepted."
+	_refresh()
+
+
+func _complete_settlement(kind: String) -> void:
+	_status = "Quest complete. Reward collected." if Game.complete_settlement_quest(dialogue_site_id, kind) else "Find the item first."
+	_refresh()
 
 
 func _accept_guard(quest: String, answer: String) -> void:

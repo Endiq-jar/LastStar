@@ -153,6 +153,8 @@ var sigils_seen: Dictionary = {}
 var story_complete := false
 # First playable story slice, independent from the older sigil victory.
 var guard_story: Dictionary = {}
+var settlement_quests: Dictionary = {}
+const SETTLEMENT_DATA := preload("res://scripts/settlement_data.gd")
 var wander_levels: Dictionary = {}
 var wander_slots: Array = []
 var outfit_style := 0
@@ -415,6 +417,7 @@ func save_collection() -> bool:
 	cfg.set_value("story", "checkpoint", checkpoint)
 	cfg.set_value("story", "complete", story_complete)
 	cfg.set_value("story", "guard_story", guard_story)
+	cfg.set_value("story", "settlement_quests", settlement_quests)
 	cfg.set_value("wander", "levels", wander_levels)
 	cfg.set_value("wander", "slots", wander_slots)
 	cfg.set_value("story", "dropped_items", dropped_items)
@@ -443,6 +446,8 @@ func load_collection() -> void:
 	story_complete = bool(cfg.get_value("story", "complete", false))
 	var story_data = cfg.get_value("story", "guard_story", {})
 	guard_story = story_data if story_data is Dictionary else {}
+	var settlement_data = cfg.get_value("story", "settlement_quests", {})
+	settlement_quests = settlement_data if settlement_data is Dictionary else {}
 	var levels_data = cfg.get_value("wander", "levels", {})
 	wander_levels = levels_data if levels_data is Dictionary else {}
 	var slots_data = cfg.get_value("wander", "slots", [])
@@ -496,6 +501,43 @@ func research_spell(first: int, second: int, shape: int, reach: int, intensity: 
 	wander.learn(id)
 	collection_changed.emit()
 	return id
+
+
+func settlement_quest_status(site_id: String, kind: String) -> String:
+	if SETTLEMENT_DATA.by_id(site_id).is_empty() or not ["main", "side"].has(kind):
+		return "invalid"
+	return str(settlement_quests.get(site_id + ":" + kind, "available"))
+
+
+func accept_settlement_quest(site_id: String, kind: String) -> bool:
+	if settlement_quest_status(site_id, kind) != "available":
+		return false
+	settlement_quests[site_id + ":" + kind] = "active"
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func collect_settlement_item(site_id: String, kind: String) -> bool:
+	if settlement_quest_status(site_id, kind) != "active":
+		return false
+	settlement_quests[site_id + ":" + kind] = "found"
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func complete_settlement_quest(site_id: String, kind: String) -> bool:
+	if settlement_quest_status(site_id, kind) != "found":
+		return false
+	settlement_quests[site_id + ":" + kind] = "done"
+	if kind == "main":
+		coins += 25
+	else:
+		starlight += 10
+	save_collection()
+	collection_changed.emit()
+	return true
 
 
 func guard_accept(quest: String, answer: String = "") -> bool:

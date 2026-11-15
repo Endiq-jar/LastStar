@@ -545,11 +545,22 @@ func _talk_to_guard() -> void:
 	var player := get_tree().get_first_node_in_group("player") as Node3D
 	if player == null:
 		return
+	var nearest: Node3D = null
+	var distance := 8.0
 	for npc in get_tree().get_nodes_in_group("story_npc"):
-		if npc is Node3D and player.global_position.distance_to(npc.global_position) <= 8.0:
-			_open_adventure("Dialogue")
-			return
-	Game.toast.emit("Move closer to Star Guard Ilyra to talk.")
+		if npc is Node3D:
+			var d: float = player.global_position.distance_to(npc.global_position)
+			if d < distance:
+				distance = d
+				nearest = npc
+	if nearest == null:
+		Game.toast.emit("Move closer to a resident to talk.")
+		return
+	var id := ""
+	if nearest.get_script() != null and nearest.get_script().resource_path == "res://scripts/settler.gd":
+		id = str(nearest.get("site_id"))
+	_adventure_menu.set("dialogue_site_id", id)
+	_open_adventure("Dialogue")
 
 
 func _open_adventure(tab: String = "Character") -> void:

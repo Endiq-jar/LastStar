@@ -81,6 +81,7 @@ func _ready() -> void:
 	_setup_environment()
 	_spawn_player()
 	_spawn_story_contact()
+	_spawn_settlements()
 
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
@@ -1205,6 +1206,14 @@ func _build_entity_culler() -> void:
 	for group_name in ["enemy", "sigil", "waypoint"]:
 		culler.call("register_group", group_name)
 	_culler = culler
+
+
+func _spawn_settlements() -> void:
+	var manager := Node3D.new()
+	manager.name = "Settlements"
+	manager.set_script(load("res://scripts/settlement_stream.gd"))
+	add_child(manager)
+	manager.call("setup", self, get_node("Player"))
 
 
 func _spawn_story_contact() -> void:

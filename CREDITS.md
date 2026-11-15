@@ -83,3 +83,9 @@ All characters (Sora, Ember, Volt) are original. The title illustration is AI-ge
 `assets/ui/celestial_title.webp` is an AI-generated illustration created for
 LastStar's title screen. It is a decorative background, not a depiction of a
 playable location currently in the game.
+
+## Medieval Village MegaKit (Standard)
+
+Seven Quaternius Medieval Village MegaKit Standard models (CC0 1.0) and reduced
+base-colour textures are used for the settlement outposts. Source, mirror, and
+modifications: `assets/village/README.md`.

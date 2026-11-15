@@ -746,6 +746,33 @@ func _run() -> void:
 	Game.save_collection()
 	_log("INFO" if locked and created and no_double and shape_ok and research_saved and reaction_ok else "FAIL", "spell research locked=%s created=%s duplicate=%s shape=%s saved=%s combined=%s" % [str(locked), str(created), str(no_double), str(shape_ok), str(research_saved), str(reaction_ok)])
 
+	# Each of the 14 residents has independent, persistent main and side quests.
+	var site_data = load("res://scripts/settlement_data.gd")
+	var quests_before := Game.settlement_quests.duplicate(true)
+	var site_coins := Game.coins
+	var site_starlight := Game.starlight
+	Game.settlement_quests = {}
+	var village_ok: bool = site_data.SITES.size() == 14
+	for site in site_data.SITES:
+		var id: String = site["id"]
+		for kind in ["main", "side"]:
+			if not Game.accept_settlement_quest(id, kind) or Game.complete_settlement_quest(id, kind) or not Game.collect_settlement_item(id, kind) or not Game.complete_settlement_quest(id, kind) or Game.complete_settlement_quest(id, kind):
+				village_ok = false
+	Game.settlement_quests = {}
+	Game.load_collection()
+	for site in site_data.SITES:
+		for kind in ["main", "side"]:
+			if Game.settlement_quest_status(site["id"], kind) != "done":
+				village_ok = false
+	Game.settlement_quests = quests_before
+	Game.coins = site_coins
+	Game.starlight = site_starlight
+	Game.save_collection()
+	Game.collection_changed.emit()
+	var settlement_manager := world.get_node_or_null("Settlements")
+	var stream_ok: bool = settlement_manager != null and settlement_manager.get("_sites").size() == 14 and not get_tree().get_nodes_in_group("story_npc").is_empty()
+	_log("INFO" if village_ok and stream_ok else "FAIL", "settlement quest persistence=%s streamed sites=%s" % [str(village_ok), str(stream_ok)])
+
 	# --- pixel checks -----------------------------------------------------
 	# A headless run has no framebuffer, so this only reports on a real device /
 	# xvfb run. That is fine: the structural checks above still gate CI.
@@ -795,6 +822,29 @@ func _run() -> void:
 		Game.equipped_backpack = before_pack
 		Game.save_collection()
 		Game.collection_changed.emit()
+
+	# Actual streamed Ashvale outpost and its resident dialogue, from a review
+	# camera. This is not a travel or gameplay spawn change.
+	if settlement_manager != null:
+		var all_sites: Array = settlement_manager.get("_sites")
+		if not all_sites.is_empty():
+			var center: Vector2 = all_sites[0]["resolved"]
+			var ground: float = world.call("_height", center.x, center.y)
+			var village_cam := Camera3D.new()
+			world.add_child(village_cam)
+			var aim := Vector3(center.x, ground + 1.8, center.y)
+			village_cam.global_position = aim + Vector3(30, 16, 28)
+			village_cam.look_at(aim, Vector3.UP)
+			village_cam.current = true
+			await _capture_ui(out_dir, "settlement_ashvale", null)
+			cam.current = true
+			village_cam.queue_free()
+	if menu != null:
+		menu.set("dialogue_site_id", "ashvale")
+		menu.call("open_menu", "Dialogue")
+		await _capture_ui(out_dir, "game_resident_dialogue", menu)
+		menu.call("close_menu")
+		menu.set("dialogue_site_id", "")
 
 	# Capture every gameplay journal page, including the bottom of scrollable
 	# pages. These are real UI states, not mockups or stitched images.

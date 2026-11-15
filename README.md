@@ -284,7 +284,7 @@ quest choices and completion are saved locally.
 `docs/Resources.txt` is the full design brief. This is an initial Godot
 implementation, not the complete 14-settlement, 190-quest, 100-spell game.
 Full spell experimentation, companions, dungeons, bosses, and the wider story
-remain to be developed; the current settlement is not a full Ashvale. Basic controller
+remain to be developed; the settlement outposts are not yet full cities. Basic controller
 bindings are available, but have not yet been validated on physical devices.
 
 ### Additional combat controls
@@ -302,3 +302,20 @@ or strong power. A new recipe costs 10 starlight; its two elements affect slime
 reactions, and its shape, reach, power, Light cost and cooldown change gameplay.
 Created spells can be assigned to slots and persist with their mastery. This is
 a limited research system, not the complete creation/evolution design.
+
+### Settlement outposts and residents
+
+Fourteen small outposts use the settlement names in `docs/Resources.txt`. They
+are distributed across the existing streamed 10 km world, not full cities or
+new biomes. Nearby outposts stream in automatically; each has three exterior
+buildings and one named, talkable resident. Interiors are not accessible.
+Original Star Guard Ilyra remains at the starting shore.
+
+Each outpost resident offers one local main and one side quest: accept it, find
+the corresponding glowing item nearby, and return it to that resident for the
+listed reward. Quest acceptance, item collection and rewards persist locally.
+These are compact retrieval quests using a shared system, not the complete
+hand-authored main campaign or 165 side quests in the design brief.
+
+The buildings use a small subset of the free, CC0 **Medieval Village MegaKit
+Standard** by Quaternius; details and changes are in `assets/village/README.md`.
