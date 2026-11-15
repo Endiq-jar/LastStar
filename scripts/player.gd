@@ -405,6 +405,9 @@ func _apply_rig_colors() -> void:
 	# match the new party member.
 	var old := _visual_node()
 	if old and is_instance_valid(old):
+		# Free the name immediately: a queued child otherwise causes the replacement
+		# Visual to be auto-renamed until the end of the frame.
+		remove_child(old)
 		old.queue_free()
 	var data: Dictionary = Game.character()
 	rig = CharacterBuilder.build(self, data)
