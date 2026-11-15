@@ -375,13 +375,13 @@ func _reaction_multiplier(hit_element: int) -> float:
 
 
 func take_hit(power: float, hit_element: int, dir: Vector3) -> void:
-	var color := ELEMENT_COLORS[hit_element] if hit_element >= 0 and hit_element < ELEMENT_COLORS.size() else Color(0.65, 0.85, 1.0)
+	var color: Color = ELEMENT_COLORS[hit_element] if hit_element >= 0 and hit_element < ELEMENT_COLORS.size() else Color(0.65, 0.85, 1.0)
 	_apply_hit(power * _reaction_multiplier(hit_element), color, dir)
 
 
 func take_combined_hit(power: float, first: int, second: int, dir: Vector3) -> void:
-	var a := ELEMENT_COLORS[clampi(first, 0, ELEMENT_COLORS.size() - 1)]
-	var b := ELEMENT_COLORS[clampi(second, 0, ELEMENT_COLORS.size() - 1)]
+	var a: Color = ELEMENT_COLORS[clampi(first, 0, ELEMENT_COLORS.size() - 1)]
+	var b: Color = ELEMENT_COLORS[clampi(second, 0, ELEMENT_COLORS.size() - 1)]
 	var multiplier := (_reaction_multiplier(first) + _reaction_multiplier(second)) * 0.5
 	_apply_hit(power * multiplier, a.lerp(b, 0.5), dir)
 
