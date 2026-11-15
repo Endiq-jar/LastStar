@@ -157,7 +157,7 @@ func _build() -> void:
 	bottom_center.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	bottom_center.offset_left = -230
 	bottom_center.offset_right = 230
-	bottom_center.offset_top = -138
+	bottom_center.offset_top = -195
 	bottom_center.offset_bottom = -18
 	bottom_center.add_theme_constant_override("separation", 7)
 	root.add_child(bottom_center)

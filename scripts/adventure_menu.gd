@@ -297,6 +297,16 @@ func _quests() -> void:
 			_line("%s · %s · %s: %s" % [site["name"], kind.capitalize(), site[kind], detail])
 	if not any_quest:
 		_line("Speak with residents in settlements to discover local quests.")
+	_line("TRAVEL NOTES", 18, UI.ACCENT)
+	_line("Approximate straight-line directions from your position. Explore on foot; there is no map or fast travel.")
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	var manager: Node = player.get_parent().get_node_or_null("Settlements") if player != null else null
+	if manager != null:
+		var sites: Array = manager.get("_sites")
+		for site in sites:
+			var delta: Vector2 = site["resolved"] - Vector2(player.global_position.x, player.global_position.z)
+			var direction := "Here" if delta.length() < 30.0 else ("%s %s" % ["North" if delta.y < 0 else "South", "East" if delta.x > 0 else "West"])
+			_line("%s · %s · %dm" % [site["name"], direction, int(delta.length())])
 	_line("THE VALLEY REMEMBERS", 23, UI.ACCENT)
 	_line("Recover star sigils: %d / %d" % [Game.sigils_collected, Game.TOTAL_SIGILS])
 	_line("Clear wandering slimes: %d / 6" % mini(Game.slimes_defeated, 6))
@@ -512,10 +522,10 @@ func _settlement_dialogue() -> void:
 		var item: String = str(site[kind])
 		match status:
 			"available":
-				_line("%s quest: Could you find my %s? It lies close to this settlement." % [title, item])
+				_line("%s quest: Could you find my %s? It lies just %s of this settlement." % [title, item, "north" if kind == "main" else "east"])
 				_action("Accept %s quest · %s" % [title.to_lower(), item], _accept_settlement.bind(kind))
 			"active":
-				_line("%s quest: Find the %s nearby and bring it back." % [title, item])
+				_line("%s quest: Find the %s just %s of the settlement and bring it back." % [title, item, "north" if kind == "main" else "east"])
 			"found":
 				_action("Return %s · reward %s" % [item, "25 coins" if kind == "main" else "10 starlight"], _complete_settlement.bind(kind))
 			"done":

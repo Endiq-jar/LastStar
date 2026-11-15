@@ -34,7 +34,7 @@ func setup(world: Node3D, player: Node3D) -> void:
 func _resolve(origin: Vector2) -> Vector2:
 	# Avoid water and excessive gradients; deterministic offsets keep quest IDs
 	# and settlement locations stable across saves.
-	for radius in [0.0, 40.0, 80.0, 120.0, 180.0, 250.0]:
+	for radius in [0.0, 40.0, 80.0, 120.0, 180.0, 250.0, 350.0, 500.0]:
 		for i in range(8):
 			var p: Vector2 = origin + Vector2(cos(TAU * i / 8.0), sin(TAU * i / 8.0)) * radius
 			if bool(_world.call("_is_wet", p.x, p.y)):
@@ -43,11 +43,23 @@ func _resolve(origin: Vector2) -> Vector2:
 			if h < 2.0:
 				continue
 			var good := true
-			for offset in [Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14), Vector2(0, 0), Vector2(0, -27), Vector2(27, 0)]:
+			for offset in [Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14)]:
 				var q: Vector2 = p + offset
-				if bool(_world.call("_is_wet", q.x, q.y)) or absf(float(_world.call("_height", q.x, q.y)) - h) > 8.0:
+				var low := INF
+				var high := -INF
+				for corner in [Vector2(-2, -2), Vector2(-2, 2), Vector2(2, -2), Vector2(2, 2), Vector2.ZERO]:
+					var sample: Vector2 = q + corner
+					if bool(_world.call("_is_wet", sample.x, sample.y)):
+						good = false
+					var y := float(_world.call("_height", sample.x, sample.y))
+					low = minf(low, y)
+					high = maxf(high, y)
+				if high - low > 2.0 or absf(high - h) > 12.0:
 					good = false
-					break
+			for offset in [Vector2(0, -27), Vector2(27, 0)]:
+				var q: Vector2 = p + offset
+				if bool(_world.call("_is_wet", q.x, q.y)) or absf(float(_world.call("_height", q.x, q.y)) - h) > 12.0:
+					good = false
 			if good:
 				return p
 	return origin
@@ -82,9 +94,17 @@ func _build_site(site: Dictionary) -> Node3D:
 	var center: Vector2 = site["resolved"]
 	for offset in [Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14)]:
 		var p: Vector2 = center + offset
+		var low := INF
+		var high := -INF
+		for corner in [Vector2(-2, -2), Vector2(-2, 2), Vector2(2, -2), Vector2(2, 2), Vector2.ZERO]:
+			var sample: Vector2 = p + corner
+			var y := float(_world.call("_height", sample.x, sample.y))
+			low = minf(low, y)
+			high = maxf(high, y)
 		var house := _house()
-		house.position = Vector3(p.x, float(_world.call("_height", p.x, p.y)) - 0.1, p.y)
+		house.position = Vector3(p.x, high + 0.08, p.y)
 		root.add_child(house)
+		_add_foundation(house, high - low + 0.4)
 	var npc := NPC.new()
 	npc.set("site_id", str(site["id"]))
 	npc.position = Vector3(center.x, float(_world.call("_height", center.x, center.y)), center.y)
@@ -98,6 +118,20 @@ func _build_site(site: Dictionary) -> Node3D:
 		item.position = Vector3(p.x, float(_world.call("_height", p.x, p.y)) + 1.0, p.y)
 		root.add_child(item)
 	return root
+
+
+func _add_foundation(house: Node3D, depth: float) -> void:
+	var foundation := MeshInstance3D.new()
+	var block := BoxMesh.new()
+	block.size = Vector3(4.1, depth, 4.1)
+	foundation.mesh = block
+	foundation.position.y = -depth * 0.5
+	var stone := StandardMaterial3D.new()
+	stone.albedo_color = Color(0.43, 0.40, 0.39)
+	stone.roughness = 1.0
+	foundation.material_override = stone
+	foundation.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	house.add_child(foundation)
 
 
 func _part(parent: Node3D, scene: PackedScene, position: Vector3, yaw: float = 0.0) -> void:

@@ -833,7 +833,7 @@ func _run() -> void:
 			var village_cam := Camera3D.new()
 			world.add_child(village_cam)
 			var aim := Vector3(center.x, ground + 1.8, center.y)
-			village_cam.global_position = aim + Vector3(30, 16, 28)
+			village_cam.global_position = aim + Vector3(25, 32, 28)
 			village_cam.look_at(aim, Vector3.UP)
 			village_cam.current = true
 			await _capture_ui(out_dir, "settlement_ashvale", null)
