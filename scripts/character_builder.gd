@@ -170,6 +170,20 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	collar_mi.rotation_degrees = Vector3(90, 0, 0)
 	_no_shadow(collar_mi)
 
+	# The two traveller outfits have an original layered shoulder mantle and sash,
+	# in addition to their dyed tunic; these follow the animated torso.
+	if Game.outfit_style >= 3:
+		var trim := _toon(Color(0.72, 0.80, 0.49) if Game.outfit_style == 3 else Color(1.0, 0.78, 0.37))
+		for side in [-1.0, 1.0]:
+			var mantle := BoxMesh.new()
+			mantle.size = Vector3(0.20, 0.07, 0.28)
+			var shoulder := _no_shadow(_add(torso, mantle, trim, Vector3(0.16 * side, 1.40, 0), "TravellerMantle"))
+			shoulder.rotation_degrees.z = -12.0 * side
+		var sash := BoxMesh.new()
+		sash.size = Vector3(0.09, 0.36, 0.025)
+		var sash_node := _no_shadow(_add(torso, sash, trim, Vector3(0, 1.16, -0.193), "TravellerSash"))
+		sash_node.rotation_degrees.z = -28.0
+
 	# Elemental crest on the chest.
 	var crest := SphereMesh.new()
 	crest.radius = 0.045
