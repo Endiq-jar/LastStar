@@ -36,7 +36,7 @@ func _resolve(origin: Vector2) -> Vector2:
 	# and settlement locations stable across saves.
 	for radius in [0.0, 40.0, 80.0, 120.0, 180.0, 250.0]:
 		for i in range(8):
-			var p := origin + Vector2(cos(TAU * i / 8.0), sin(TAU * i / 8.0)) * radius
+			var p: Vector2 = origin + Vector2(cos(TAU * i / 8.0), sin(TAU * i / 8.0)) * radius
 			if bool(_world.call("_is_wet", p.x, p.y)):
 				continue
 			var h := float(_world.call("_height", p.x, p.y))
