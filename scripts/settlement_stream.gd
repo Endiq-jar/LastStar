@@ -8,6 +8,11 @@ const WINDOW_WALL := preload("res://assets/village/Wall_Plaster_Window_Wide_Flat
 const ROOF := preload("res://assets/village/Roof_RoundTiles_4x4.gltf")
 const GABLE := preload("res://assets/village/Roof_Front_Brick4.gltf")
 const WINDOW := preload("res://assets/village/Window_Wide_Flat1.gltf")
+const BED := preload("res://assets/furniture/bed_single_A.gltf")
+const TABLE := preload("res://assets/furniture/table_small.gltf")
+const CHAIR := preload("res://assets/furniture/chair_A_wood.gltf")
+const SHELF := preload("res://assets/furniture/shelf_B_small_decorated.gltf")
+const RUG := preload("res://assets/furniture/rug_rectangle_A.gltf")
 const NPC := preload("res://scripts/settler.gd")
 const ITEM := preload("res://scripts/settlement_item.gd")
 const HOUSE := preload("res://scripts/village_house.gd")
@@ -48,7 +53,7 @@ func _resolve(origin: Vector2) -> Vector2:
 				var q: Vector2 = p + offset
 				var low := INF
 				var high := -INF
-				for corner in [Vector2(-2, -2), Vector2(-2, 2), Vector2(2, -2), Vector2(2, 2), Vector2.ZERO]:
+				for corner in [Vector2(-3, -3), Vector2(-3, 3), Vector2(3, -3), Vector2(3, 3), Vector2.ZERO]:
 					var sample: Vector2 = q + corner
 					if bool(_world.call("_is_wet", sample.x, sample.y)):
 						good = false
@@ -98,13 +103,14 @@ func _build_site(site: Dictionary) -> Node3D:
 		var p: Vector2 = center + offset
 		var low := INF
 		var high := -INF
-		for corner in [Vector2(-2, -2), Vector2(-2, 2), Vector2(2, -2), Vector2(2, 2), Vector2.ZERO]:
+		for corner in [Vector2(-3, -3), Vector2(-3, 3), Vector2(3, -3), Vector2(3, 3), Vector2.ZERO]:
 			var sample: Vector2 = p + corner
 			var y := float(_world.call("_height", sample.x, sample.y))
 			low = minf(low, y)
 			high = maxf(high, y)
 		var house := _house()
 		house.position = Vector3(p.x, high + 0.08, p.y)
+		house.scale = Vector3(1.5, 1.0, 1.5)
 		root.add_child(house)
 		_add_foundation(house, high - low + 0.4)
 		_add_entrance_ramp(house, p, high + 0.08)
@@ -130,9 +136,9 @@ func _resident_position(center: Vector2, index: int) -> Vector2:
 		var pos := center + Vector2(cos(a), sin(a)) * radius
 		var near_house := false
 		for h in [Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14)]:
-			if pos.distance_to(center + h) < 5.0:
+			if pos.distance_to(center + h) < 6.5:
 				near_house = true
-			if pos.distance_to(center + h + Vector2(-1, -5)) < 2.5:
+			if pos.distance_to(center + h + Vector2(-1.5, -7.5)) < 2.5:
 				near_house = true
 		if not near_house and not bool(_world.call("_is_wet", pos.x, pos.y)):
 			return pos
@@ -197,8 +203,7 @@ func _part(parent: Node3D, scene: PackedScene, position: Vector3, yaw: float = 0
 func _house() -> Node3D:
 	var house := HOUSE.new()
 	house.name = "VillageHouse"
-	# A genuine 1m opening centred on x=-1, z=-2; the original decorative
-	# door is omitted so there is no invisible barrier or closed door mesh.
+	# The door fills the opening and swings around its left-hand hinge.
 	_part(house, DOOR_WALL, Vector3(-1, 0, -2), PI)
 	_part(house, WINDOW_WALL, Vector3(1, 0, -2), PI)
 	_part(house, WINDOW, Vector3(1, 0, -2), PI)
@@ -234,6 +239,11 @@ func _house() -> Node3D:
 	floor_mat.albedo_color = Color(0.40, 0.27, 0.18)
 	floor_mesh.material_override = floor_mat
 	house.add_child(floor_mesh)
+	_part(house, RUG, Vector3(0.05, 0.08, 0.0))
+	_part(house, BED, Vector3(1.0, 0.08, 0.35))
+	_part(house, TABLE, Vector3(-1.0, 0.08, 0.65))
+	_part(house, CHAIR, Vector3(-1.0, 0.08, 1.5), PI)
+	_part(house, SHELF, Vector3(0.0, 0.18, 1.85), PI)
 	return house
 
 
@@ -248,7 +258,7 @@ func _box_collision(body: StaticBody3D, size: Vector3, position: Vector3) -> Col
 
 
 func _add_entrance_ramp(house: Node3D, at: Vector2, floor_height: float) -> void:
-	var far_height := float(_world.call("_height", at.x - 1.0, at.y - 6.0))
+	var far_height := float(_world.call("_height", at.x - 1.5, at.y - 9.0))
 	var rise := floor_height - far_height
 	var length := sqrt(16.0 + rise * rise)
 	var angle := -atan2(rise, 4.0)

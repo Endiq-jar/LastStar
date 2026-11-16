@@ -593,6 +593,9 @@ func _talk_to_guard() -> void:
 	for hollow in get_tree().get_nodes_in_group("hollow_entrance"):
 		if hollow.call("try_interact", player):
 			return
+	for house in get_tree().get_nodes_in_group("village_house"):
+		if house.call("try_interact", player):
+			return
 	var nearest: Node3D = null
 	var distance := 8.0
 	for npc in get_tree().get_nodes_in_group("story_npc"):

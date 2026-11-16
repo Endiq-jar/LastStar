@@ -842,16 +842,22 @@ func _run() -> void:
 				door_ray.exclude = [player.get_rid()]
 				var wall_ray := PhysicsRayQueryParameters3D.create(house.to_global(Vector3(0, 1, 0)), house.to_global(Vector3(2.5, 1, 0)), 1)
 				wall_ray.exclude = [player.get_rid()]
-				var door_hit := space.intersect_ray(door_ray)
+				var door_closed := not space.intersect_ray(door_ray).is_empty()
 				var wall_hit := space.intersect_ray(wall_ray)
 				var old_pos := player.global_position
+				player.global_position = house.to_global(Vector3(-1, 0.1, -3))
+				var door_opened: bool = house.call("try_interact", player)
+				await get_tree().process_frame
+				await get_tree().physics_frame
+				var door_hit := space.intersect_ray(door_ray)
+				var door_closed_again: bool = house.call("try_interact", player) and not bool(house.get("_open"))
 				player.global_position = house.to_global(Vector3(0, 0.1, 0))
 				house.call("_process", 0.2)
 				var roof := house.get_node("RoofParts") as Node3D
 				var roof_hidden := not roof.visible
 				player.global_position = old_pos
 				house.call("_process", 0.2)
-				house_ok = door_hit.is_empty() and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
+				house_ok = door_closed and door_opened and door_hit.is_empty() and door_closed_again and house.scale.x > 1.0 and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
 	_log("INFO" if resident_ok and quest_ui_ok and house_ok else "FAIL", "20 residents=%s independent quest=%s enterable house=%s" % [str(resident_ok), str(quest_ui_ok), str(house_ok)])
 
 	# Quest rewards survive saves, can be used, and cannot be claimed twice.

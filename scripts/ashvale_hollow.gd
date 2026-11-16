@@ -111,10 +111,11 @@ func _enter() -> void:
 		_sentries_left = 2
 		for x in [-4.0, 4.0]:
 			var scout := SENTRY.new()
+			scout.is_orc = dungeon_id == "vault"
 			scout.position = Vector3(x, 0.15, -1)
 			chamber.add_child(scout)
 			scout.defeated.connect(_on_sentry_defeated)
-		Game.toast.emit("Defeat the two scouts. Dodge the red circles! Exit is at the rear right.")
+		Game.toast.emit("Defeat the two guardians. Dodge the red circles! Exit is at the rear right.")
 	else:
 		_add_chest()
 		Game.toast.emit("This Hollow is cleared. Leave when ready.")
@@ -143,7 +144,7 @@ func _on_sentry_defeated() -> void:
 	if _sentries_left == 0:
 		_spawn_warden()
 	else:
-		Game.toast.emit("One Hollow scout remains.")
+		Game.toast.emit("One guardian remains.")
 
 
 func _spawn_warden() -> void:

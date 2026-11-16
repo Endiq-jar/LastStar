@@ -2,6 +2,8 @@ extends CharacterBody3D
 ## A light but dangerous Hollow scout with an evadable targeted strike.
 signal defeated
 const CREATURE := preload("res://assets/creatures/Ghost_Skull.gltf")
+const ORC := preload("res://assets/creatures/Orc.gltf")
+var is_orc := false
 var hp := 260.0
 var _player: Node3D
 var _visual: Node3D
@@ -26,13 +28,13 @@ func _ready() -> void:
 	collision.shape = capsule
 	collision.position.y = 0.75
 	add_child(collision)
-	_visual = CREATURE.instantiate() as Node3D
-	_visual.scale = Vector3.ONE * 0.42
+	_visual = (ORC if is_orc else CREATURE).instantiate() as Node3D
+	_visual.scale = Vector3.ONE * (0.52 if is_orc else 0.42)
 	add_child(_visual)
 	_animation = _visual.find_child("AnimationPlayer", true, false) as AnimationPlayer
-	_play("Flying_Idle")
+	_play("Idle" if is_orc else "Flying_Idle")
 	_label = Label3D.new()
-	_label.text = "Hollow scout · 260"
+	_label.text = "Vault raider · 260" if is_orc else "Hollow scout · 260"
 	_label.position.y = 1.9
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.font_size = 36
@@ -73,7 +75,7 @@ func _physics_process(delta: float) -> void:
 				_warning.visible = true
 			_state = "warning"
 			_timer = 1.25
-			_play("Headbutt")
+			_play("Punch" if is_orc else "Headbutt")
 	elif _timer <= 0.0:
 		if is_instance_valid(_warning): _warning.visible = false
 		var diff := _player.global_position - _target
@@ -82,13 +84,13 @@ func _physics_process(delta: float) -> void:
 			_player.call("take_damage", Game.max_hp() * 0.10, global_position)
 		_state = "rest"
 		_timer = 3.0
-		_play("Flying_Idle")
+		_play("Idle" if is_orc else "Flying_Idle")
 
 
 func take_hit(power: float, _element: int, _direction: Vector3) -> void:
 	if _dead: return
 	hp = maxf(0.0, hp - maxf(0.0, power))
-	_label.text = "Hollow scout · %d" % int(hp)
+	_label.text = "%s · %d" % ["Vault raider" if is_orc else "Hollow scout", int(hp)]
 	if hp <= 0.0:
 		_dead = true
 		defeated.emit()
