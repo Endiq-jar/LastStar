@@ -1133,7 +1133,7 @@ func _run() -> void:
 		Game.dungeon_clears = {}
 		var story_probe_locations: Array = stream.get("_locations")
 		var story_probe_ids := {}
-		for story_probe_location in story_probe_locations: story_probe_ids[str(story_probe_location["id"])] = true
+		for story_probe_entry in story_probe_locations: story_probe_ids[str(story_probe_entry["id"])] = true
 		memories_ok = story_probe_locations.size() == 22 and story_probe_ids.size() == 22 and Game.all_story_memories().size() == 25
 		for chosen in ["memory_04", "memory_12", "memory_25"]:
 			var story_probe_location: Dictionary = {}
