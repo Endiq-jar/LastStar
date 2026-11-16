@@ -338,6 +338,8 @@ func _quests() -> void:
 		_line("Main · A Memory in the Hollow: %s" % memory_status)
 	_line("ASHVALE HOLLOW", 18, UI.ACCENT)
 	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Optional challenge: find the Hollow entrance near Ashvale. Dodge the Warden's red warning circles. Defeat it for 100 Ane and 30 starlight.")
+	_line("MEMORY VAULT", 18, UI.ACCENT)
+	_line("Cleared · Verdant Bloom recovered" if bool(Game.dungeon_clears.get("memory_vault", false)) else "Find the Memory Vault near Lunareth. Defeat its scouts and the two-phase sentinel to learn Verdant Bloom.")
 	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
 	var any_quest := false
 	for site in SETTLEMENTS.SITES:

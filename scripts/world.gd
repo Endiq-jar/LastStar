@@ -83,6 +83,7 @@ func _ready() -> void:
 	_spawn_story_contact()
 	_spawn_settlements()
 	_spawn_ashvale_hollow()
+	_spawn_memory_vault()
 
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
@@ -1258,6 +1259,19 @@ func _spawn_ashvale_hollow() -> void:
 	add_child(hollow)
 	hollow.add_to_group("hollow_entrance")
 	hollow.call("setup", self, get_node("Player"), sites[0]["resolved"])
+
+
+func _spawn_memory_vault() -> void:
+	var manager := get_node_or_null("Settlements")
+	if manager == null: return
+	var sites: Array = manager.get("_sites")
+	if sites.size() < 3: return
+	var vault := Node3D.new()
+	vault.name = "MemoryVault"
+	vault.set_script(load("res://scripts/ashvale_hollow.gd"))
+	add_child(vault)
+	vault.add_to_group("hollow_entrance")
+	vault.call("setup", self, get_node("Player"), sites[2]["resolved"], "vault")
 
 
 func _build_grass_field() -> void:

@@ -1,8 +1,14 @@
 extends CharacterBody3D
-## Original temporary Hollow guardian. The requested Mantis models are not bundled.
+## Two-phase guardian using Quaternius CC0 animated creature models.
 ## Visible ground telegraphs, deliberate recovery windows and a distinct second
 ## pattern make this a readable encounter rather than a contact-damage sponge.
 signal defeated
+const DEMON := preload("res://assets/creatures/Demon.gltf")
+const BLUE_DEMON := preload("res://assets/creatures/BlueDemon.gltf")
+var is_vault := false
+var _visual: Node3D
+var _animation: AnimationPlayer
+var _attack_number := 0
 var max_hp := 1100.0
 var hp := 1100.0
 var phase := 1
@@ -20,6 +26,9 @@ func _ready() -> void:
 	collision_layer = 8
 	collision_mask = 1
 	_player = get_tree().get_first_node_in_group("player") as Node3D
+	if is_vault:
+		max_hp = 1550.0
+		hp = max_hp
 	var collider := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
 	shape.radius = 0.7
@@ -27,25 +36,11 @@ func _ready() -> void:
 	collider.shape = shape
 	collider.position.y = 1.0
 	add_child(collider)
-	var body := MeshInstance3D.new()
-	var mesh := CapsuleMesh.new()
-	mesh.radius = 0.65
-	mesh.height = 2.0
-	body.mesh = mesh
-	body.position.y = 1.0
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.22, 0.13, 0.31)
-	body.material_override = material
-	add_child(body)
-	for side in [-1.0, 1.0]:
-		var horn := MeshInstance3D.new()
-		var horn_mesh := PrismMesh.new()
-		horn_mesh.size = Vector3(0.30, 0.72, 0.30)
-		horn.mesh = horn_mesh
-		horn.material_override = material
-		horn.position = Vector3(side * 0.42, 2.05, 0)
-		horn.rotation.z = side * -0.45
-		add_child(horn)
+	_visual = (BLUE_DEMON if is_vault else DEMON).instantiate() as Node3D
+	_visual.scale = Vector3.ONE * 0.68
+	add_child(_visual)
+	_animation = _visual.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	_play_animation("Idle")
 	_label = Label3D.new()
 	_label.position.y = 2.7
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -79,16 +74,23 @@ func _physics_process(delta: float) -> void:
 		toward.y = 0
 		if toward.length() > 3.0:
 			velocity = toward.normalized() * (2.0 if phase == 1 else 2.6)
+			_visual.rotation.y = lerp_angle(_visual.rotation.y, atan2(toward.x, toward.z), 6.0 * delta)
+			_play_animation("Walk")
 			move_and_slide()
+		else:
+			_play_animation("Idle")
 		if _timer <= 0.0:
 			_state = "warning"
-			_timer = 1.6 if phase == 1 else 1.25
-			_target = _player.global_position if phase == 1 else global_position
+			_timer = 1.6 if phase == 1 else (1.15 if is_vault else 1.25)
+			_attack_number += 1
+			var targeted := phase == 1 or (is_vault and _attack_number % 2 == 0)
+			_target = _player.global_position if targeted else global_position
+			_play_animation("Punch")
 			_target.y = global_position.y + 0.08
 			if is_instance_valid(_warning):
 				_warning.global_position = _target
 				_warning.visible = true
-			Game.toast.emit("Hollow Warden: %s — dodge the red circle!" % ("strike" if phase == 1 else "shockwave"))
+			Game.toast.emit("%s: %s — dodge the red circle!" % ["Vault Sentinel" if is_vault else "Hollow Warden", "strike" if targeted else "shockwave"])
 	elif _timer <= 0.0:
 		if is_instance_valid(_warning): _warning.visible = false
 		var delta_pos := _player.global_position - _target
@@ -104,7 +106,7 @@ func take_hit(power: float, _element: int, _direction: Vector3) -> void:
 	hp = maxf(0.0, hp - maxf(power, 0.0))
 	if hp <= max_hp * 0.5 and phase == 1:
 		phase = 2
-		Game.toast.emit("Warden phase 2: it will strike around itself!")
+		Game.toast.emit("%s phase 2: %s" % ["Vault Sentinel" if is_vault else "Warden", "it alternates strikes and shockwaves!" if is_vault else "it will strike around itself!"])
 	_update_label()
 	if hp <= 0.0:
 		_dead = true
@@ -118,4 +120,18 @@ func take_combined_hit(power: float, first: int, _second: int, direction: Vector
 
 
 func _update_label() -> void:
-	_label.text = "Hollow Warden · Phase %d\n%d / %d" % [phase, int(hp), int(max_hp)]
+	_label.text = "%s · Phase %d\n%d / %d" % ["Vault Sentinel" if is_vault else "Hollow Warden", phase, int(hp), int(max_hp)]
+
+
+func _play_animation(part: String) -> void:
+	if _animation == null:
+		return
+	for name in _animation.get_animation_list():
+		if str(name).to_lower().ends_with(part.to_lower()):
+			if _animation.current_animation != name or not _animation.is_playing():
+				_animation.play(name)
+			return
+
+
+func _exit_tree() -> void:
+	if is_instance_valid(_warning): _warning.queue_free()

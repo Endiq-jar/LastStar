@@ -940,6 +940,10 @@ func _run() -> void:
 		await get_tree().physics_frame
 		if DisplayServer.get_name() != "headless":
 			await _capture_ui(out_dir, "game_ashvale_hollow", null)
+		var scouts: Array = get_tree().get_nodes_in_group("enemy").filter(func(e): return e.get_parent() == hollow.get("chamber"))
+		hollow_ok = hollow_ok and scouts.size() == 2 and hollow.get("boss") == null
+		for scout in scouts:
+			scout.call("take_hit", 9999.0, 0, Vector3.ZERO)
 		var warden := hollow.get("boss") as Node3D
 		var ilyra := world.get_node_or_null("StarGuardIlyra")
 		if warden != null and ilyra != null:
@@ -998,6 +1002,44 @@ func _run() -> void:
 		Game.starlight = original_light
 		Game.save_collection()
 		Game.collection_changed.emit()
+	var vault_ok := false
+	var vault := world.get_node_or_null("MemoryVault")
+	if vault != null and hollow_player != null:
+		var old_pos := hollow_player.global_position
+		var old_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+		var old_coins: int = Game.coins
+		var old_light: int = Game.starlight
+		var old_levels: Dictionary = Game.wander.levels.duplicate(true)
+		Game.dungeon_clears.erase("memory_vault")
+		hollow_player.global_position = vault.get("entrance") + Vector3(0, 0.2, 0)
+		vault_ok = vault.call("try_interact", hollow_player)
+		var vault_scouts: Array = get_tree().get_nodes_in_group("enemy").filter(func(e): return e.get_parent() == vault.get("chamber"))
+		vault_ok = vault_ok and vault_scouts.size() == 2
+		for scout in vault_scouts:
+			scout.call("take_hit", 9999.0, 0, Vector3.ZERO)
+		var sentinel := vault.get("boss") as Node3D
+		if sentinel != null:
+			sentinel.call("take_hit", 800.0, 0, Vector3.ZERO)
+			vault_ok = vault_ok and int(sentinel.get("phase")) == 2
+			sentinel.call("take_hit", 9999.0, 0, Vector3.ZERO)
+			vault_ok = vault_ok and bool(Game.dungeon_clears.get("memory_vault", false)) and Game.coins == old_coins + 150 and Game.starlight == old_light + 50 and Game.wander.known("verdant_bloom")
+			vault.call("_on_defeated")
+			vault_ok = vault_ok and Game.coins == old_coins + 150
+			Game.dungeon_clears = {}
+			Game.load_collection()
+			vault_ok = vault_ok and bool(Game.dungeon_clears.get("memory_vault", false))
+		else:
+			vault_ok = false
+		hollow_player.global_position = vault.get("_exit_point")
+		vault_ok = vault.call("try_interact", hollow_player) and vault_ok
+		hollow_player.global_position = old_pos
+		Game.dungeon_clears = old_clears
+		Game.coins = old_coins
+		Game.starlight = old_light
+		Game.wander.levels = old_levels
+		Game.save_wander()
+		Game.save_collection()
+	_log("INFO" if vault_ok else "FAIL", "Memory Vault scouts, sentinel, reward and persistence=%s" % str(vault_ok))
 	_log("INFO" if hollow_ok else "FAIL", "Ashvale Hollow entry, boss phases, damage and reward=%s" % str(hollow_ok))
 	_log("INFO" if story_companion_ok else "FAIL", "Ilyra companion, memory choices, persistence and safe spatial movement=%s" % str(story_companion_ok))
 

@@ -1,12 +1,15 @@
 extends Node3D
-## A compact optional Hollow. Geometry exists only while inside to limit cost.
+## Two compact optional Hollows, each streamed only while inside.
 const FLOOR := preload("res://assets/dungeon/floor_tile_large.gltf.glb")
 const WALL := preload("res://assets/dungeon/wall.gltf.glb")
 const DOOR := preload("res://assets/dungeon/wall_doorway.glb")
 const TORCH := preload("res://assets/dungeon/torch_lit.gltf.glb")
 const CHEST := preload("res://assets/dungeon/chest.glb")
 const WARDEN := preload("res://scripts/hollow_warden.gd")
+const SENTRY := preload("res://scripts/hollow_sentry.gd")
 const ALTITUDE := 500.0
+var dungeon_id := "ashvale"
+var _sentries_left := 0
 var player: CharacterBody3D
 var entrance := Vector3.ZERO
 var return_point := Vector3.ZERO
@@ -16,7 +19,8 @@ var boss: Node3D
 var _exit_point := Vector3.ZERO
 
 
-func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
+func setup(world: Node3D, actor: CharacterBody3D, center: Vector2, which: String = "ashvale") -> void:
+	dungeon_id = which
 	player = actor
 	var p := center + Vector2(0, -22)
 	entrance = Vector3(p.x, float(world.call("_height", p.x, p.y)), p.y)
@@ -24,7 +28,7 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
 	var door := DOOR.instantiate() as Node3D
 	add_child(door)
 	var label := Label3D.new()
-	label.text = "ASHVALE HOLLOW\nF / Talk to enter · Challenging"
+	label.text = "%s\nF / Talk to enter · Challenging" % ("MEMORY VAULT" if dungeon_id == "vault" else "ASHVALE HOLLOW")
 	label.position = Vector3(0, 4.5, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 48
@@ -36,11 +40,14 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
 
 func try_interact(actor: Node3D) -> bool:
 	if inside:
-		if Game.ashvale_hollow_cleared and is_instance_valid(chamber):
+		if _is_cleared() and is_instance_valid(chamber):
 			var chest := chamber.get_node_or_null("VictoryChest") as Node3D
 			if chest != null and actor.global_position.distance_to(chest.global_position) < 3.5:
-				if not Game.collect_hollow_memory():
-					Game.toast.emit("The memory fragment has already been recovered.")
+				if dungeon_id == "ashvale":
+					if not Game.collect_hollow_memory():
+						Game.toast.emit("The memory fragment has already been recovered.")
+				else:
+					Game.toast.emit("The Vault's reward has already been claimed.")
 				return true
 		if actor.global_position.distance_to(_exit_point) < 4.0:
 			_leave()
@@ -100,15 +107,17 @@ func _enter() -> void:
 	_exit_point = chamber.global_position + Vector3(7, 0, 8)
 	player.global_position = chamber.global_position + Vector3(0, 0.2, 7.0)
 	player.velocity = Vector3.ZERO
-	if not Game.ashvale_hollow_cleared:
-		boss = WARDEN.new()
-		boss.position = Vector3(0, 0.15, -4)
-		chamber.add_child(boss)
-		boss.connect("defeated", _on_defeated)
-		Game.toast.emit("Warden ahead. Dodge red circles! Exit is marked at the rear right.")
+	if not _is_cleared():
+		_sentries_left = 2
+		for x in [-4.0, 4.0]:
+			var scout := SENTRY.new()
+			scout.position = Vector3(x, 0.15, -1)
+			chamber.add_child(scout)
+			scout.defeated.connect(_on_sentry_defeated)
+		Game.toast.emit("Defeat the two scouts. Dodge the red circles! Exit is at the rear right.")
 	else:
 		_add_chest()
-		Game.toast.emit("Ashvale Hollow is cleared. Leave when ready.")
+		Game.toast.emit("This Hollow is cleared. Leave when ready.")
 
 
 func _box(parent: Node3D, at: Vector3, size: Vector3) -> void:
@@ -124,14 +133,48 @@ func _box(parent: Node3D, at: Vector3, size: Vector3) -> void:
 	parent.add_child(body)
 
 
+func _is_cleared() -> bool:
+	return bool(Game.dungeon_clears.get("memory_vault", false)) if dungeon_id == "vault" else Game.ashvale_hollow_cleared
+
+
+func _on_sentry_defeated() -> void:
+	if not inside or _sentries_left <= 0: return
+	_sentries_left -= 1
+	if _sentries_left == 0:
+		_spawn_warden()
+	else:
+		Game.toast.emit("One Hollow scout remains.")
+
+
+func _spawn_warden() -> void:
+	if not inside or not is_instance_valid(chamber) or is_instance_valid(boss): return
+	boss = WARDEN.new()
+	boss.set("is_vault", dungeon_id == "vault")
+	boss.position = Vector3(0, 0.15, -4)
+	chamber.add_child(boss)
+	boss.connect("defeated", _on_defeated)
+	Game.toast.emit("%s awakened! Watch its attacks." % ("Vault Sentinel" if dungeon_id == "vault" else "Hollow Warden"))
+
+
 func _on_defeated() -> void:
-	if not Game.ashvale_hollow_cleared:
-		Game.ashvale_hollow_cleared = true
-		Game.starlight += 30
-		Game.coins += 100
+	if not _is_cleared():
+		if dungeon_id == "vault":
+			Game.dungeon_clears["memory_vault"] = true
+			Game.starlight += 50
+			Game.coins += 150
+			# Mark complete before learn() can emit the autosave signal.
+			Game.wander_levels["verdant_bloom"] = 1
+			if Game.wander != null:
+				Game.wander.learn("verdant_bloom")
+				Game.save_wander()
+			Game.toast.emit("Memory Vault cleared: Verdant Bloom, 50 starlight, 150 Ane!")
+		else:
+			Game.ashvale_hollow_cleared = true
+			Game.starlight += 30
+			Game.coins += 100
+			Game.toast.emit("Hollow cleared! +30 starlight, +100 Ane. Search the chest.")
 		Game.save_collection()
 		Game.collection_changed.emit()
-		Game.toast.emit("Hollow cleared! +30 starlight, +100 Ane. Return to the entrance.")
 	_add_chest()
 
 
@@ -142,7 +185,7 @@ func _add_chest() -> void:
 	chest.position = Vector3(0, 0.05, -6)
 	chamber.add_child(chest)
 	var label := Label3D.new()
-	label.text = "F / Talk · Memory fragment"
+	label.text = "F / Talk · Memory fragment" if dungeon_id == "ashvale" else "Vault cleared · reward claimed"
 	label.position = Vector3(0, 1.6, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 36

@@ -155,6 +155,7 @@ var story_complete := false
 var guard_story: Dictionary = {}
 var settlement_quests: Dictionary = {}
 var ashvale_hollow_cleared := false
+var dungeon_clears: Dictionary = {}
 const SETTLEMENT_DATA := preload("res://scripts/settlement_data.gd")
 var wander_levels: Dictionary = {}
 var wander_slots: Array = []
@@ -437,6 +438,7 @@ func save_collection() -> bool:
 	cfg.set_value("story", "guard_story", guard_story)
 	cfg.set_value("story", "settlement_quests", settlement_quests)
 	cfg.set_value("story", "ashvale_hollow_cleared", ashvale_hollow_cleared)
+	cfg.set_value("story", "dungeon_clears", dungeon_clears)
 	cfg.set_value("wander", "levels", wander_levels)
 	cfg.set_value("wander", "slots", wander_slots)
 	cfg.set_value("story", "dropped_items", dropped_items)
@@ -468,6 +470,8 @@ func load_collection() -> void:
 	var settlement_data = cfg.get_value("story", "settlement_quests", {})
 	settlement_quests = settlement_data if settlement_data is Dictionary else {}
 	ashvale_hollow_cleared = bool(cfg.get_value("story", "ashvale_hollow_cleared", false))
+	var saved_dungeon_clears = cfg.get_value("story", "dungeon_clears", {})
+	dungeon_clears = saved_dungeon_clears if saved_dungeon_clears is Dictionary else {}
 	var levels_data = cfg.get_value("wander", "levels", {})
 	wander_levels = levels_data if levels_data is Dictionary else {}
 	var slots_data = cfg.get_value("wander", "slots", [])
