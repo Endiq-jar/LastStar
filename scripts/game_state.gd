@@ -646,6 +646,51 @@ func guard_complete(quest: String) -> bool:
 	return true
 
 
+# The Memory Vault story thread builds on the existing Ilyra save dictionary.
+# These keys default safely for players with saves from before this chapter.
+func accept_hollow_memory() -> bool:
+	if not bool(guard_story.get("seal_done", false)) or bool(guard_story.get("memory_accepted", false)):
+		return false
+	guard_story["memory_accepted"] = true
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func collect_hollow_memory() -> bool:
+	if not ashvale_hollow_cleared or bool(guard_story.get("memory_found", false)):
+		return false
+	guard_story["memory_found"] = true
+	save_collection()
+	collection_changed.emit()
+	toast.emit("Memory fragment recovered. Bring it to Ilyra.")
+	return true
+
+
+func resolve_hollow_memory(choice: String) -> bool:
+	if not ["share", "study"].has(choice) or not bool(guard_story.get("memory_accepted", false)) or not bool(guard_story.get("memory_found", false)) or bool(guard_story.get("memory_done", false)) or wander == null:
+		return false
+	# Persist the decision before learning emits a save signal.
+	guard_story["memory_done"] = true
+	guard_story["memory_choice"] = choice
+	guard_story["ilyra_bond"] = 2 if choice == "share" else 1
+	var spell := "sun_spear" if choice == "share" else "tide_step"
+	wander.learn(spell)
+	save_wander()
+	collection_changed.emit()
+	toast.emit("Memory understood: %s learned." % wander.spell(spell)["name"])
+	return true
+
+
+func set_ilyra_following(following: bool) -> bool:
+	if not bool(guard_story.get("seal_done", false)):
+		return false
+	guard_story["ilyra_following"] = following
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
 func inventory_capacity() -> int:
 	return 10 + int(BACKPACK_BONUS[equipped_backpack])
 

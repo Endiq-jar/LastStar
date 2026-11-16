@@ -333,6 +333,9 @@ func _quests() -> void:
 		_line("Main · A Light Remembered: recover a star sigil (%d / 1), then return to Ilyra." % mini(Game.sigils_collected, 1))
 	if bool(story.get("hollow_accepted", false)):
 		_line("Side · Hollow Signs: %s" % ("completed. Reward: Arc Lance." if bool(story.get("hollow_done", false)) else "defeat three slimes (%d / 3), then return to Ilyra." % mini(Game.slimes_defeated, 3)))
+	if bool(story.get("memory_accepted", false)):
+		var memory_status := "Completed · choice: %s" % str(story.get("memory_choice", "")) if bool(story.get("memory_done", false)) else ("Return the fragment to Ilyra" if bool(story.get("memory_found", false)) else "Defeat the Warden, then recover the fragment from the chest")
+		_line("Main · A Memory in the Hollow: %s" % memory_status)
 	_line("ASHVALE HOLLOW", 18, UI.ACCENT)
 	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Optional challenge: find the Hollow entrance near Ashvale. Dodge the Warden's red warning circles. Defeat it for 100 Ane and 30 starlight.")
 	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
@@ -566,6 +569,27 @@ func _dialogue() -> void:
 			_action("Complete Hollow Signs · learn Arc Lance", _complete_guard.bind("hollow"))
 		else:
 			_line("Please defeat three slimes. Progress: %d / 3." % mini(Game.slimes_defeated, 3))
+		if bool(story.get("seal_done", false)):
+			_line("My Gift can mend wounds, but I could not save the patrol that vanished into the Hollow. I still carry their unanswered report.")
+			if bool(story.get("ilyra_following", false)):
+				_line("Ilyra accompanies you and heals you during nearby fights when your health is low.")
+				_action("Ask Ilyra to return to Ashvale", _set_ilyra_following.bind(false))
+			else:
+				_action("Ask Ilyra to travel with you", _set_ilyra_following.bind(true))
+			if not bool(story.get("memory_accepted", false)):
+				_line("The patrol described a memory fragment beyond the Ashvale Hollow's guardian. Could you recover it?")
+				_action("Begin A Memory in the Hollow", _accept_hollow_memory)
+			elif bool(story.get("memory_done", false)):
+				if story.get("memory_choice", "") == "share":
+					_line("The patrol's families know the truth. Thank you for trusting me with it. Our bond strengthens my healing Gift.")
+				else:
+					_line("We kept the fragment safe for the scholars. I still hope the families can hear its story someday.")
+			elif bool(story.get("memory_found", false)):
+				_line("The fragment remembers the patrol sealing a breach, not abandoning their post. What should we do with it?")
+				_action("Share the truth with the families · learn Sun Spear", _resolve_hollow_memory.bind("share"))
+				_action("Preserve it for research · learn Tide Step", _resolve_hollow_memory.bind("study"))
+			else:
+				_line("Defeat the Warden in Ashvale Hollow, then interact with the chest to recover the fragment. You can leave and try again.")
 
 
 func _settlement_dialogue() -> void:
@@ -701,4 +725,21 @@ func _buy_sunrise_outfit() -> void:
 
 func _toggle_weapons() -> void:
 	_show_weapons = not _show_weapons
+	_refresh()
+
+
+func _accept_hollow_memory() -> void:
+	_status = "A Memory in the Hollow added to your journal." if Game.accept_hollow_memory() else "Complete Ilyra's first quest first."
+	_refresh()
+
+
+func _resolve_hollow_memory(choice: String) -> void:
+	_status = "Memory resolved. Your new spell is available in Story and the spell wheel." if Game.resolve_hollow_memory(choice) else "The memory is not ready to resolve."
+	_refresh()
+
+
+func _set_ilyra_following(following: bool) -> void:
+	_status = "Ilyra joins your journey." if following else "Ilyra returns to Ashvale."
+	if not Game.set_ilyra_following(following):
+		_status = "Complete Ilyra's first quest first."
 	_refresh()

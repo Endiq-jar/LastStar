@@ -922,10 +922,7 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 
 	# Spatial spells relocate the caster instead of dealing damage.
 	if id == "tide_step":
-		var dest := global_position + forward * minf(reach, 14.0)
-		var terrain := _terrain()
-		if terrain != null:
-			dest.y = terrain.get_height_at(dest.x, dest.z) + SPAWN_CLEARANCE
+		var dest := _safe_spatial_destination(forward, minf(reach, 14.0))
 		global_position = dest
 		velocity = Vector3.ZERO
 		FX.sparkle(get_parent(), dest + Vector3(0, 1.0, 0), color)
@@ -968,6 +965,29 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 		arm.rotation.x = -2.2
 		var tw := create_tween()
 		tw.tween_property(arm, "rotation:x", 0.2, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _safe_spatial_destination(forward: Vector3, distance: float) -> Vector3:
+	# Never use the outdoor terrain height inside a Hollow, and do not blink
+	# through walls or onto empty air. Query the same collision layer as walking.
+	var space := get_world_3d().direct_space_state
+	var direction := Vector3(forward.x, 0, forward.z).normalized()
+	if direction.length_squared() < 0.01:
+		return global_position
+	var start := global_position + Vector3(0, 0.9, 0)
+	var ray := PhysicsRayQueryParameters3D.create(start, start + direction * distance, 1)
+	ray.exclude = [get_rid()]
+	var hit := space.intersect_ray(ray)
+	var travel: float = distance
+	if not hit.is_empty():
+		travel = maxf(0.0, start.distance_to(hit["position"]) - 0.8)
+	var dest := global_position + direction * travel
+	var floor_ray := PhysicsRayQueryParameters3D.create(dest + Vector3(0, 3, 0), dest - Vector3(0, 10, 0), 1)
+	floor_ray.exclude = [get_rid()]
+	var floor_hit := space.intersect_ray(floor_ray)
+	if floor_hit.is_empty():
+		return global_position
+	return Vector3(dest.x, float(floor_hit["position"].y) + SPAWN_CLEARANCE, dest.z)
 
 
 func _plunge_impact() -> void:

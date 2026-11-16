@@ -36,6 +36,12 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
 
 func try_interact(actor: Node3D) -> bool:
 	if inside:
+		if Game.ashvale_hollow_cleared and is_instance_valid(chamber):
+			var chest := chamber.get_node_or_null("VictoryChest") as Node3D
+			if chest != null and actor.global_position.distance_to(chest.global_position) < 3.5:
+				if not Game.collect_hollow_memory():
+					Game.toast.emit("The memory fragment has already been recovered.")
+				return true
 		if actor.global_position.distance_to(_exit_point) < 4.0:
 			_leave()
 			return true
@@ -135,6 +141,14 @@ func _add_chest() -> void:
 	chest.name = "VictoryChest"
 	chest.position = Vector3(0, 0.05, -6)
 	chamber.add_child(chest)
+	var label := Label3D.new()
+	label.text = "F / Talk · Memory fragment"
+	label.position = Vector3(0, 1.6, 0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 36
+	label.pixel_size = 0.003
+	label.outline_size = 6
+	chest.add_child(label)
 
 
 func _leave() -> void:

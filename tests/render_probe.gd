@@ -918,6 +918,7 @@ func _run() -> void:
 
 	# Real entrance, two-phase telegraph combat, one-time reward, and safe exit.
 	var hollow_ok := false
+	var story_companion_ok := false
 	var hollow := world.get_node_or_null("AshvaleHollow")
 	var hollow_player := world.get_node_or_null("Player") as CharacterBody3D
 	if hollow != null and hollow_player != null and settlement_manager != null:
@@ -926,6 +927,11 @@ func _run() -> void:
 		var original_coins: int = Game.coins
 		var original_light: int = Game.starlight
 		var original_clear: bool = Game.ashvale_hollow_cleared
+		var original_story: Dictionary = Game.guard_story.duplicate(true)
+		var original_wander: Dictionary = Game.wander.levels.duplicate(true)
+		var original_slots: Array = Game.wander.slots.duplicate()
+		Game.guard_story = {"seal_done": true}
+		story_companion_ok = Game.set_ilyra_following(true) and Game.accept_hollow_memory() and not Game.accept_hollow_memory() and not Game.resolve_hollow_memory("share")
 		Game.ashvale_hollow_cleared = false
 		var entrance: Vector3 = hollow.get("entrance")
 		hollow_player.global_position = entrance + Vector3(0, 0.2, 0)
@@ -935,6 +941,20 @@ func _run() -> void:
 		if DisplayServer.get_name() != "headless":
 			await _capture_ui(out_dir, "game_ashvale_hollow", null)
 		var warden := hollow.get("boss") as Node3D
+		var ilyra := world.get_node_or_null("StarGuardIlyra")
+		if warden != null and ilyra != null:
+			Game.set_hp(Game.max_hp() * 0.5)
+			var hp_before_heal: float = Game.current_hp()
+			ilyra.set("_support_cooldown", 0.0)
+			ilyra.call("_process", 0.1)
+			story_companion_ok = story_companion_ok and Game.current_hp() > hp_before_heal and float(ilyra.get("_support_cooldown")) > 0.0
+			Game.set_hp(original_hp)
+			var chamber: Node3D = hollow.get("chamber")
+			var previous_pos := hollow_player.global_position
+			hollow_player.global_position = chamber.global_position + Vector3(0, 0.2, 0)
+			var blink: Vector3 = hollow_player.call("_safe_spatial_destination", Vector3.RIGHT, 14.0)
+			story_companion_ok = story_companion_ok and blink.x < chamber.global_position.x + 9.5 and absf(blink.y - chamber.global_position.y) < 1.0
+			hollow_player.global_position = previous_pos
 		if warden == null:
 			hollow_ok = false
 		else:
@@ -949,9 +969,20 @@ func _run() -> void:
 			hollow_ok = hollow_ok and Game.ashvale_hollow_cleared and Game.coins == original_coins + 100 and Game.starlight == original_light + 30
 			hollow.call("_on_defeated")
 			hollow_ok = hollow_ok and Game.coins == original_coins + 100
+			var chest := (hollow.get("chamber") as Node3D).get_node_or_null("VictoryChest") as Node3D
+			if chest != null:
+				hollow_player.global_position = chest.global_position + Vector3(0, 0.2, 1)
+				story_companion_ok = hollow.call("try_interact", hollow_player) and bool(Game.guard_story.get("memory_found", false)) and story_companion_ok
+			else:
+				story_companion_ok = false
+			story_companion_ok = Game.resolve_hollow_memory("share") and not Game.resolve_hollow_memory("study") and Game.wander.known("sun_spear") and story_companion_ok
 			Game.ashvale_hollow_cleared = false
+			Game.guard_story = {}
 			Game.load_collection()
 			hollow_ok = hollow_ok and Game.ashvale_hollow_cleared
+			story_companion_ok = story_companion_ok and bool(Game.guard_story.get("ilyra_following", false)) and str(Game.guard_story.get("memory_choice", "")) == "share" and int(Game.guard_story.get("ilyra_bond", 0)) == 2 and Game.wander_levels.has("sun_spear")
+			Game.guard_story = {"seal_done": true, "memory_accepted": true, "memory_found": true}
+			story_companion_ok = Game.resolve_hollow_memory("study") and Game.wander.known("tide_step") and int(Game.guard_story.get("ilyra_bond", 0)) == 1 and story_companion_ok
 		var exit_point: Vector3 = hollow.get("_exit_point")
 		hollow_player.global_position = exit_point
 		hollow_ok = hollow.call("try_interact", hollow_player) and not bool(hollow.get("inside")) and hollow_ok
@@ -959,11 +990,16 @@ func _run() -> void:
 		hollow_player.velocity = Vector3.ZERO
 		Game.set_hp(original_hp)
 		Game.ashvale_hollow_cleared = original_clear
+		Game.guard_story = original_story
+		Game.wander.levels = original_wander
+		Game.wander.slots.assign(original_slots)
+		Game.save_wander()
 		Game.coins = original_coins
 		Game.starlight = original_light
 		Game.save_collection()
 		Game.collection_changed.emit()
 	_log("INFO" if hollow_ok else "FAIL", "Ashvale Hollow entry, boss phases, damage and reward=%s" % str(hollow_ok))
+	_log("INFO" if story_companion_ok else "FAIL", "Ilyra companion, memory choices, persistence and safe spatial movement=%s" % str(story_companion_ok))
 
 	# The compact HUD list opens from its button and shows independent NPC quests.
 	var quest_box_ok := false

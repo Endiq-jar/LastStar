@@ -756,6 +756,9 @@ func _refresh_quest_box() -> void:
 	if bool(story.get("hollow_accepted", false)):
 		var status := "Completed" if bool(story.get("hollow_done", false)) else "Defeat slimes (%d/3), then return to Ilyra" % mini(Game.slimes_defeated, 3)
 		lines.append("Ilyra · Hollow Signs\n%s" % status)
+	if bool(story.get("memory_accepted", false)):
+		var memory_status := "Completed" if bool(story.get("memory_done", false)) else ("Return the fragment to Ilyra" if bool(story.get("memory_found", false)) else "Defeat the Warden and search its chest")
+		lines.append("Ilyra · A Memory in the Hollow\n%s" % memory_status)
 	for site in SETTLEMENTS.SITES:
 		for index in range(SETTLEMENTS.RESIDENT_COUNT):
 			for kind in ["main", "side"]:
