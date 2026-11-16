@@ -1135,10 +1135,10 @@ func _run() -> void:
 		var story_probe_ids := {}
 		for story_probe_entry in story_probe_locations: story_probe_ids[str(story_probe_entry["id"])] = true
 		memories_ok = story_probe_locations.size() == 22 and story_probe_ids.size() == 22 and Game.all_story_memories().size() == 25
-		for chosen in ["memory_04", "memory_12", "memory_25"]:
+		for memory_probe_chosen in ["memory_04", "memory_12", "memory_25"]:
 			var story_probe_location: Dictionary = {}
-			for item in story_probe_locations:
-				if str(item["id"]) == chosen: story_probe_location = item
+			for memory_probe_item in story_probe_locations:
+				if str(memory_probe_item["id"]) == memory_probe_chosen: story_probe_location = memory_probe_item
 			if story_probe_location.is_empty():
 				memories_ok = false
 				continue
@@ -1146,20 +1146,20 @@ func _run() -> void:
 			hollow_player.global_position = Vector3(story_probe_xy.x, float(world.call("_height", story_probe_xy.x, story_probe_xy.y)) + 0.2, story_probe_xy.y)
 			stream.call("_update_stream")
 			var story_probe_loaded: Dictionary = stream.get("_loaded")
-			var memory_dungeon := story_probe_loaded.get(chosen) as Node3D
+			var memory_dungeon := story_probe_loaded.get(memory_probe_chosen) as Node3D
 			if memory_dungeon == null:
 				memories_ok = false
 				continue
 			memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
 			var memory_guards: Array = []
-			for enemy in get_tree().get_nodes_in_group("enemy"):
-				if enemy.get_parent() == memory_dungeon.get("chamber") and not enemy.is_queued_for_deletion(): memory_guards.append(enemy)
+			for memory_probe_enemy in get_tree().get_nodes_in_group("memory_probe_enemy"):
+				if memory_probe_enemy.get_parent() == memory_dungeon.get("chamber") and not memory_probe_enemy.is_queued_for_deletion(): memory_guards.append(memory_probe_enemy)
 			memories_ok = memories_ok and memory_guards.size() >= 2 and memory_guards.size() <= 4
-			for guard in memory_guards: guard.call("take_hit", 9999.0, 0, Vector3.ZERO)
+			for memory_probe_guard in memory_guards: memory_probe_guard.call("take_hit", 9999.0, 0, Vector3.ZERO)
 			var memory_boss := memory_dungeon.get("boss") as Node3D
 			if memory_boss != null:
 				memory_boss.call("take_hit", 9999.0, 0, Vector3.ZERO)
-				memories_ok = memories_ok and Game.story_memory_owned(chosen)
+				memories_ok = memories_ok and Game.story_memory_owned(memory_probe_chosen)
 				var story_probe_after_reward: int = Game.coins
 				memory_dungeon.call("_on_defeated")
 				memories_ok = memories_ok and Game.coins == story_probe_after_reward
