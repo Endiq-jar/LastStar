@@ -858,6 +858,7 @@ func _run() -> void:
 				player.global_position = old_pos
 				house.call("_process", 0.2)
 				house_ok = door_closed and door_opened and door_hit.is_empty() and door_closed_again and house.scale.x > 1.0 and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
+				_log("INFO", "House checks closed=%s opened=%s clear=%s reclosed=%s scale=%s wall=%s roof_hidden=%s roof_visible=%s ramp=%s" % [door_closed, door_opened, door_hit.is_empty(), door_closed_again, house.scale, not wall_hit.is_empty(), roof_hidden, roof.visible, house.has_node("EntranceRamp")])
 	_log("INFO" if resident_ok and quest_ui_ok and house_ok else "FAIL", "20 residents=%s independent quest=%s enterable house=%s" % [str(resident_ok), str(quest_ui_ok), str(house_ok)])
 
 	# Quest rewards survive saves, can be used, and cannot be claimed twice.
