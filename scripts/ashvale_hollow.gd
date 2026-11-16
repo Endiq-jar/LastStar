@@ -1,5 +1,6 @@
 extends Node3D
 ## Two compact optional Hollows, each streamed only while inside.
+const STORY_DUNGEONS := preload("res://scripts/story_dungeons.gd")
 const FLOOR := preload("res://assets/dungeon/floor_tile_large.gltf.glb")
 const WALL := preload("res://assets/dungeon/wall.gltf.glb")
 const DOOR := preload("res://assets/dungeon/wall_doorway.glb")
@@ -9,6 +10,7 @@ const WARDEN := preload("res://scripts/hollow_warden.gd")
 const SENTRY := preload("res://scripts/hollow_sentry.gd")
 const ALTITUDE := 500.0
 var dungeon_id := "ashvale"
+var _story_entry: Dictionary = {}
 var _sentries_left := 0
 var player: CharacterBody3D
 var entrance := Vector3.ZERO
@@ -21,6 +23,7 @@ var _exit_point := Vector3.ZERO
 
 func setup(world: Node3D, actor: CharacterBody3D, center: Vector2, which: String = "ashvale") -> void:
 	dungeon_id = which
+	_story_entry = STORY_DUNGEONS.by_id(which)
 	player = actor
 	var p := center + Vector2(0, -22)
 	entrance = Vector3(p.x, float(world.call("_height", p.x, p.y)), p.y)
@@ -28,7 +31,8 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2, which: String
 	var door := DOOR.instantiate() as Node3D
 	add_child(door)
 	var label := Label3D.new()
-	label.text = "%s\nF / Talk to enter · Challenging" % ("SUNCREST ROOST" if dungeon_id == "roost" else ("MEMORY VAULT" if dungeon_id == "vault" else "ASHVALE HOLLOW"))
+	var title := str(_story_entry.get("name", "")) if not _story_entry.is_empty() else ("SUNCREST ROOST" if dungeon_id == "roost" else ("MEMORY VAULT" if dungeon_id == "vault" else "ASHVALE HOLLOW"))
+	label.text = "%s\nF / Talk to enter · Challenging" % title.to_upper()
 	label.position = Vector3(0, 4.5, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 48
@@ -108,14 +112,15 @@ func _enter() -> void:
 	player.global_position = chamber.global_position + Vector3(0, 0.2, 7.0)
 	player.velocity = Vector3.ZERO
 	if not _is_cleared():
-		_sentries_left = 2
-		for x in [-4.0, 4.0]:
+		_sentries_left = 2 if _story_entry.is_empty() else 2 + int(dungeon_id.trim_prefix("memory_")) % 3
+		var positions := [Vector3(-4, 0.15, -2), Vector3(4, 0.15, -2), Vector3(-5, 0.15, 2), Vector3(5, 0.15, 2)]
+		for index in range(_sentries_left):
 			var scout := SENTRY.new()
-			scout.is_orc = dungeon_id == "vault"
-			scout.position = Vector3(x, 0.15, -1)
+			scout.is_orc = dungeon_id == "vault" or (not _story_entry.is_empty() and (index + int(dungeon_id.trim_prefix("memory_"))) % 2 == 0)
+			scout.position = positions[index]
 			chamber.add_child(scout)
 			scout.defeated.connect(_on_sentry_defeated)
-		Game.toast.emit("Defeat the two guardians. Dodge the red circles! Exit is at the rear right.")
+		Game.toast.emit("Defeat the guardians. Dodge the red circles! Exit is at the rear right.")
 	else:
 		_add_chest()
 		Game.toast.emit("This Hollow is cleared. Leave when ready.")
@@ -136,6 +141,7 @@ func _box(parent: Node3D, at: Vector3, size: Vector3) -> void:
 
 func _is_cleared() -> bool:
 	if dungeon_id == "ashvale": return Game.ashvale_hollow_cleared
+	if not _story_entry.is_empty(): return bool(Game.dungeon_clears.get(dungeon_id, false))
 	return bool(Game.dungeon_clears.get("memory_vault" if dungeon_id == "vault" else "suncrest_roost", false))
 
 
@@ -145,7 +151,7 @@ func _on_sentry_defeated() -> void:
 	if _sentries_left == 0:
 		_spawn_warden()
 	else:
-		Game.toast.emit("One guardian remains.")
+		Game.toast.emit("%d guardian(s) remain." % _sentries_left)
 
 
 func _spawn_warden() -> void:
@@ -153,15 +159,27 @@ func _spawn_warden() -> void:
 	boss = WARDEN.new()
 	boss.set("is_vault", dungeon_id == "vault")
 	boss.set("is_dragon", dungeon_id == "roost")
+	if not _story_entry.is_empty():
+		var rank := int(dungeon_id.trim_prefix("memory_"))
+		boss.set("is_dragon", rank % 3 == 0)
+		boss.set("is_vault", rank % 3 == 1)
+		boss.set("custom_name", "Echo of " + str(_story_entry["name"]))
+		boss.set("difficulty_scale", 1.0 + float(rank) * 0.02)
 	boss.position = Vector3(0, 0.15, -4)
 	chamber.add_child(boss)
 	boss.connect("defeated", _on_defeated)
-	Game.toast.emit("%s awakened! Watch its attacks." % ("Suncrest Dragon" if dungeon_id == "roost" else ("Vault Sentinel" if dungeon_id == "vault" else "Hollow Warden")))
+	Game.toast.emit("%s awakened! Watch its attacks." % ("Echo of " + str(_story_entry["name"]) if not _story_entry.is_empty() else ("Suncrest Dragon" if dungeon_id == "roost" else ("Vault Sentinel" if dungeon_id == "vault" else "Hollow Warden"))))
 
 
 func _on_defeated() -> void:
 	if not _is_cleared():
-		if dungeon_id == "roost":
+		if not _story_entry.is_empty():
+			var rank := int(dungeon_id.trim_prefix("memory_"))
+			Game.dungeon_clears[dungeon_id] = true
+			Game.coins += 100 + rank * 2
+			Game.starlight += 25 + rank
+			Game.toast.emit("Memory recovered: %s (%d / 25)." % [_story_entry["name"], Game.story_memory_count()])
+		elif dungeon_id == "roost":
 			Game.dungeon_clears["suncrest_roost"] = true
 			Game.starlight += 60
 			Game.coins += 200

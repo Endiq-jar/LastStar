@@ -160,6 +160,7 @@ var dungeon_clears: Dictionary = {}
 var in_final_dungeon := false
 # Story memories are derived from unique dungeon clears, so old saves receive
 # them automatically and repeat victories can never duplicate an item.
+const STORY_DUNGEONS := preload("res://scripts/story_dungeons.gd")
 const STORY_MEMORY_GOAL := 25
 const STORY_MEMORIES := [
 	{"id": "ashvale", "name": "The First Lamp", "lore": "When the Silence fell, Ashvale sheltered its neighbours beneath a shared light."},
@@ -172,9 +173,13 @@ func story_memory_owned(id: String) -> bool:
 	return ashvale_hollow_cleared if id == "ashvale" else bool(dungeon_clears.get(id, false))
 
 
+func all_story_memories() -> Array:
+	return STORY_MEMORIES + STORY_DUNGEONS.ENTRIES
+
+
 func story_memory_count() -> int:
 	var count := 0
-	for memory in STORY_MEMORIES:
+	for memory in all_story_memories():
 		if story_memory_owned(str(memory["id"])): count += 1
 	return count
 
@@ -356,10 +361,7 @@ func collect_sigil(sigil_id: String = "") -> void:
 	sigils_changed.emit(sigils_collected, TOTAL_SIGILS)
 	_refresh_quest()
 	if sigils_collected >= TOTAL_SIGILS:
-		has_won = true
-		quest_text = "Every star sigil is home. The valley remembers your name."
-		quest_changed.emit(quest_text)
-		game_won.emit()
+		toast.emit("All star sigils recovered. The journey continues.")
 
 
 func register_slime() -> void:

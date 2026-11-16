@@ -10,6 +10,8 @@ const BLUE_DEMON := preload("res://assets/creatures/BlueDemon.gltf")
 var is_vault := false
 var is_dragon := false
 var is_keeper := false
+var custom_name := ""
+var difficulty_scale := 1.0
 var _radius := 2.6
 const LINE_LENGTH := 12.0
 const LINE_HALF_WIDTH := 1.0
@@ -42,6 +44,7 @@ func _ready() -> void:
 		max_hp = 1800.0
 	elif is_vault:
 		max_hp = 1550.0
+	max_hp *= clampf(difficulty_scale, 1.0, 1.5)
 	hp = max_hp
 	var collider := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
@@ -191,6 +194,7 @@ func _exit_tree() -> void:
 
 
 func _boss_name() -> String:
+	if not custom_name.is_empty(): return custom_name
 	if is_keeper: return "The Keeper"
 	if is_dragon: return "Suncrest Dragon"
 	return "Vault Sentinel" if is_vault else "Hollow Warden"

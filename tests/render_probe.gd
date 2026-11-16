@@ -627,6 +627,9 @@ func _run() -> void:
 	Game.load_collection()
 	var story_ok := Game.sigils_seen.has("probe_sigil") and Game.sigils_collected == 1 and Game.slimes_defeated == 3 and Game.waypoints_seen.has("Probe waypoint") and Game.checkpoint == Vector3(10, 20, 30)
 	var drop_ok := drop_id != "" and Game.dropped_items.has(drop_id) and Game.recover_drop(drop_id) and Game.potions == 2
+	Game.sigils_collected = Game.TOTAL_SIGILS - 1
+	Game.collect_sigil("probe_last_sigil")
+	var journey_continues := Game.story_complete and not Game.has_won and hollow_player_can_continue(world)
 	Game.sigils_seen = saved_sigils
 	Game.sigils_collected = saved_count
 	Game.slimes_defeated = saved_slimes
@@ -645,7 +648,7 @@ func _run() -> void:
 	Game.save_collection()
 	Game.sigils_changed.emit(Game.sigils_collected, Game.TOTAL_SIGILS)
 	Game.call("_refresh_quest")
-	_log("INFO" if story_ok and no_duplicate and drop_ok else "FAIL", "story persistence=%s duplicate prevention=%s drop recovery=%s" % [str(story_ok), str(no_duplicate), str(drop_ok)])
+	_log("INFO" if story_ok and no_duplicate and drop_ok and journey_continues else "FAIL", "story persistence=%s duplicate prevention=%s drop recovery=%s journey continues=%s" % [str(story_ok), str(no_duplicate), str(drop_ok), str(journey_continues)])
 	var old_jump: int = Game.key_for_action("jump")
 	var settings_ok := Game.rebind_action("jump", KEY_K) and Game.key_for_action("jump") == KEY_K and not Game.rebind_action("move_forward", KEY_K) and Game.rebind_action("jump", old_jump)
 	_log("INFO" if settings_ok else "FAIL", "key remapping and conflict prevention: %s" % str(settings_ok))
@@ -1119,20 +1122,84 @@ func _run() -> void:
 	_log("INFO" if hollow_ok else "FAIL", "Ashvale Hollow entry, boss phases, damage and reward=%s" % str(hollow_ok))
 	_log("INFO" if story_companion_ok else "FAIL", "Ilyra companion, memory choices, persistence and safe spatial movement=%s" % str(story_companion_ok))
 
-	# The 25-memory gate is intentionally locked until the other story dungeons
-	# exist. Exercise the interior directly without weakening the live gate.
+	# Check the 22-entry streamed catalog and several full representative fights.
+	var memories_ok := false
+	var stream := world.get_node_or_null("StoryDungeons")
+	if stream != null and hollow_player != null:
+		var memories_pos := hollow_player.global_position
+		var memories_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+		var memories_coins: int = Game.coins
+		var memories_light: int = Game.starlight
+		Game.dungeon_clears = {}
+		var locations: Array = stream.get("_locations")
+		var ids := {}
+		for location in locations: ids[str(location["id"])] = true
+		memories_ok = locations.size() == 22 and ids.size() == 22 and Game.all_story_memories().size() == 25
+		for chosen in ["memory_04", "memory_12", "memory_25"]:
+			var location: Dictionary = {}
+			for item in locations:
+				if str(item["id"]) == chosen: location = item
+			if location.is_empty():
+				memories_ok = false
+				continue
+			var xy: Vector2 = location["pos"]
+			hollow_player.global_position = Vector3(xy.x, float(world.call("_height", xy.x, xy.y)) + 0.2, xy.y)
+			stream.call("_update_stream")
+			var loaded: Dictionary = stream.get("_loaded")
+			var memory_dungeon := loaded.get(chosen) as Node3D
+			if memory_dungeon == null:
+				memories_ok = false
+				continue
+			memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
+			var memory_guards: Array = []
+			for enemy in get_tree().get_nodes_in_group("enemy"):
+				if enemy.get_parent() == memory_dungeon.get("chamber") and not enemy.is_queued_for_deletion(): memory_guards.append(enemy)
+			memories_ok = memories_ok and memory_guards.size() >= 2 and memory_guards.size() <= 4
+			for guard in memory_guards: guard.call("take_hit", 9999.0, 0, Vector3.ZERO)
+			var memory_boss := memory_dungeon.get("boss") as Node3D
+			if memory_boss != null:
+				memory_boss.call("take_hit", 9999.0, 0, Vector3.ZERO)
+				memories_ok = memories_ok and Game.story_memory_owned(chosen)
+				var after_reward: int = Game.coins
+				memory_dungeon.call("_on_defeated")
+				memories_ok = memories_ok and Game.coins == after_reward
+			else:
+				memories_ok = false
+			hollow_player.global_position = memory_dungeon.get("_exit_point")
+			memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
+		Game.dungeon_clears = {}
+		Game.load_collection()
+		memories_ok = memories_ok and Game.story_memory_owned("memory_04") and Game.story_memory_owned("memory_12") and Game.story_memory_owned("memory_25")
+		Game.dungeon_clears = memories_clears
+		Game.coins = memories_coins
+		Game.starlight = memories_light
+		hollow_player.global_position = memories_pos
+		stream.call("_update_stream")
+		Game.save_collection()
+	_log("INFO" if memories_ok else "FAIL", "22 streamed memory Hollows, fights, unique rewards and save=%s" % str(memories_ok))
+
+	# Exercise both the locked gate and the live 25-memory unlock path.
 	var finale_ok := false
 	var finale := world.get_node_or_null("LastSeal")
 	if finale != null and hollow_player != null:
 		var finale_pos := hollow_player.global_position
 		var finale_story: Dictionary = Game.guard_story.duplicate(true)
+		var finale_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+		var finale_ashvale: bool = Game.ashvale_hollow_cleared
+		Game.dungeon_clears = {}
+		Game.ashvale_hollow_cleared = false
 		var finale_coins: int = Game.coins
 		var finale_light: int = Game.starlight
 		var finale_hp: float = Game.current_hp()
 		Game.guard_story.erase("keeper_defeated")
 		hollow_player.global_position = finale.get("entrance") + Vector3(0, 0.2, 0)
 		finale_ok = finale.call("try_interact", hollow_player) and not bool(finale.get("inside"))
-		finale.call("_enter")
+		Game.ashvale_hollow_cleared = true
+		Game.dungeon_clears["memory_vault"] = true
+		Game.dungeon_clears["suncrest_roost"] = true
+		for memory in Game.STORY_DUNGEONS.ENTRIES:
+			Game.dungeon_clears[str(memory["id"])] = true
+		finale_ok = Game.story_memory_count() == 25 and finale.call("try_interact", hollow_player) and finale_ok
 		var depths := finale.get("chamber") as Node3D
 		finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and depths != null and depths.global_position.y < 0 and (finale.get("_gates") as Array).size() == 10
 		if depths != null:
@@ -1165,6 +1232,8 @@ func _run() -> void:
 			finale_ok = finale.call("try_interact", hollow_player) and not Game.in_final_dungeon and finale_ok
 		hollow_player.global_position = finale_pos
 		Game.guard_story = finale_story
+		Game.dungeon_clears = finale_clears
+		Game.ashvale_hollow_cleared = finale_ashvale
 		Game.coins = finale_coins
 		Game.starlight = finale_light
 		Game.set_hp(finale_hp)
@@ -2888,3 +2957,8 @@ func _image_difference(a: Image, b: Image) -> float:
 			if absf(la - lb) > 0.05:
 				changed += 1
 	return float(changed) / maxf(1.0, float(total))
+
+
+func hollow_player_can_continue(world: Node) -> bool:
+	var actor := world.get_node_or_null("Player")
+	return actor != null and actor.is_processing_input()

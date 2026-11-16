@@ -86,6 +86,7 @@ func _ready() -> void:
 	_spawn_memory_vault()
 	_spawn_suncrest_roost()
 	_spawn_last_seal()
+	_spawn_story_dungeons()
 
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
@@ -1300,6 +1301,18 @@ func _spawn_last_seal() -> void:
 	add_child(finale)
 	finale.add_to_group("hollow_entrance")
 	finale.call("setup", self, get_node("Player"), sites[13]["resolved"])
+
+
+func _spawn_story_dungeons() -> void:
+	var manager := get_node_or_null("Settlements")
+	if manager == null: return
+	var sites: Array = manager.get("_sites")
+	if sites.size() < 11: return
+	var stream := Node3D.new()
+	stream.name = "StoryDungeons"
+	stream.set_script(load("res://scripts/story_dungeon_stream.gd"))
+	add_child(stream)
+	stream.call("setup", self, get_node("Player"), sites)
 
 
 func _build_grass_field() -> void:

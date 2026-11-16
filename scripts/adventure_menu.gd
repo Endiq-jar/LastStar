@@ -343,17 +343,18 @@ func _quests() -> void:
 	_line("SUNCREST ROOST", 18, UI.ACCENT)
 	_line("Cleared · Scorched Promise recovered" if bool(Game.dungeon_clears.get("suncrest_roost", false)) else "Find the Roost near Suncrest. Defeat its guardians and dragon for a memory, 200 Ane and 60 starlight.")
 	_line("MEMORIES OF THE FIRST SILENCE · %d / %d" % [Game.story_memory_count(), Game.STORY_MEMORY_GOAL], 18, UI.ACCENT)
-	for memory in Game.STORY_MEMORIES:
+	for memory in Game.all_story_memories():
 		if Game.story_memory_owned(str(memory["id"])):
 			_line("%s — %s" % [memory["name"], memory["lore"]])
 		else:
-			_line("Undiscovered memory · %s" % memory["id"].replace("_", " ").capitalize())
-	_line("More story memories and their dungeons are still to come.")
+			var hint := str(SETTLEMENTS.SITES[int(memory["site"])]["name"]) if memory.has("site") else str(memory["id"]).replace("_", " ").capitalize()
+			_line("Undiscovered memory · near %s" % hint)
+	_line("Find two memory Hollows near each listed settlement. Their arenas share a common Hollow design.")
 	_line("THE LAST SEAL", 18, UI.ACCENT)
 	if bool(Game.guard_story.get("keeper_defeated", false)):
 		_line("The Keeper is defeated. The Seals hold because the people of Elaris chose to share their light. The world remembers again.")
 	else:
-		_line("Aetheris · The underground gate requires all 25 memories. Only three are currently obtainable.")
+		_line("Aetheris · The underground gate requires all 25 memories.")
 	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
 	var any_quest := false
 	for site in SETTLEMENTS.SITES:
@@ -661,7 +662,7 @@ func _story() -> void:
 	_line("✦  Recover twelve sigils and discover the landmarks of the valley.")
 	_line("Long ago, the First Silence nearly extinguished Elaris. Seven Seals guard the world, but Hollows have begun to open and memories of the past are scattered.")
 	_line("Visit Star Guard Ilyra in Ashvale. A recovered sigil leads to a memory in the Hollow, and a choice about who should hear its story.")
-	_line("Seek the memories in Ashvale Hollow, the Memory Vault and Suncrest Roost. The remaining memories must be recovered before the Last Seal can open.")
+	_line("Seek the memories in Ashvale Hollow, the Memory Vault and Suncrest Roost. Recover all 25 memories to open the Last Seal.")
 	if bool(Game.guard_story.get("keeper_defeated", false)):
 		_line("At the Last Seal, the Keeper's control was broken. With their shared memories, the people renewed the Seals together, and Elaris remembered its light.")
 	if Game.wander != null:

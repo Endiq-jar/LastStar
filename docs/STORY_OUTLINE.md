@@ -1,9 +1,10 @@
 # Last Star — story outline
 
 This is a direction for the story, not a list of completed quests or dungeons.
-The playable story covers Ilyra's first quests and the first three Hollow
-memories. The Last Seal and its ending are implemented but cannot yet be reached
-in normal play: the other 22 story memories have not been implemented.
+The playable story covers Ilyra's quests, 25 Hollow memories and the Last
+Seal. Twenty-two of the memory Hollows share a reusable arena and creature
+families; they are not bespoke levels. The broader story and companion arcs
+remain substantially shorter than the original design brief.
 
 ## Premise
 
@@ -25,11 +26,11 @@ it for research, changing Ilyra's bond and the spell learned.
 Elaris's settlements hold different parts of a broken account. In Lunareth's
 Memory Vault, a record describes the Seals as a shield for the people. At
 Suncrest, a dragon guards the memory of a caravan that carried knowledge through
-the catastrophe. Twenty-five story dungeons are intended to each reveal one
-memory, while other dungeons provide optional challenges and rewards. Three
-memories are currently obtainable. Collecting all twenty-five is not yet possible.
+the catastrophe. Twenty-five story dungeons each reveal one memory. Twenty-two
+are repeatable arena templates with different defenders, bosses and story text;
+their one-time memory and currency rewards persist.
 
-## Act III — The Keeper (proposed)
+## Act III — The Keeper
 
 The Keeper believes that silence and control are the only way to prevent the
 catastrophe returning. As the memories are assembled, the player discovers
@@ -37,11 +38,11 @@ what the Seals protect, why the Hollows are changing, and what the Keeper has
 sacrificed to maintain them. Allies and their choices should shape the journey
 rather than simply give the player more power.
 
-## Finale — The last star (proposed)
+## Finale — The last star
 
 Beneath Aetheris, a vast underground dungeon descends toward the heart of the
 Seals. At its end the Keeper, the strongest boss, confronts the player in a
 multi-phase battle. The Keeper is defeated, the people renew the Seals together and Elaris
 remembers its light. The ending is a short journal conclusion rather than a
-cinematic or a branching finale. The descent is built but inaccessible until
-the other 22 memories are added.
+cinematic or a branching finale. The full narrative and companion arcs remain
+unfinished.
