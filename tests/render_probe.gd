@@ -940,7 +940,9 @@ func _run() -> void:
 		await get_tree().physics_frame
 		if DisplayServer.get_name() != "headless":
 			await _capture_ui(out_dir, "game_ashvale_hollow", null)
-		var scouts: Array = get_tree().get_nodes_in_group("enemy").filter(func(e): return e.get_parent() == hollow.get("chamber"))
+		var scouts: Array = []
+		for enemy in get_tree().get_nodes_in_group("enemy"):
+			if enemy.get_parent() == hollow.get("chamber"): scouts.append(enemy)
 		hollow_ok = hollow_ok and scouts.size() == 2 and hollow.get("boss") == null
 		for scout in scouts:
 			scout.call("take_hit", 9999.0, 0, Vector3.ZERO)
@@ -1013,7 +1015,9 @@ func _run() -> void:
 		Game.dungeon_clears.erase("memory_vault")
 		hollow_player.global_position = vault.get("entrance") + Vector3(0, 0.2, 0)
 		vault_ok = vault.call("try_interact", hollow_player)
-		var vault_scouts: Array = get_tree().get_nodes_in_group("enemy").filter(func(e): return e.get_parent() == vault.get("chamber"))
+		var vault_scouts: Array = []
+		for enemy in get_tree().get_nodes_in_group("enemy"):
+			if enemy.get_parent() == vault.get("chamber"): vault_scouts.append(enemy)
 		vault_ok = vault_ok and vault_scouts.size() == 2
 		for scout in vault_scouts:
 			scout.call("take_hit", 9999.0, 0, Vector3.ZERO)
