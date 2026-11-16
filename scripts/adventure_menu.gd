@@ -349,6 +349,11 @@ func _quests() -> void:
 		else:
 			_line("Undiscovered memory · %s" % memory["id"].replace("_", " ").capitalize())
 	_line("More story memories and their dungeons are still to come.")
+	_line("THE LAST SEAL", 18, UI.ACCENT)
+	if bool(Game.guard_story.get("keeper_defeated", false)):
+		_line("The Keeper is defeated. The Seals hold because the people of Elaris chose to share their light. The world remembers again.")
+	else:
+		_line("Aetheris · The underground gate requires all 25 memories. Only three are currently obtainable.")
 	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
 	var any_quest := false
 	for site in SETTLEMENTS.SITES:
@@ -656,7 +661,9 @@ func _story() -> void:
 	_line("✦  Recover twelve sigils and discover the landmarks of the valley.")
 	_line("Long ago, the First Silence nearly extinguished Elaris. Seven Seals guard the world, but Hollows have begun to open and memories of the past are scattered.")
 	_line("Visit Star Guard Ilyra in Ashvale. A recovered sigil leads to a memory in the Hollow, and a choice about who should hear its story.")
-	_line("Seek the memories in Ashvale Hollow, the Memory Vault and Suncrest Roost. The Keeper and the wider story are still to come.")
+	_line("Seek the memories in Ashvale Hollow, the Memory Vault and Suncrest Roost. The remaining memories must be recovered before the Last Seal can open.")
+	if bool(Game.guard_story.get("keeper_defeated", false)):
+		_line("At the Last Seal, the Keeper's control was broken. With their shared memories, the people renewed the Seals together, and Elaris remembered its light.")
 	if Game.wander != null:
 		_line("WANDER RESEARCH", 18, UI.ACCENT)
 		if not bool(Game.guard_story.get("seal_done", false)):

@@ -276,6 +276,9 @@ func _update_contact_shadow() -> void:
 	## out while she is airborne so it does not stay glued to her boots mid-jump.
 	if _contact_shadow == null:
 		return
+	_contact_shadow.visible = not Game.in_final_dungeon
+	if Game.in_final_dungeon:
+		return
 	var terr := _terrain()
 	if terr == null or not terr.has_method("surface_height_at"):
 		return
@@ -472,6 +475,8 @@ func _guard_world_bounds() -> void:
 	## This runs every physics frame and is deliberately cheap: one analytic
 	## height lookup with no physics query. Being lifted a little happens
 	## invisibly; falling for 60 seconds does not.
+	if Game.in_final_dungeon:
+		return
 	var terrain := _terrain()
 	if terrain == null:
 		return
@@ -687,7 +692,9 @@ func _physics_process(delta: float) -> void:
 	_guard_world_bounds()
 
 	# Falling out of the world? Return to the checkpoint.
-	if global_position.y < -60.0:
+	if Game.in_final_dungeon and global_position.y < -260.0:
+		Game._on_party_down()
+	elif not Game.in_final_dungeon and global_position.y < -60.0:
 		_on_respawn()
 
 	_update_animation(delta, Vector2(velocity.x, velocity.z).length(), on_floor, sprinting)

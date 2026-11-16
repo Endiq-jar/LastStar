@@ -64,9 +64,14 @@ func _physics_process(delta: float) -> void:
 		var toward := _player.global_position - global_position
 		toward.y = 0
 		if toward.length() > 2.5:
-			velocity = toward.normalized() * 2.6
+			velocity.x = toward.normalized().x * 2.6
+			velocity.z = toward.normalized().z * 2.6
 			_visual.rotation.y = lerp_angle(_visual.rotation.y, atan2(toward.x, toward.z), 6.0 * delta)
-			move_and_slide()
+		else:
+			velocity.x = 0.0
+			velocity.z = 0.0
+		velocity.y = maxf(velocity.y - 20.0 * delta, -30.0)
+		move_and_slide()
 		if _timer <= 0.0:
 			_target = _player.global_position
 			_target.y = global_position.y + 0.08

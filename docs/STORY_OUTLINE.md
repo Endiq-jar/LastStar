@@ -1,8 +1,9 @@
 # Last Star — story outline
 
 This is a direction for the story, not a list of completed quests or dungeons.
-The playable story currently covers Ilyra's first quests and the first three
-Hollow memories; the later acts and ending below are proposed and unimplemented.
+The playable story covers Ilyra's first quests and the first three Hollow
+memories. The Last Seal and its ending are implemented but cannot yet be reached
+in normal play: the other 22 story memories have not been implemented.
 
 ## Premise
 
@@ -26,8 +27,7 @@ Memory Vault, a record describes the Seals as a shield for the people. At
 Suncrest, a dragon guards the memory of a caravan that carried knowledge through
 the catastrophe. Twenty-five story dungeons are intended to each reveal one
 memory, while other dungeons provide optional challenges and rewards. Three
-memories are currently obtainable. Collecting all twenty-five and the finale
-are not implemented yet.
+memories are currently obtainable. Collecting all twenty-five is not yet possible.
 
 ## Act III — The Keeper (proposed)
 
@@ -41,6 +41,7 @@ rather than simply give the player more power.
 
 Beneath Aetheris, a vast underground dungeon descends toward the heart of the
 Seals. At its end the Keeper, the strongest boss, confronts the player in a
-multi-phase battle. The intended ending resolves the story memories and the
-fate of the Seals; its exact dialogue, branching consequences, one-kilometre
-level and boss are not yet implemented.
+multi-phase battle. The Keeper is defeated, the people renew the Seals together and Elaris
+remembers its light. The ending is a short journal conclusion rather than a
+cinematic or a branching finale. The descent is built but inaccessible until
+the other 22 memories are added.

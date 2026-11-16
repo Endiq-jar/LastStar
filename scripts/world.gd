@@ -85,6 +85,7 @@ func _ready() -> void:
 	_spawn_ashvale_hollow()
 	_spawn_memory_vault()
 	_spawn_suncrest_roost()
+	_spawn_last_seal()
 
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
@@ -1286,6 +1287,19 @@ func _spawn_suncrest_roost() -> void:
 	add_child(roost)
 	roost.add_to_group("hollow_entrance")
 	roost.call("setup", self, get_node("Player"), sites[6]["resolved"], "roost")
+
+
+func _spawn_last_seal() -> void:
+	var manager := get_node_or_null("Settlements")
+	if manager == null: return
+	var sites: Array = manager.get("_sites")
+	if sites.size() < 14: return
+	var finale := Node3D.new()
+	finale.name = "LastSeal"
+	finale.set_script(load("res://scripts/final_dungeon.gd"))
+	add_child(finale)
+	finale.add_to_group("hollow_entrance")
+	finale.call("setup", self, get_node("Player"), sites[13]["resolved"])
 
 
 func _build_grass_field() -> void:

@@ -3,11 +3,13 @@ extends CharacterBody3D
 ## Visible ground telegraphs, deliberate recovery windows and a distinct second
 ## pattern make this a readable encounter rather than a contact-damage sponge.
 signal defeated
+const KEEPER := preload("res://assets/creatures/Ninja.gltf")
 const DEMON := preload("res://assets/creatures/Demon.gltf")
 const DRAGON := preload("res://assets/creatures/Dragon_Evolved.gltf")
 const BLUE_DEMON := preload("res://assets/creatures/BlueDemon.gltf")
 var is_vault := false
 var is_dragon := false
+var is_keeper := false
 var _radius := 2.6
 const LINE_LENGTH := 12.0
 const LINE_HALF_WIDTH := 1.0
@@ -34,7 +36,9 @@ func _ready() -> void:
 	collision_layer = 8
 	collision_mask = 1
 	_player = get_tree().get_first_node_in_group("player") as Node3D
-	if is_dragon:
+	if is_keeper:
+		max_hp = 4500.0
+	elif is_dragon:
 		max_hp = 1800.0
 	elif is_vault:
 		max_hp = 1550.0
@@ -46,7 +50,7 @@ func _ready() -> void:
 	collider.shape = shape
 	collider.position.y = 1.0
 	add_child(collider)
-	_visual = (DRAGON if is_dragon else (BLUE_DEMON if is_vault else DEMON)).instantiate() as Node3D
+	_visual = (KEEPER if is_keeper else (DRAGON if is_dragon else (BLUE_DEMON if is_vault else DEMON))).instantiate() as Node3D
 	_visual.scale = Vector3.ONE * (0.72 if is_dragon else 0.68)
 	add_child(_visual)
 	_animation = _visual.find_child("AnimationPlayer", true, false) as AnimationPlayer
@@ -91,11 +95,11 @@ func _physics_process(delta: float) -> void:
 			_play_animation("Flying_Idle" if is_dragon else "Idle")
 		if _timer <= 0.0:
 			_state = "warning"
-			_timer = 1.6 if phase == 1 else (1.15 if is_vault else 1.25)
+			_timer = 1.6 if phase == 1 else (1.0 if is_keeper and phase >= 3 else (1.15 if is_vault else 1.25))
 			_attack_number += 1
-			var targeted := phase == 1 or ((is_vault or is_dragon) and _attack_number % 2 == 0)
-			_attack_kind = "line" if phase == 2 and _attack_number % 3 == 0 else "circle"
-			_radius = 3.4 if is_dragon and phase == 2 and not targeted else 2.6
+			var targeted := phase == 1 or ((is_vault or is_dragon or is_keeper) and _attack_number % 2 == 0)
+			_attack_kind = "line" if phase >= 2 and _attack_number % 3 == 0 else "circle"
+			_radius = 3.8 if is_keeper and phase >= 3 and not targeted else (3.4 if is_dragon and phase >= 2 and not targeted else 2.6)
 			_play_animation("Headbutt" if is_dragon else "Punch")
 			if _attack_kind == "line":
 				_line_origin = global_position
@@ -109,7 +113,7 @@ func _physics_process(delta: float) -> void:
 				stripe.size = Vector3(LINE_HALF_WIDTH * 2.0, 0.04, LINE_LENGTH)
 				_warning.mesh = stripe
 				_warning.rotation.y = atan2(_line_direction.x, _line_direction.z)
-				_timer = 1.45 # A committed, readable wind-up before the slash.
+				_timer = 1.25 if is_keeper and phase >= 4 else 1.45 # Readable committed wind-up.
 				Game.toast.emit("%s: star slash — dodge sideways!" % _boss_name())
 			else:
 				var disc := CylinderMesh.new()
@@ -139,16 +143,23 @@ func _physics_process(delta: float) -> void:
 		if hit and absf(_player.global_position.y - _target.y) < 2.5:
 			_player.call("take_damage", Game.max_hp() * (0.22 if phase == 1 else 0.28), global_position)
 		_state = "rest"
-		_timer = 2.4 if phase == 1 else 1.8
+		_timer = 2.4 if phase == 1 else (1.45 if is_keeper and phase >= 4 else 1.8)
 
 
 
 func take_hit(power: float, _element: int, _direction: Vector3) -> void:
 	if _dead: return
 	hp = maxf(0.0, hp - maxf(power, 0.0))
-	if hp <= max_hp * 0.5 and phase == 1:
-		phase = 2
-		Game.toast.emit("%s phase 2: %s" % [_boss_name(), "watch its strikes, shockwaves and star slash!" if is_vault or is_dragon else "beware its shockwave and star slash!"])
+	var next_phase := 1
+	if is_keeper:
+		if hp <= max_hp * 0.25: next_phase = 4
+		elif hp <= max_hp * 0.5: next_phase = 3
+		elif hp <= max_hp * 0.75: next_phase = 2
+	elif hp <= max_hp * 0.5:
+		next_phase = 2
+	if next_phase > phase:
+		phase = next_phase
+		Game.toast.emit("%s phase %d: watch the strike patterns!" % [_boss_name(), phase])
 	_update_label()
 	if hp <= 0.0:
 		_dead = true
@@ -180,5 +191,6 @@ func _exit_tree() -> void:
 
 
 func _boss_name() -> String:
+	if is_keeper: return "The Keeper"
 	if is_dragon: return "Suncrest Dragon"
 	return "Vault Sentinel" if is_vault else "Hollow Warden"

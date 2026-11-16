@@ -1119,6 +1119,58 @@ func _run() -> void:
 	_log("INFO" if hollow_ok else "FAIL", "Ashvale Hollow entry, boss phases, damage and reward=%s" % str(hollow_ok))
 	_log("INFO" if story_companion_ok else "FAIL", "Ilyra companion, memory choices, persistence and safe spatial movement=%s" % str(story_companion_ok))
 
+	# The 25-memory gate is intentionally locked until the other story dungeons
+	# exist. Exercise the interior directly without weakening the live gate.
+	var finale_ok := false
+	var finale := world.get_node_or_null("LastSeal")
+	if finale != null and hollow_player != null:
+		var finale_pos := hollow_player.global_position
+		var finale_story: Dictionary = Game.guard_story.duplicate(true)
+		var finale_coins: int = Game.coins
+		var finale_light: int = Game.starlight
+		var finale_hp: float = Game.current_hp()
+		Game.guard_story.erase("keeper_defeated")
+		hollow_player.global_position = finale.get("entrance") + Vector3(0, 0.2, 0)
+		finale_ok = finale.call("try_interact", hollow_player) and not bool(finale.get("inside"))
+		finale.call("_enter")
+		var depths := finale.get("chamber") as Node3D
+		finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and depths != null and depths.global_position.y < 0 and (finale.get("_gates") as Array).size() == 10
+		if depths != null:
+			for level in range(10):
+				var guards: Array = []
+				for enemy in get_tree().get_nodes_in_group("enemy"):
+					if enemy.get_parent() == depths and not enemy.is_queued_for_deletion(): guards.append(enemy)
+				finale_ok = finale_ok and guards.size() == 2 and int(finale.get("sector")) == level
+				for guard in guards:
+					guard.call("take_hit", 9999.0, 0, Vector3.ZERO)
+			var keeper := finale.get("boss") as Node3D
+			if keeper != null:
+				finale_ok = finale_ok and bool(keeper.get("is_keeper")) and float(keeper.get("max_hp")) > 1800.0
+				keeper.call("take_hit", 1200.0, 0, Vector3.ZERO)
+				finale_ok = finale_ok and int(keeper.get("phase")) == 2
+				keeper.call("take_hit", 1200.0, 0, Vector3.ZERO)
+				finale_ok = finale_ok and int(keeper.get("phase")) == 3
+				keeper.call("take_hit", 1200.0, 0, Vector3.ZERO)
+				finale_ok = finale_ok and int(keeper.get("phase")) == 4
+				keeper.call("take_hit", 9999.0, 0, Vector3.ZERO)
+				finale_ok = finale_ok and bool(Game.guard_story.get("keeper_defeated", false)) and Game.coins == finale_coins + 1000 and Game.starlight == finale_light + 200
+				finale.call("_keeper_defeated")
+				finale_ok = finale_ok and Game.coins == finale_coins + 1000
+				Game.guard_story = {}
+				Game.load_collection()
+				finale_ok = finale_ok and bool(Game.guard_story.get("keeper_defeated", false))
+			else:
+				finale_ok = false
+			hollow_player.global_position = finale.get("_arena_exit")
+			finale_ok = finale.call("try_interact", hollow_player) and not Game.in_final_dungeon and finale_ok
+		hollow_player.global_position = finale_pos
+		Game.guard_story = finale_story
+		Game.coins = finale_coins
+		Game.starlight = finale_light
+		Game.set_hp(finale_hp)
+		Game.save_collection()
+	_log("INFO" if finale_ok else "FAIL", "Last Seal gate, guarded kilometre, four boss phases, ending and save=%s" % str(finale_ok))
+
 	# The compact HUD list opens from its button and shows independent NPC quests.
 	var quest_box_ok := false
 	if hud != null:

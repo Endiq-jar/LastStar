@@ -156,6 +156,8 @@ var guard_story: Dictionary = {}
 var settlement_quests: Dictionary = {}
 var ashvale_hollow_cleared := false
 var dungeon_clears: Dictionary = {}
+# Runtime-only flag: the underground finale uses its own floors and cleanup.
+var in_final_dungeon := false
 # Story memories are derived from unique dungeon clears, so old saves receive
 # them automatically and repeat victories can never duplicate an item.
 const STORY_MEMORY_GOAL := 25
