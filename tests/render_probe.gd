@@ -850,6 +850,7 @@ func _run() -> void:
 				await get_tree().process_frame
 				await get_tree().physics_frame
 				var door_hit := space.intersect_ray(door_ray)
+				player.global_position = house.to_global(Vector3(-1, 0.1, -3))
 				var door_closed_again: bool = house.call("try_interact", player) and not bool(house.get("_open"))
 				player.global_position = house.to_global(Vector3(0, 0.1, 0))
 				house.call("_process", 0.2)
