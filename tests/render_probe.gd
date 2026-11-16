@@ -1131,22 +1131,22 @@ func _run() -> void:
 		var memories_coins: int = Game.coins
 		var memories_light: int = Game.starlight
 		Game.dungeon_clears = {}
-		var locations: Array = stream.get("_locations")
-		var ids := {}
-		for location in locations: ids[str(location["id"])] = true
-		memories_ok = locations.size() == 22 and ids.size() == 22 and Game.all_story_memories().size() == 25
+		var story_probe_locations: Array = stream.get("_locations")
+		var story_probe_ids := {}
+		for story_probe_location in story_probe_locations: story_probe_ids[str(story_probe_location["id"])] = true
+		memories_ok = story_probe_locations.size() == 22 and story_probe_ids.size() == 22 and Game.all_story_memories().size() == 25
 		for chosen in ["memory_04", "memory_12", "memory_25"]:
-			var location: Dictionary = {}
-			for item in locations:
-				if str(item["id"]) == chosen: location = item
-			if location.is_empty():
+			var story_probe_location: Dictionary = {}
+			for item in story_probe_locations:
+				if str(item["id"]) == chosen: story_probe_location = item
+			if story_probe_location.is_empty():
 				memories_ok = false
 				continue
-			var xy: Vector2 = location["pos"]
-			hollow_player.global_position = Vector3(xy.x, float(world.call("_height", xy.x, xy.y)) + 0.2, xy.y)
+			var story_probe_xy: Vector2 = story_probe_location["pos"]
+			hollow_player.global_position = Vector3(story_probe_xy.x, float(world.call("_height", story_probe_xy.x, story_probe_xy.y)) + 0.2, story_probe_xy.y)
 			stream.call("_update_stream")
-			var loaded: Dictionary = stream.get("_loaded")
-			var memory_dungeon := loaded.get(chosen) as Node3D
+			var story_probe_loaded: Dictionary = stream.get("_loaded")
+			var memory_dungeon := story_probe_loaded.get(chosen) as Node3D
 			if memory_dungeon == null:
 				memories_ok = false
 				continue
@@ -1160,9 +1160,9 @@ func _run() -> void:
 			if memory_boss != null:
 				memory_boss.call("take_hit", 9999.0, 0, Vector3.ZERO)
 				memories_ok = memories_ok and Game.story_memory_owned(chosen)
-				var after_reward: int = Game.coins
+				var story_probe_after_reward: int = Game.coins
 				memory_dungeon.call("_on_defeated")
-				memories_ok = memories_ok and Game.coins == after_reward
+				memories_ok = memories_ok and Game.coins == story_probe_after_reward
 			else:
 				memories_ok = false
 			hollow_player.global_position = memory_dungeon.get("_exit_point")
