@@ -9,6 +9,11 @@ const BLUE_DEMON := preload("res://assets/creatures/BlueDemon.gltf")
 var is_vault := false
 var is_dragon := false
 var _radius := 2.6
+const LINE_LENGTH := 12.0
+const LINE_HALF_WIDTH := 1.0
+var _attack_kind := "circle"
+var _line_origin := Vector3.ZERO
+var _line_direction := Vector3.FORWARD
 var _visual: Node3D
 var _animation: AnimationPlayer
 var _attack_number := 0
@@ -89,26 +94,53 @@ func _physics_process(delta: float) -> void:
 			_timer = 1.6 if phase == 1 else (1.15 if is_vault else 1.25)
 			_attack_number += 1
 			var targeted := phase == 1 or ((is_vault or is_dragon) and _attack_number % 2 == 0)
+			_attack_kind = "line" if phase == 2 and _attack_number % 3 == 0 else "circle"
 			_radius = 3.4 if is_dragon and phase == 2 and not targeted else 2.6
-			var disc := _warning.mesh as CylinderMesh
-			if disc != null:
+			_play_animation("Headbutt" if is_dragon else "Punch")
+			if _attack_kind == "line":
+				_line_origin = global_position
+				_line_direction = _player.global_position - _line_origin
+				_line_direction.y = 0
+				if _line_direction.length_squared() < 0.01: _line_direction = Vector3.FORWARD
+				_line_direction = _line_direction.normalized()
+				_target = _line_origin + _line_direction * LINE_LENGTH * 0.5
+				_target.y = global_position.y + 0.08
+				var stripe := BoxMesh.new()
+				stripe.size = Vector3(LINE_HALF_WIDTH * 2.0, 0.04, LINE_LENGTH)
+				_warning.mesh = stripe
+				_warning.rotation.y = atan2(_line_direction.x, _line_direction.z)
+				_timer = 1.45 # A committed, readable wind-up before the slash.
+				Game.toast.emit("%s: star slash — dodge sideways!" % _boss_name())
+			else:
+				var disc := CylinderMesh.new()
 				disc.top_radius = _radius
 				disc.bottom_radius = _radius
-			_target = _player.global_position if targeted else global_position
-			_play_animation("Headbutt" if is_dragon else "Punch")
-			_target.y = global_position.y + 0.08
+				disc.height = 0.03
+				disc.radial_segments = 32
+				_warning.mesh = disc
+				_warning.rotation.y = 0.0
+				_target = _player.global_position if targeted else global_position
+				_target.y = global_position.y + 0.08
+				Game.toast.emit("%s: %s — dodge the red circle!" % [_boss_name(), "strike" if targeted else "shockwave"])
 			if is_instance_valid(_warning):
 				_warning.global_position = _target
 				_warning.visible = true
-			Game.toast.emit("%s: %s — dodge the red circle!" % [_boss_name(), "strike" if targeted else "shockwave"])
 	elif _timer <= 0.0:
 		if is_instance_valid(_warning): _warning.visible = false
 		var delta_pos := _player.global_position - _target
 		delta_pos.y = 0
-		if delta_pos.length() < _radius and absf(_player.global_position.y - _target.y) < 2.5:
+		var hit := delta_pos.length() < _radius
+		if _attack_kind == "line":
+			var offset := _player.global_position - _line_origin
+			offset.y = 0
+			var along := offset.dot(_line_direction)
+			var across := absf(offset.x * _line_direction.z - offset.z * _line_direction.x)
+			hit = along >= 0.0 and along <= LINE_LENGTH and across < LINE_HALF_WIDTH
+		if hit and absf(_player.global_position.y - _target.y) < 2.5:
 			_player.call("take_damage", Game.max_hp() * (0.22 if phase == 1 else 0.28), global_position)
 		_state = "rest"
 		_timer = 2.4 if phase == 1 else 1.8
+
 
 
 func take_hit(power: float, _element: int, _direction: Vector3) -> void:
@@ -116,7 +148,7 @@ func take_hit(power: float, _element: int, _direction: Vector3) -> void:
 	hp = maxf(0.0, hp - maxf(power, 0.0))
 	if hp <= max_hp * 0.5 and phase == 1:
 		phase = 2
-		Game.toast.emit("%s phase 2: %s" % [_boss_name(), "it alternates strikes and shockwaves!" if is_vault or is_dragon else "it will strike around itself!"])
+		Game.toast.emit("%s phase 2: %s" % [_boss_name(), "watch its strikes, shockwaves and star slash!" if is_vault or is_dragon else "beware its shockwave and star slash!"])
 	_update_label()
 	if hp <= 0.0:
 		_dead = true

@@ -654,7 +654,9 @@ func _story() -> void:
 	_line("THE VALLEY REMEMBERS", 25, UI.ACCENT)
 	_line("The valley's scattered stars have fallen quiet. Sora and her companions travel between the waypoints to bring their light home.")
 	_line("✦  Recover twelve sigils and discover the landmarks of the valley.")
-	_line("Visit Star Guard Ilyra in Ashvale to begin the first playable story quests.")
+	_line("Long ago, the First Silence nearly extinguished Elaris. Seven Seals guard the world, but Hollows have begun to open and memories of the past are scattered.")
+	_line("Visit Star Guard Ilyra in Ashvale. A recovered sigil leads to a memory in the Hollow, and a choice about who should hear its story.")
+	_line("Seek the memories in Ashvale Hollow, the Memory Vault and Suncrest Roost. The Keeper and the wider story are still to come.")
 	if Game.wander != null:
 		_line("WANDER RESEARCH", 18, UI.ACCENT)
 		if not bool(Game.guard_story.get("seal_done", false)):

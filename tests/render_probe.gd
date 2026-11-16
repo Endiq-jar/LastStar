@@ -1077,6 +1077,26 @@ func _run() -> void:
 		if dragon != null:
 			dragon.call("take_hit", 950.0, 0, Vector3.ZERO)
 			roost_ok = roost_ok and int(dragon.get("phase")) == 2 and bool(dragon.get("is_dragon"))
+			var slash_hp: float = Game.current_hp()
+			hollow_player.global_position = dragon.global_position + Vector3(0, 0, 5)
+			dragon.set("_attack_number", 2)
+			dragon.set("_state", "rest")
+			dragon.set("_timer", 0.0)
+			dragon.call("_physics_process", 0.01)
+			roost_ok = roost_ok and str(dragon.get("_attack_kind")) == "line" and float(dragon.get("_timer")) >= 1.4
+			hollow_player.global_position = dragon.global_position + Vector3(3, 0, 5)
+			dragon.set("_timer", 0.0)
+			dragon.call("_physics_process", 0.01)
+			roost_ok = roost_ok and is_equal_approx(Game.current_hp(), slash_hp)
+			hollow_player.global_position = dragon.global_position + Vector3(0, 0, 5)
+			dragon.set("_attack_number", 2)
+			dragon.set("_state", "rest")
+			dragon.set("_timer", 0.0)
+			dragon.call("_physics_process", 0.01)
+			dragon.set("_timer", 0.0)
+			dragon.call("_physics_process", 0.01)
+			roost_ok = roost_ok and Game.current_hp() < slash_hp
+			Game.set_hp(slash_hp)
 			dragon.call("take_hit", 9999.0, 0, Vector3.ZERO)
 			roost_ok = roost_ok and Game.story_memory_count() == 3 and Game.story_memory_owned("suncrest_roost") and Game.coins == roost_coins + 200 and Game.starlight == roost_light + 60
 			roost.call("_on_defeated")
