@@ -1007,11 +1007,11 @@ func _run() -> void:
 	var vault_ok := false
 	var vault := world.get_node_or_null("MemoryVault")
 	if vault != null and hollow_player != null:
-		var old_pos := hollow_player.global_position
-		var old_clears: Dictionary = Game.dungeon_clears.duplicate(true)
-		var old_coins: int = Game.coins
-		var old_light: int = Game.starlight
-		var old_levels: Dictionary = Game.wander.levels.duplicate(true)
+		var vault_old_pos := hollow_player.global_position
+		var vault_old_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+		var vault_old_coins: int = Game.coins
+		var vault_old_light: int = Game.starlight
+		var vault_old_levels: Dictionary = Game.wander.levels.duplicate(true)
 		Game.dungeon_clears.erase("memory_vault")
 		hollow_player.global_position = vault.get("entrance") + Vector3(0, 0.2, 0)
 		vault_ok = vault.call("try_interact", hollow_player)
@@ -1026,9 +1026,9 @@ func _run() -> void:
 			sentinel.call("take_hit", 800.0, 0, Vector3.ZERO)
 			vault_ok = vault_ok and int(sentinel.get("phase")) == 2
 			sentinel.call("take_hit", 9999.0, 0, Vector3.ZERO)
-			vault_ok = vault_ok and bool(Game.dungeon_clears.get("memory_vault", false)) and Game.coins == old_coins + 150 and Game.starlight == old_light + 50 and Game.wander.known("verdant_bloom")
+			vault_ok = vault_ok and bool(Game.dungeon_clears.get("memory_vault", false)) and Game.coins == vault_old_coins + 150 and Game.starlight == vault_old_light + 50 and Game.wander.known("verdant_bloom")
 			vault.call("_on_defeated")
-			vault_ok = vault_ok and Game.coins == old_coins + 150
+			vault_ok = vault_ok and Game.coins == vault_old_coins + 150
 			Game.dungeon_clears = {}
 			Game.load_collection()
 			vault_ok = vault_ok and bool(Game.dungeon_clears.get("memory_vault", false))
@@ -1036,11 +1036,11 @@ func _run() -> void:
 			vault_ok = false
 		hollow_player.global_position = vault.get("_exit_point")
 		vault_ok = vault.call("try_interact", hollow_player) and vault_ok
-		hollow_player.global_position = old_pos
-		Game.dungeon_clears = old_clears
-		Game.coins = old_coins
-		Game.starlight = old_light
-		Game.wander.levels = old_levels
+		hollow_player.global_position = vault_old_pos
+		Game.dungeon_clears = vault_old_clears
+		Game.coins = vault_old_coins
+		Game.starlight = vault_old_light
+		Game.wander.levels = vault_old_levels
 		Game.save_wander()
 		Game.save_collection()
 	_log("INFO" if vault_ok else "FAIL", "Memory Vault scouts, sentinel, reward and persistence=%s" % str(vault_ok))
