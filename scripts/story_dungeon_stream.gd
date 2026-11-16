@@ -27,7 +27,7 @@ func setup(world: Node3D, player: CharacterBody3D, sites: Array) -> void:
 func _dry_location(ideal: Vector2, settlement: Vector2) -> Vector2:
 	for radius in [0.0, 12.0, 24.0, 36.0, 48.0]:
 		for n in range(8):
-			var point := ideal + Vector2(cos(TAU * n / 8.0), sin(TAU * n / 8.0)) * radius
+			var point: Vector2 = ideal + Vector2(cos(TAU * n / 8.0), sin(TAU * n / 8.0)) * radius
 			if point.distance_to(settlement) < 30.0 or bool(_world.call("_is_wet", point.x, point.y)): continue
 			var y := float(_world.call("_height", point.x, point.y))
 			var suitable := true
