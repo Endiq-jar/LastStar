@@ -1152,7 +1152,7 @@ func _run() -> void:
 				continue
 			memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
 			var memory_guards: Array = []
-			for memory_probe_enemy in get_tree().get_nodes_in_group("memory_probe_enemy"):
+			for memory_probe_enemy in get_tree().get_nodes_in_group("enemy"):
 				if memory_probe_enemy.get_parent() == memory_dungeon.get("chamber") and not memory_probe_enemy.is_queued_for_deletion(): memory_guards.append(memory_probe_enemy)
 			memories_ok = memories_ok and memory_guards.size() >= 2 and memory_guards.size() <= 4
 			for memory_probe_guard in memory_guards: memory_probe_guard.call("take_hit", 9999.0, 0, Vector3.ZERO)
