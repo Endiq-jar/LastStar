@@ -340,6 +340,15 @@ func _quests() -> void:
 	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Optional challenge: find the Hollow entrance near Ashvale. Dodge the Warden's red warning circles. Defeat it for 100 Ane and 30 starlight.")
 	_line("MEMORY VAULT", 18, UI.ACCENT)
 	_line("Cleared · Verdant Bloom recovered" if bool(Game.dungeon_clears.get("memory_vault", false)) else "Find the Memory Vault near Lunareth. Defeat its scouts and the two-phase sentinel to learn Verdant Bloom.")
+	_line("SUNCREST ROOST", 18, UI.ACCENT)
+	_line("Cleared · Scorched Promise recovered" if bool(Game.dungeon_clears.get("suncrest_roost", false)) else "Find the Roost near Suncrest. Defeat its guardians and dragon for a memory, 200 Ane and 60 starlight.")
+	_line("MEMORIES OF THE FIRST SILENCE · %d / %d" % [Game.story_memory_count(), Game.STORY_MEMORY_GOAL], 18, UI.ACCENT)
+	for memory in Game.STORY_MEMORIES:
+		if Game.story_memory_owned(str(memory["id"])):
+			_line("%s — %s" % [memory["name"], memory["lore"]])
+		else:
+			_line("Undiscovered memory · %s" % memory["id"].replace("_", " ").capitalize())
+	_line("More story memories and their dungeons are still to come.")
 	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
 	var any_quest := false
 	for site in SETTLEMENTS.SITES:

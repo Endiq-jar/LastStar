@@ -1051,6 +1051,50 @@ func _run() -> void:
 		Game.wander.levels = vault_old_levels
 		Game.save_wander()
 		Game.save_collection()
+
+	# Each available story memory follows a unique persistent clear; old clear
+	# flags migrate naturally and re-entering cannot grant the reward twice.
+	var roost_ok := false
+	var roost := world.get_node_or_null("SuncrestRoost")
+	if roost != null and hollow_player != null:
+		var roost_pos := hollow_player.global_position
+		var roost_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+		var roost_ashvale: bool = Game.ashvale_hollow_cleared
+		var roost_coins: int = Game.coins
+		var roost_light: int = Game.starlight
+		Game.ashvale_hollow_cleared = true
+		Game.dungeon_clears = {"memory_vault": true}
+		roost_ok = Game.story_memory_count() == 2 and not Game.story_memory_owned("suncrest_roost")
+		hollow_player.global_position = roost.get("entrance") + Vector3(0, 0.2, 0)
+		roost_ok = roost.call("try_interact", hollow_player) and roost_ok
+		var roost_enemies: Array = []
+		for enemy in get_tree().get_nodes_in_group("enemy"):
+			if enemy.get_parent() == roost.get("chamber"): roost_enemies.append(enemy)
+		roost_ok = roost_ok and roost_enemies.size() == 2
+		for enemy in roost_enemies:
+			enemy.call("take_hit", 9999.0, 0, Vector3.ZERO)
+		var dragon := roost.get("boss") as Node3D
+		if dragon != null:
+			dragon.call("take_hit", 950.0, 0, Vector3.ZERO)
+			roost_ok = roost_ok and int(dragon.get("phase")) == 2 and bool(dragon.get("is_dragon"))
+			dragon.call("take_hit", 9999.0, 0, Vector3.ZERO)
+			roost_ok = roost_ok and Game.story_memory_count() == 3 and Game.story_memory_owned("suncrest_roost") and Game.coins == roost_coins + 200 and Game.starlight == roost_light + 60
+			roost.call("_on_defeated")
+			roost_ok = roost_ok and Game.coins == roost_coins + 200
+			Game.dungeon_clears = {}
+			Game.load_collection()
+			roost_ok = roost_ok and Game.story_memory_count() == 3
+		else:
+			roost_ok = false
+		hollow_player.global_position = roost.get("_exit_point")
+		roost_ok = roost.call("try_interact", hollow_player) and roost_ok
+		hollow_player.global_position = roost_pos
+		Game.dungeon_clears = roost_clears
+		Game.ashvale_hollow_cleared = roost_ashvale
+		Game.coins = roost_coins
+		Game.starlight = roost_light
+		Game.save_collection()
+	_log("INFO" if roost_ok else "FAIL", "Suncrest Roost dragon and unique persistent story memories=%s" % str(roost_ok))
 	_log("INFO" if vault_ok else "FAIL", "Memory Vault scouts, sentinel, reward and persistence=%s" % str(vault_ok))
 	_log("INFO" if hollow_ok else "FAIL", "Ashvale Hollow entry, boss phases, damage and reward=%s" % str(hollow_ok))
 	_log("INFO" if story_companion_ok else "FAIL", "Ilyra companion, memory choices, persistence and safe spatial movement=%s" % str(story_companion_ok))

@@ -156,6 +156,26 @@ var guard_story: Dictionary = {}
 var settlement_quests: Dictionary = {}
 var ashvale_hollow_cleared := false
 var dungeon_clears: Dictionary = {}
+# Story memories are derived from unique dungeon clears, so old saves receive
+# them automatically and repeat victories can never duplicate an item.
+const STORY_MEMORY_GOAL := 25
+const STORY_MEMORIES := [
+	{"id": "ashvale", "name": "The First Lamp", "lore": "When the Silence fell, Ashvale sheltered its neighbours beneath a shared light."},
+	{"id": "memory_vault", "name": "The Sealed Record", "lore": "The Vault remembers seven seals, raised not to imprison the world but to protect its people."},
+	{"id": "suncrest_roost", "name": "The Scorched Promise", "lore": "A dragon guarded the last caravan carrying a fragment of the old world's knowledge."},
+]
+
+
+func story_memory_owned(id: String) -> bool:
+	return ashvale_hollow_cleared if id == "ashvale" else bool(dungeon_clears.get(id, false))
+
+
+func story_memory_count() -> int:
+	var count := 0
+	for memory in STORY_MEMORIES:
+		if story_memory_owned(str(memory["id"])): count += 1
+	return count
+
 const SETTLEMENT_DATA := preload("res://scripts/settlement_data.gd")
 var wander_levels: Dictionary = {}
 var wander_slots: Array = []

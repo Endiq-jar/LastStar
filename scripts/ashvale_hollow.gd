@@ -28,7 +28,7 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2, which: String
 	var door := DOOR.instantiate() as Node3D
 	add_child(door)
 	var label := Label3D.new()
-	label.text = "%s\nF / Talk to enter · Challenging" % ("MEMORY VAULT" if dungeon_id == "vault" else "ASHVALE HOLLOW")
+	label.text = "%s\nF / Talk to enter · Challenging" % ("SUNCREST ROOST" if dungeon_id == "roost" else ("MEMORY VAULT" if dungeon_id == "vault" else "ASHVALE HOLLOW"))
 	label.position = Vector3(0, 4.5, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 48
@@ -47,7 +47,7 @@ func try_interact(actor: Node3D) -> bool:
 					if not Game.collect_hollow_memory():
 						Game.toast.emit("The memory fragment has already been recovered.")
 				else:
-					Game.toast.emit("The Vault's reward has already been claimed.")
+					Game.toast.emit("This dungeon's reward has already been claimed.")
 				return true
 		if actor.global_position.distance_to(_exit_point) < 4.0:
 			_leave()
@@ -135,7 +135,8 @@ func _box(parent: Node3D, at: Vector3, size: Vector3) -> void:
 
 
 func _is_cleared() -> bool:
-	return bool(Game.dungeon_clears.get("memory_vault", false)) if dungeon_id == "vault" else Game.ashvale_hollow_cleared
+	if dungeon_id == "ashvale": return Game.ashvale_hollow_cleared
+	return bool(Game.dungeon_clears.get("memory_vault" if dungeon_id == "vault" else "suncrest_roost", false))
 
 
 func _on_sentry_defeated() -> void:
@@ -151,15 +152,21 @@ func _spawn_warden() -> void:
 	if not inside or not is_instance_valid(chamber) or is_instance_valid(boss): return
 	boss = WARDEN.new()
 	boss.set("is_vault", dungeon_id == "vault")
+	boss.set("is_dragon", dungeon_id == "roost")
 	boss.position = Vector3(0, 0.15, -4)
 	chamber.add_child(boss)
 	boss.connect("defeated", _on_defeated)
-	Game.toast.emit("%s awakened! Watch its attacks." % ("Vault Sentinel" if dungeon_id == "vault" else "Hollow Warden"))
+	Game.toast.emit("%s awakened! Watch its attacks." % ("Suncrest Dragon" if dungeon_id == "roost" else ("Vault Sentinel" if dungeon_id == "vault" else "Hollow Warden")))
 
 
 func _on_defeated() -> void:
 	if not _is_cleared():
-		if dungeon_id == "vault":
+		if dungeon_id == "roost":
+			Game.dungeon_clears["suncrest_roost"] = true
+			Game.starlight += 60
+			Game.coins += 200
+			Game.toast.emit("Suncrest Roost cleared: a memory, 60 starlight, 200 Ane!")
+		elif dungeon_id == "vault":
 			Game.dungeon_clears["memory_vault"] = true
 			Game.starlight += 50
 			Game.coins += 150
@@ -186,7 +193,7 @@ func _add_chest() -> void:
 	chest.position = Vector3(0, 0.05, -6)
 	chamber.add_child(chest)
 	var label := Label3D.new()
-	label.text = "F / Talk · Memory fragment" if dungeon_id == "ashvale" else "Vault cleared · reward claimed"
+	label.text = "F / Talk · Memory fragment" if dungeon_id == "ashvale" else "Dungeon cleared · reward claimed"
 	label.position = Vector3(0, 1.6, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 36
@@ -203,7 +210,7 @@ func _leave() -> void:
 	if is_instance_valid(chamber): chamber.queue_free()
 	chamber = null
 	boss = null
-	Game.toast.emit("Left Ashvale Hollow. You can return and try again.")
+	Game.toast.emit("Left the dungeon. You can return and try again.")
 
 
 func _on_respawn() -> void:

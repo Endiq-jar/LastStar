@@ -4,8 +4,11 @@ extends CharacterBody3D
 ## pattern make this a readable encounter rather than a contact-damage sponge.
 signal defeated
 const DEMON := preload("res://assets/creatures/Demon.gltf")
+const DRAGON := preload("res://assets/creatures/Dragon_Evolved.gltf")
 const BLUE_DEMON := preload("res://assets/creatures/BlueDemon.gltf")
 var is_vault := false
+var is_dragon := false
+var _radius := 2.6
 var _visual: Node3D
 var _animation: AnimationPlayer
 var _attack_number := 0
@@ -26,9 +29,11 @@ func _ready() -> void:
 	collision_layer = 8
 	collision_mask = 1
 	_player = get_tree().get_first_node_in_group("player") as Node3D
-	if is_vault:
+	if is_dragon:
+		max_hp = 1800.0
+	elif is_vault:
 		max_hp = 1550.0
-		hp = max_hp
+	hp = max_hp
 	var collider := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
 	shape.radius = 0.7
@@ -36,11 +41,11 @@ func _ready() -> void:
 	collider.shape = shape
 	collider.position.y = 1.0
 	add_child(collider)
-	_visual = (BLUE_DEMON if is_vault else DEMON).instantiate() as Node3D
-	_visual.scale = Vector3.ONE * 0.68
+	_visual = (DRAGON if is_dragon else (BLUE_DEMON if is_vault else DEMON)).instantiate() as Node3D
+	_visual.scale = Vector3.ONE * (0.72 if is_dragon else 0.68)
 	add_child(_visual)
 	_animation = _visual.find_child("AnimationPlayer", true, false) as AnimationPlayer
-	_play_animation("Idle")
+	_play_animation("Flying_Idle" if is_dragon else "Idle")
 	_label = Label3D.new()
 	_label.position.y = 2.7
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -75,27 +80,32 @@ func _physics_process(delta: float) -> void:
 		if toward.length() > 3.0:
 			velocity = toward.normalized() * (2.0 if phase == 1 else 2.6)
 			_visual.rotation.y = lerp_angle(_visual.rotation.y, atan2(toward.x, toward.z), 6.0 * delta)
-			_play_animation("Walk")
+			_play_animation("Fast_Flying" if is_dragon else "Walk")
 			move_and_slide()
 		else:
-			_play_animation("Idle")
+			_play_animation("Flying_Idle" if is_dragon else "Idle")
 		if _timer <= 0.0:
 			_state = "warning"
 			_timer = 1.6 if phase == 1 else (1.15 if is_vault else 1.25)
 			_attack_number += 1
-			var targeted := phase == 1 or (is_vault and _attack_number % 2 == 0)
+			var targeted := phase == 1 or ((is_vault or is_dragon) and _attack_number % 2 == 0)
+			_radius = 3.4 if is_dragon and phase == 2 and not targeted else 2.6
+			var disc := _warning.mesh as CylinderMesh
+			if disc != null:
+				disc.top_radius = _radius
+				disc.bottom_radius = _radius
 			_target = _player.global_position if targeted else global_position
-			_play_animation("Punch")
+			_play_animation("Headbutt" if is_dragon else "Punch")
 			_target.y = global_position.y + 0.08
 			if is_instance_valid(_warning):
 				_warning.global_position = _target
 				_warning.visible = true
-			Game.toast.emit("%s: %s — dodge the red circle!" % ["Vault Sentinel" if is_vault else "Hollow Warden", "strike" if targeted else "shockwave"])
+			Game.toast.emit("%s: %s — dodge the red circle!" % [_boss_name(), "strike" if targeted else "shockwave"])
 	elif _timer <= 0.0:
 		if is_instance_valid(_warning): _warning.visible = false
 		var delta_pos := _player.global_position - _target
 		delta_pos.y = 0
-		if delta_pos.length() < 2.6 and absf(_player.global_position.y - _target.y) < 2.5:
+		if delta_pos.length() < _radius and absf(_player.global_position.y - _target.y) < 2.5:
 			_player.call("take_damage", Game.max_hp() * (0.22 if phase == 1 else 0.28), global_position)
 		_state = "rest"
 		_timer = 2.4 if phase == 1 else 1.8
@@ -106,7 +116,7 @@ func take_hit(power: float, _element: int, _direction: Vector3) -> void:
 	hp = maxf(0.0, hp - maxf(power, 0.0))
 	if hp <= max_hp * 0.5 and phase == 1:
 		phase = 2
-		Game.toast.emit("%s phase 2: %s" % ["Vault Sentinel" if is_vault else "Warden", "it alternates strikes and shockwaves!" if is_vault else "it will strike around itself!"])
+		Game.toast.emit("%s phase 2: %s" % [_boss_name(), "it alternates strikes and shockwaves!" if is_vault or is_dragon else "it will strike around itself!"])
 	_update_label()
 	if hp <= 0.0:
 		_dead = true
@@ -120,7 +130,7 @@ func take_combined_hit(power: float, first: int, _second: int, direction: Vector
 
 
 func _update_label() -> void:
-	_label.text = "%s · Phase %d\n%d / %d" % ["Vault Sentinel" if is_vault else "Hollow Warden", phase, int(hp), int(max_hp)]
+	_label.text = "%s · Phase %d\n%d / %d" % [_boss_name(), phase, int(hp), int(max_hp)]
 
 
 func _play_animation(part: String) -> void:
@@ -135,3 +145,8 @@ func _play_animation(part: String) -> void:
 
 func _exit_tree() -> void:
 	if is_instance_valid(_warning): _warning.queue_free()
+
+
+func _boss_name() -> String:
+	if is_dragon: return "Suncrest Dragon"
+	return "Vault Sentinel" if is_vault else "Hollow Warden"

@@ -84,6 +84,7 @@ func _ready() -> void:
 	_spawn_settlements()
 	_spawn_ashvale_hollow()
 	_spawn_memory_vault()
+	_spawn_suncrest_roost()
 
 	# Everything else is scenery dressed on afterwards.
 	_build_lake()
@@ -1272,6 +1273,19 @@ func _spawn_memory_vault() -> void:
 	add_child(vault)
 	vault.add_to_group("hollow_entrance")
 	vault.call("setup", self, get_node("Player"), sites[2]["resolved"], "vault")
+
+
+func _spawn_suncrest_roost() -> void:
+	var manager := get_node_or_null("Settlements")
+	if manager == null: return
+	var sites: Array = manager.get("_sites")
+	if sites.size() < 7: return
+	var roost := Node3D.new()
+	roost.name = "SuncrestRoost"
+	roost.set_script(load("res://scripts/ashvale_hollow.gd"))
+	add_child(roost)
+	roost.add_to_group("hollow_entrance")
+	roost.call("setup", self, get_node("Player"), sites[6]["resolved"], "roost")
 
 
 func _build_grass_field() -> void:
