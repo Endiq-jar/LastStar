@@ -62,7 +62,7 @@ func _process(delta: float) -> void:
 	if player == null: return
 	var desired := player.global_position + Vector3(1.7, 0, 1.7)
 	var terrain := get_parent().get_node_or_null("Terrain")
-	if terrain != null and player.global_position.y < 400.0:
+	if terrain != null and player.global_position.y < 400.0 and not Game.in_final_dungeon:
 		desired.y = float(terrain.call("get_height_at", desired.x, desired.z))
 	else:
 		desired.y = player.global_position.y

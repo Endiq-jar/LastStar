@@ -1124,6 +1124,7 @@ func _run() -> void:
 
 	# Check the 22-entry streamed catalog and several full representative fights.
 	var memories_ok := false
+	var verified_story_clears: Dictionary = {}
 	var stream := world.get_node_or_null("StoryDungeons")
 	if stream != null and hollow_player != null:
 		var memories_pos := hollow_player.global_position
@@ -1133,9 +1134,16 @@ func _run() -> void:
 		Game.dungeon_clears = {}
 		var story_probe_locations: Array = stream.get("_locations")
 		var story_probe_ids := {}
-		for story_probe_entry in story_probe_locations: story_probe_ids[str(story_probe_entry["id"])] = true
-		memories_ok = story_probe_locations.size() == 22 and story_probe_ids.size() == 22 and Game.all_story_memories().size() == 25
-		for memory_probe_chosen in ["memory_04", "memory_12", "memory_25"]:
+		memories_ok = story_probe_locations.size() == 22 and Game.all_story_memories().size() == 25
+		for story_probe_entry in story_probe_locations:
+			story_probe_ids[str(story_probe_entry["id"])] = true
+			var story_probe_point: Vector2 = story_probe_entry["pos"]
+			if bool(world.call("_is_wet", story_probe_point.x, story_probe_point.y)):
+				_log("FAIL", "Memory entrance is wet: %s" % story_probe_entry["id"])
+				memories_ok = false
+		memories_ok = memories_ok and story_probe_ids.size() == 22
+		for memory_probe_definition in Game.STORY_DUNGEONS.ENTRIES:
+			var memory_probe_chosen: String = memory_probe_definition["id"]
 			var story_probe_location: Dictionary = {}
 			for memory_probe_item in story_probe_locations:
 				if str(memory_probe_item["id"]) == memory_probe_chosen: story_probe_location = memory_probe_item
@@ -1167,9 +1175,14 @@ func _run() -> void:
 				memories_ok = false
 			hollow_player.global_position = memory_dungeon.get("_exit_point")
 			memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
+			# Release completed arenas regularly rather than retaining all 22 at once.
+			if int(memory_probe_chosen.trim_prefix("memory_")) % 4 == 0:
+				await get_tree().process_frame
 		Game.dungeon_clears = {}
 		Game.load_collection()
-		memories_ok = memories_ok and Game.story_memory_owned("memory_04") and Game.story_memory_owned("memory_12") and Game.story_memory_owned("memory_25")
+		for story_probe_memory in Game.STORY_DUNGEONS.ENTRIES:
+			memories_ok = memories_ok and Game.story_memory_owned(str(story_probe_memory["id"]))
+		verified_story_clears = Game.dungeon_clears.duplicate(true)
 		Game.dungeon_clears = memories_clears
 		Game.coins = memories_coins
 		Game.starlight = memories_light
@@ -1195,14 +1208,27 @@ func _run() -> void:
 		hollow_player.global_position = finale.get("entrance") + Vector3(0, 0.2, 0)
 		finale_ok = finale.call("try_interact", hollow_player) and not bool(finale.get("inside"))
 		Game.ashvale_hollow_cleared = true
+		Game.dungeon_clears = verified_story_clears.duplicate(true)
 		Game.dungeon_clears["memory_vault"] = true
 		Game.dungeon_clears["suncrest_roost"] = true
-		for memory in Game.STORY_DUNGEONS.ENTRIES:
-			Game.dungeon_clears[str(memory["id"])] = true
 		finale_ok = Game.story_memory_count() == 25 and finale.call("try_interact", hollow_player) and finale_ok
 		var depths := finale.get("chamber") as Node3D
 		finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and depths != null and depths.global_position.y < 0 and (finale.get("_gates") as Array).size() == 10
 		if depths != null:
+			await get_tree().physics_frame
+			var finale_space := depths.get_world_3d().direct_space_state
+			for floor_index in range(10):
+				var expected_floor := depths.to_global(Vector3(0, -8.0 * (float(floor_index) + 0.5), -100.0 * (float(floor_index) + 0.5)))
+				var floor_query := PhysicsRayQueryParameters3D.create(expected_floor + Vector3(0, 3, 0), expected_floor - Vector3(0, 3, 0), 1)
+				var finale_floor_hit := finale_space.intersect_ray(floor_query)
+				finale_ok = finale_ok and not finale_floor_hit.is_empty() and absf(float(finale_floor_hit.get("position", Vector3.ZERO).y) - expected_floor.y) < 0.5
+			var finale_ilyra := world.get_node_or_null("StarGuardIlyra") as Node3D
+			Game.guard_story["ilyra_following"] = true
+			if finale_ilyra != null:
+				finale_ilyra.call("_process", 0.1)
+				finale_ok = finale_ok and absf(finale_ilyra.global_position.y - hollow_player.global_position.y) < 3.0
+			else:
+				finale_ok = false
 			for level in range(10):
 				var guards: Array = []
 				for enemy in get_tree().get_nodes_in_group("enemy"):
@@ -1210,6 +1236,10 @@ func _run() -> void:
 				finale_ok = finale_ok and guards.size() == 2 and int(finale.get("sector")) == level
 				for guard in guards:
 					guard.call("take_hit", 9999.0, 0, Vector3.ZERO)
+				if level == 0:
+					Game._on_party_down()
+					var checkpoint_pos: Vector3 = finale.get("_checkpoint")
+					finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and hollow_player.global_position.distance_to(checkpoint_pos) < 0.1 and int(finale.get("sector")) == 1
 			var keeper := finale.get("boss") as Node3D
 			if keeper != null:
 				finale_ok = finale_ok and bool(keeper.get("is_keeper")) and float(keeper.get("max_hp")) > 1800.0

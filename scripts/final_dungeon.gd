@@ -20,6 +20,7 @@ var _remaining := 0
 var _gates: Array[Node3D] = []
 var _exit: Vector3
 var _arena_exit: Vector3
+var _checkpoint: Vector3
 
 
 func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
@@ -93,7 +94,8 @@ func _enter() -> void:
 	_arena_exit = chamber.to_global(Vector3(7, -80, -1015))
 	_marker("F / Talk · Leave the depths", Vector3(0, 2, -3))
 	_marker("F / Talk · Return to Aetheris", Vector3(7, -78, -1015))
-	player.global_position = chamber.to_global(Vector3(0, 1.6, -3))
+	_checkpoint = chamber.to_global(Vector3(0, 1.6, -3))
+	player.global_position = _checkpoint
 	player.velocity = Vector3.ZERO
 	if bool(Game.guard_story.get("keeper_defeated", false)):
 		for gate in _gates: gate.queue_free()
@@ -120,6 +122,9 @@ func _guardian_defeated() -> void:
 	if _remaining != 0: return
 	if is_instance_valid(_gates[sector]): _gates[sector].queue_free()
 	sector += 1
+	# A checkpoint after each gate makes the long descent fair without changing
+	# the player's overworld waypoint or persisting a half-finished expedition.
+	_checkpoint = chamber.to_global(Vector3(0, -DESCENT_PER_SECTOR * sector + 1.6, -SECTOR_LENGTH * sector + 1.0))
 	if sector == SECTORS:
 		_spawn_keeper()
 	else:
@@ -195,11 +200,11 @@ func _leave() -> void:
 
 
 func _on_respawn() -> void:
-	if inside:
-		inside = false
-		Game.in_final_dungeon = false
-		if is_instance_valid(chamber): chamber.queue_free()
-		chamber = null
-		boss = null
-		_gates.clear()
-		Game.toast.emit("The descent has reset. Prepare and try again.")
+	if not inside or not is_instance_valid(chamber) or not is_instance_valid(player): return
+	# Player's normal respawn runs first; return to the last opened gate after it.
+	Game.in_final_dungeon = true
+	player.global_position = _checkpoint
+	player.velocity = Vector3.ZERO
+	if is_instance_valid(boss) and not boss.is_queued_for_deletion():
+		boss.call("reset_encounter")
+	Game.toast.emit("Returned to the last open gate. The Keeper recovers between attempts.")

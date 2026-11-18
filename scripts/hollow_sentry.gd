@@ -72,7 +72,7 @@ func _physics_process(delta: float) -> void:
 			velocity.z = 0.0
 		velocity.y = maxf(velocity.y - 20.0 * delta, -30.0)
 		move_and_slide()
-		if _timer <= 0.0:
+		if _timer <= 0.0 and _can_target(10.0):
 			_target = _player.global_position
 			_target.y = global_position.y + 0.08
 			if is_instance_valid(_warning):
@@ -117,3 +117,13 @@ func _play(part: String) -> void:
 			if _animation.current_animation != name or not _animation.is_playing():
 				_animation.play(name)
 			return
+
+
+func _can_target(reach: float) -> bool:
+	if not is_instance_valid(_player): return false
+	var origin := global_position + Vector3(0, 0.8, 0)
+	var target := _player.global_position + Vector3(0, 0.8, 0)
+	if origin.distance_to(target) > reach: return false
+	var ray := PhysicsRayQueryParameters3D.create(origin, target, 1)
+	ray.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_ray(ray).is_empty()

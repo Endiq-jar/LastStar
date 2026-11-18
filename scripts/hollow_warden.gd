@@ -96,7 +96,7 @@ func _physics_process(delta: float) -> void:
 			move_and_slide()
 		else:
 			_play_animation("Flying_Idle" if is_dragon else "Idle")
-		if _timer <= 0.0:
+		if _timer <= 0.0 and _can_target(15.0):
 			_state = "warning"
 			_timer = 1.6 if phase == 1 else (1.0 if is_keeper and phase >= 3 else (1.15 if is_vault else 1.25))
 			_attack_number += 1
@@ -198,3 +198,25 @@ func _boss_name() -> String:
 	if is_keeper: return "The Keeper"
 	if is_dragon: return "Suncrest Dragon"
 	return "Vault Sentinel" if is_vault else "Hollow Warden"
+
+
+func _can_target(reach: float) -> bool:
+	if not is_instance_valid(_player): return false
+	var origin := global_position + Vector3(0, 1.0, 0)
+	var target := _player.global_position + Vector3(0, 1.0, 0)
+	if origin.distance_to(target) > reach: return false
+	var ray := PhysicsRayQueryParameters3D.create(origin, target, 1)
+	ray.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_ray(ray).is_empty()
+
+
+func reset_encounter() -> void:
+	if _dead: return
+	hp = max_hp
+	phase = 1
+	_attack_number = 0
+	_state = "rest"
+	_timer = 2.5
+	velocity = Vector3.ZERO
+	if is_instance_valid(_warning): _warning.visible = false
+	_update_label()
