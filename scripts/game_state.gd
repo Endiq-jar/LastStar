@@ -162,6 +162,7 @@ var in_final_dungeon := false
 # them automatically and repeat victories can never duplicate an item.
 const STORY_DUNGEONS := preload("res://scripts/story_dungeons.gd")
 const STORY_MEMORY_GOAL := 25
+const MEMORY_SPELLS := {"memory_10": "tide_remedy", "memory_15": "winter_resolve", "memory_22": "dusk_seal"}
 const STORY_MEMORIES := [
 	{"id": "ashvale", "name": "The First Lamp", "lore": "When the Silence fell, Ashvale sheltered its neighbours beneath a shared light."},
 	{"id": "memory_vault", "name": "The Sealed Record", "lore": "The Vault remembers seven seals, raised not to imprison the world but to protect its people."},
@@ -498,6 +499,12 @@ func load_collection() -> void:
 	dungeon_clears = saved_dungeon_clears if saved_dungeon_clears is Dictionary else {}
 	var levels_data = cfg.get_value("wander", "levels", {})
 	wander_levels = levels_data if levels_data is Dictionary else {}
+	# Existing clears earn these discoveries too, without resetting mastery.
+	for memory_id in MEMORY_SPELLS:
+		if bool(dungeon_clears.get(memory_id, false)):
+			var spell_id: String = MEMORY_SPELLS[memory_id]
+			if not wander_levels.has(spell_id): wander_levels[spell_id] = 1
+			if wander != null and not wander.known(spell_id): wander.levels[spell_id] = 1
 	var slots_data = cfg.get_value("wander", "slots", [])
 	wander_slots = slots_data if slots_data is Array else []
 	var saved_drops = cfg.get_value("story", "dropped_items", {})
@@ -555,6 +562,14 @@ func load_collection() -> void:
 	if saved_items is Dictionary:
 		collectibles = saved_items
 	collection_changed.emit()
+
+
+func grant_memory_spell(memory_id: String) -> String:
+	var id := str(MEMORY_SPELLS.get(memory_id, ""))
+	if id.is_empty(): return ""
+	if not wander_levels.has(id): wander_levels[id] = 1
+	if wander != null and not wander.known(id): wander.learn(id)
+	return id
 
 
 func save_wander() -> void:

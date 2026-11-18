@@ -178,7 +178,9 @@ func _on_defeated() -> void:
 			Game.dungeon_clears[dungeon_id] = true
 			Game.coins += 100 + rank * 2
 			Game.starlight += 25 + rank
-			Game.toast.emit("Memory recovered: %s (%d / 25)." % [_story_entry["name"], Game.story_memory_count()])
+			var reward_spell: String = Game.grant_memory_spell(dungeon_id)
+			var spell_message := " · new spell: " + str(Game.wander.spell(reward_spell).get("name", reward_spell)) if not reward_spell.is_empty() and Game.wander != null else ""
+			Game.toast.emit("Memory recovered: %s (%d / 25)%s." % [_story_entry["name"], Game.story_memory_count(), spell_message])
 		elif dungeon_id == "roost":
 			Game.dungeon_clears["suncrest_roost"] = true
 			Game.starlight += 60

@@ -348,7 +348,9 @@ func _quests() -> void:
 			_line("%s — %s" % [memory["name"], memory["lore"]])
 		else:
 			var hint := str(SETTLEMENTS.SITES[int(memory["site"])]["name"]) if memory.has("site") else str(memory["id"]).replace("_", " ").capitalize()
-			_line("Undiscovered memory · near %s" % hint)
+			var reward_id := str(Game.MEMORY_SPELLS.get(str(memory["id"]), ""))
+			var reward_hint := " · spell discovery" if not reward_id.is_empty() else ""
+			_line("Undiscovered memory · near %s%s" % [hint, reward_hint])
 	_line("Find two memory Hollows near each listed settlement. Their arenas share a common Hollow design.")
 	_line("THE LAST SEAL", 18, UI.ACCENT)
 	if bool(Game.guard_story.get("keeper_defeated", false)):

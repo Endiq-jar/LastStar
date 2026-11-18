@@ -136,6 +136,24 @@ const CATALOGUE := {
 		"desc": "Brambles erupt and hold the ground.",
 		"starter": false,
 	},
+	"tide_remedy": {
+		"name": "Tide Remedy", "category": "Defensive", "element": 3,
+		"color": Color(0.38, 0.8, 0.92), "icon": "aqua", "cost": 24.0,
+		"cooldown": 16.0, "power": 0.0, "radius": 0.0, "range": 0.0,
+		"desc": "Restore a portion of your health. Mastery improves the healing.", "starter": false,
+	},
+	"winter_resolve": {
+		"name": "Winter Resolve", "category": "Enhancement", "element": 4,
+		"color": Color(0.65, 0.85, 1.0), "icon": "aqua", "cost": 18.0,
+		"cooldown": 12.0, "power": 0.0, "radius": 0.0, "range": 0.0,
+		"desc": "Recover stamina for dodging and sprinting.", "starter": false,
+	},
+	"dusk_seal": {
+		"name": "Dusk Seal", "category": "Arcane", "element": 2,
+		"color": Color(0.72, 0.55, 0.95), "icon": "arcane", "cost": 26.0,
+		"cooldown": 10.0, "power": 1.0, "radius": 6.0, "range": 0.0,
+		"desc": "Interrupt nearby Hollow scouts and raiders. Bosses resist the interrupt.", "starter": false,
+	},
 }
 
 ## Equipped slot ids, length MAX_SLOTS. Empty string means an empty slot.

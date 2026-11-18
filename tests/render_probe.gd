@@ -1131,6 +1131,9 @@ func _run() -> void:
 		var memories_clears: Dictionary = Game.dungeon_clears.duplicate(true)
 		var memories_coins: int = Game.coins
 		var memories_light: int = Game.starlight
+		var memories_wander: Dictionary = Game.wander.levels.duplicate(true)
+		var memories_stamina: float = Game.stamina
+		var memories_hp: float = Game.current_hp()
 		Game.dungeon_clears = {}
 		var story_probe_locations: Array = stream.get("_locations")
 		var story_probe_ids := {}
@@ -1163,11 +1166,20 @@ func _run() -> void:
 			for memory_probe_enemy in get_tree().get_nodes_in_group("enemy"):
 				if memory_probe_enemy.get_parent() == memory_dungeon.get("chamber") and not memory_probe_enemy.is_queued_for_deletion(): memory_guards.append(memory_probe_enemy)
 			memories_ok = memories_ok and memory_guards.size() >= 2 and memory_guards.size() <= 4
+			if memory_probe_chosen == "memory_22" and not memory_guards.is_empty():
+				var interrupted := memory_guards[0] as Node3D
+				hollow_player.global_position = interrupted.global_position + Vector3(0, 0, 2)
+				interrupted.set("_state", "warning")
+				interrupted.set("_timer", 0.1)
+				hollow_player.call("_on_spell_cast", "dusk_seal", Game.wander.spell("dusk_seal"))
+				memories_ok = memories_ok and str(interrupted.get("_state")) == "rest" and float(interrupted.get("_timer")) >= 2.0 and float(interrupted.get("hp")) < 260.0
 			for memory_probe_guard in memory_guards: memory_probe_guard.call("take_hit", 9999.0, 0, Vector3.ZERO)
 			var memory_boss := memory_dungeon.get("boss") as Node3D
 			if memory_boss != null:
 				memory_boss.call("take_hit", 9999.0, 0, Vector3.ZERO)
 				memories_ok = memories_ok and Game.story_memory_owned(memory_probe_chosen)
+				if Game.MEMORY_SPELLS.has(memory_probe_chosen):
+					memories_ok = memories_ok and Game.wander.known(str(Game.MEMORY_SPELLS[memory_probe_chosen]))
 				var story_probe_after_reward: int = Game.coins
 				memory_dungeon.call("_on_defeated")
 				memories_ok = memories_ok and Game.coins == story_probe_after_reward
@@ -1178,16 +1190,32 @@ func _run() -> void:
 			# Release completed arenas regularly rather than retaining all 22 at once.
 			if int(memory_probe_chosen.trim_prefix("memory_")) % 4 == 0:
 				await get_tree().process_frame
+		Game.set_hp(Game.max_hp() * 0.5)
+		var memory_before_heal: float = Game.current_hp()
+		hollow_player.call("_on_spell_cast", "tide_remedy", Game.wander.spell("tide_remedy"))
+		memories_ok = memories_ok and Game.current_hp() > memory_before_heal
+		Game.stamina = 10.0
+		hollow_player.call("_on_spell_cast", "winter_resolve", Game.wander.spell("winter_resolve"))
+		memories_ok = memories_ok and Game.stamina > 10.0
+		for memory_spell_id in Game.MEMORY_SPELLS.values():
+			Game.wander.levels.erase(memory_spell_id)
+		Game.save_wander() # simulate a save from before these rewards existed
 		Game.dungeon_clears = {}
 		Game.load_collection()
+		for memory_spell_id in Game.MEMORY_SPELLS.values():
+			memories_ok = memories_ok and Game.wander.known(str(memory_spell_id)) and Game.wander_levels.has(memory_spell_id)
 		for story_probe_memory in Game.STORY_DUNGEONS.ENTRIES:
 			memories_ok = memories_ok and Game.story_memory_owned(str(story_probe_memory["id"]))
 		verified_story_clears = Game.dungeon_clears.duplicate(true)
 		Game.dungeon_clears = memories_clears
+		Game.wander.levels = memories_wander
+		Game.stamina = memories_stamina
+		Game.set_hp(memories_hp)
 		Game.coins = memories_coins
 		Game.starlight = memories_light
 		hollow_player.global_position = memories_pos
 		stream.call("_update_stream")
+		Game.save_wander()
 		Game.save_collection()
 	_log("INFO" if memories_ok else "FAIL", "22 streamed memory Hollows, fights, unique rewards and save=%s" % str(memories_ok))
 

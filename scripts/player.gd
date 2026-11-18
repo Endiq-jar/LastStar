@@ -927,6 +927,24 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 		Game.toast.emit("Stone Bulwark: %.0f shield" % Game.shield_points)
 		return
 
+	if id == "tide_remedy":
+		var healed := Game.max_hp() * 0.18 * mastery
+		Game.heal(healed)
+		Game.toast.emit("Tide Remedy: +%.0f health" % healed)
+		return
+	if id == "winter_resolve":
+		Game.stamina = minf(Game.MAX_STAMINA, Game.stamina + 35.0 * mastery)
+		Game.stats_changed.emit()
+		Game.toast.emit("Winter Resolve: stamina restored")
+		return
+	if id == "dusk_seal":
+		for foe in get_tree().get_nodes_in_group("enemy"):
+			if foe is Node3D and is_instance_valid(foe) and foe.global_position.distance_to(global_position) < radius and foe.has_method("interrupt_attack"):
+				foe.call("interrupt_attack", 2.0)
+				foe.call("take_hit", power, element, forward)
+		Game.toast.emit("Dusk Seal interrupts nearby scouts")
+		return
+
 	# Spatial spells relocate the caster instead of dealing damage.
 	if id == "tide_step":
 		var dest := _safe_spatial_destination(forward, minf(reach, 14.0))

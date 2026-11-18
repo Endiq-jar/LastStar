@@ -92,6 +92,14 @@ func _physics_process(delta: float) -> void:
 		_play("Idle" if is_orc else "Flying_Idle")
 
 
+func interrupt_attack(recovery: float) -> void:
+	if _dead: return
+	_state = "rest"
+	_timer = maxf(_timer, recovery)
+	if is_instance_valid(_warning): _warning.visible = false
+	_play("Idle" if is_orc else "Flying_Idle")
+
+
 func take_hit(power: float, _element: int, _direction: Vector3) -> void:
 	if _dead: return
 	hp = maxf(0.0, hp - maxf(0.0, power))
