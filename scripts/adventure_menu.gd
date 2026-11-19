@@ -352,6 +352,17 @@ func _quests() -> void:
 			var reward_hint := " · spell discovery" if not reward_id.is_empty() else ""
 			_line("Undiscovered memory · near %s%s" % [hint, reward_hint])
 	_line("Find two memory Hollows near each listed settlement. Their arenas share a common Hollow design.")
+	_line("OPTIONAL HOLLOWS · %d / %d" % [Game.optional_dungeon_count(), Game.OPTIONAL_DUNGEONS.COUNT], 18, UI.ACCENT)
+	_line("Explore near settlements for optional challenges. These encounters reuse Hollow arenas and enemy families; their Ane and starlight rewards are claimed once.")
+	for optional_site in range(SETTLEMENTS.SITES.size()):
+		var optional_done := 0
+		var optional_total := 0
+		for optional_index in range(Game.OPTIONAL_DUNGEONS.COUNT):
+			var optional_entry: Dictionary = Game.OPTIONAL_DUNGEONS.entry(optional_index)
+			if int(optional_entry["site"]) == optional_site:
+				optional_total += 1
+				if bool(Game.dungeon_clears.get(optional_entry["id"], false)): optional_done += 1
+		_line("%s · %d / %d cleared" % [SETTLEMENTS.SITES[optional_site]["name"], optional_done, optional_total])
 	_line("THE LAST SEAL", 18, UI.ACCENT)
 	if bool(Game.guard_story.get("keeper_defeated", false)):
 		_line("The Keeper is defeated. The Seals hold because the people of Elaris chose to share their light. The world remembers again.")

@@ -161,6 +161,7 @@ var in_final_dungeon := false
 # Story memories are derived from unique dungeon clears, so old saves receive
 # them automatically and repeat victories can never duplicate an item.
 const STORY_DUNGEONS := preload("res://scripts/story_dungeons.gd")
+const OPTIONAL_DUNGEONS := preload("res://scripts/optional_dungeons.gd")
 const STORY_MEMORY_GOAL := 25
 const MEMORY_SPELLS := {"memory_10": "tide_remedy", "memory_15": "winter_resolve", "memory_22": "dusk_seal"}
 const STORY_MEMORIES := [
@@ -183,6 +184,10 @@ func story_memory_count() -> int:
 	for memory in all_story_memories():
 		if story_memory_owned(str(memory["id"])): count += 1
 	return count
+
+
+func optional_dungeon_count() -> int:
+	return OPTIONAL_DUNGEONS.count_cleared(dungeon_clears)
 
 const SETTLEMENT_DATA := preload("res://scripts/settlement_data.gd")
 var wander_levels: Dictionary = {}

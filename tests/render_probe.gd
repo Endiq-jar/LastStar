@@ -1219,6 +1219,76 @@ func _run() -> void:
 		Game.save_collection()
 	_log("INFO" if memories_ok else "FAIL", "22 streamed memory Hollows, fights, unique rewards and save=%s" % str(memories_ok))
 
+	# Optional Hollows have stable independent IDs and a compact streamed roster.
+	var optional_ok := false
+	if stream != null and hollow_player != null:
+		var optional_pos := hollow_player.global_position
+		var optional_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+		var optional_coins: int = Game.coins
+		var optional_light: int = Game.starlight
+		var optional_memory_count: int = Game.story_memory_count()
+		var optional_locations: Array = stream.get("_extra_locations")
+		var optional_ids := {}
+		optional_ok = optional_locations.size() == 75 and Game.OPTIONAL_DUNGEONS.COUNT == 75
+		for optional_location in optional_locations:
+			var optional_id := str(optional_location["id"])
+			var optional_point: Vector2 = optional_location["pos"]
+			optional_ids[optional_id] = true
+			if bool(world.call("_is_wet", optional_point.x, optional_point.y)):
+				_log("FAIL", "Optional entrance is wet: %s" % optional_id)
+				optional_ok = false
+			for prior in optional_locations:
+				if str(prior["id"]) != optional_id and optional_point.distance_to(prior["pos"]) < 10.0:
+					_log("FAIL", "Optional entrances overlap: %s and %s" % [optional_id, prior["id"]])
+					optional_ok = false
+		optional_ok = optional_ok and optional_ids.size() == 75
+		for optional_chosen in ["optional_000", "optional_015", "optional_037", "optional_074"]:
+			var optional_place: Dictionary = {}
+			for optional_candidate in optional_locations:
+				if optional_candidate["id"] == optional_chosen: optional_place = optional_candidate
+			if optional_place.is_empty():
+				optional_ok = false
+				continue
+			Game.dungeon_clears.erase(optional_chosen)
+			var optional_xy: Vector2 = optional_place["pos"]
+			hollow_player.global_position = Vector3(optional_xy.x, float(world.call("_height", optional_xy.x, optional_xy.y)) + 0.2, optional_xy.y)
+			stream.call("_update_stream")
+			var optional_loaded: Dictionary = stream.get("_loaded")
+			var optional_dungeon := optional_loaded.get(optional_chosen) as Node3D
+			if optional_dungeon == null:
+				optional_ok = false
+				continue
+			optional_ok = optional_dungeon.call("try_interact", hollow_player) and optional_ok
+			var optional_guards: Array = []
+			for optional_enemy in get_tree().get_nodes_in_group("enemy"):
+				if optional_enemy.get_parent() == optional_dungeon.get("chamber") and not optional_enemy.is_queued_for_deletion(): optional_guards.append(optional_enemy)
+			optional_ok = optional_ok and optional_guards.size() >= 2 and optional_guards.size() <= 4
+			for optional_guard in optional_guards: optional_guard.call("take_hit", 9999.0, 0, Vector3.ZERO)
+			var optional_boss := optional_dungeon.get("boss") as Node3D
+			if optional_boss != null:
+				var optional_before_coins: int = Game.coins
+				optional_boss.call("take_hit", 9999.0, 0, Vector3.ZERO)
+				optional_ok = optional_ok and bool(Game.dungeon_clears.get(optional_chosen, false)) and Game.coins > optional_before_coins
+				var optional_after_coins: int = Game.coins
+				optional_dungeon.call("_on_defeated")
+				optional_ok = optional_ok and Game.coins == optional_after_coins and Game.story_memory_count() == optional_memory_count
+			else:
+				optional_ok = false
+			hollow_player.global_position = optional_dungeon.get("_exit_point")
+			optional_ok = optional_dungeon.call("try_interact", hollow_player) and optional_ok
+			await get_tree().process_frame
+		Game.dungeon_clears = {}
+		Game.load_collection()
+		for optional_chosen in ["optional_000", "optional_015", "optional_037", "optional_074"]:
+			optional_ok = optional_ok and bool(Game.dungeon_clears.get(optional_chosen, false))
+		Game.dungeon_clears = optional_clears
+		Game.coins = optional_coins
+		Game.starlight = optional_light
+		hollow_player.global_position = optional_pos
+		stream.call("_update_stream")
+		Game.save_collection()
+	_log("INFO" if optional_ok else "FAIL", "75 optional Hollows, placement, representative rewards and save=%s" % str(optional_ok))
+
 	# Exercise both the locked gate and the live 25-memory unlock path.
 	var finale_ok := false
 	var finale := world.get_node_or_null("LastSeal")
