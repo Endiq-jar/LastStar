@@ -1242,7 +1242,12 @@ func _run() -> void:
 					_log("FAIL", "Optional entrances overlap: %s and %s" % [optional_id, prior["id"]])
 					optional_ok = false
 		optional_ok = optional_ok and optional_ids.size() == 75
-		for optional_chosen in ["optional_000", "optional_015", "optional_037", "optional_074"]:
+		var optional_to_check: Array[String] = ["optional_000", "optional_015", "optional_037", "optional_074"]
+		if DisplayServer.get_name() == "headless":
+			optional_to_check.clear()
+			for optional_definition in optional_locations:
+				optional_to_check.append(str(optional_definition["id"]))
+		for optional_chosen in optional_to_check:
 			var optional_place: Dictionary = {}
 			for optional_candidate in optional_locations:
 				if optional_candidate["id"] == optional_chosen: optional_place = optional_candidate
@@ -1279,15 +1284,15 @@ func _run() -> void:
 			await get_tree().process_frame
 		Game.dungeon_clears = {}
 		Game.load_collection()
-		for optional_chosen in ["optional_000", "optional_015", "optional_037", "optional_074"]:
-			optional_ok = optional_ok and bool(Game.dungeon_clears.get(optional_chosen, false))
+		for optional_saved_id in optional_to_check:
+			optional_ok = optional_ok and bool(Game.dungeon_clears.get(optional_saved_id, false))
 		Game.dungeon_clears = optional_clears
 		Game.coins = optional_coins
 		Game.starlight = optional_light
 		hollow_player.global_position = optional_pos
 		stream.call("_update_stream")
 		Game.save_collection()
-	_log("INFO" if optional_ok else "FAIL", "75 optional Hollows, placement, representative rewards and save=%s" % str(optional_ok))
+	_log("INFO" if optional_ok else "FAIL", "75 optional Hollows, placement, rewards and save=%s" % str(optional_ok))
 
 	# Exercise both the locked gate and the live 25-memory unlock path.
 	var finale_ok := false
