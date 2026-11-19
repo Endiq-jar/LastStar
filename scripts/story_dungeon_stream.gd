@@ -50,7 +50,7 @@ func _dry_location(ideal: Vector2, settlement: Vector2) -> Vector2:
 
 
 func _optional_location(ideal: Vector2, settlement: Vector2) -> Vector2:
-	for radius in [0.0, 12.0, 24.0, 36.0, 48.0, 60.0, 84.0]:
+	for radius in [0.0, 12.0, 24.0, 36.0, 48.0, 60.0, 84.0, 120.0, 160.0, 240.0, 320.0, 400.0]:
 		for n in range(8):
 			var point: Vector2 = ideal + Vector2(cos(TAU * n / 8.0), sin(TAU * n / 8.0)) * radius
 			if point.distance_to(settlement) < 65.0 or bool(_world.call("_is_wet", point.x, point.y)): continue
