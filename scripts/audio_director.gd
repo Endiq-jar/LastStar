@@ -17,6 +17,7 @@ func _ready() -> void:
 	add_to_group("ambience")
 	_wind = AudioStreamPlayer.new()
 	_wind.name = "Wind"
+	_wind.bus = "Ambience"
 	_wind.volume_db = -17.0
 	var gen := AudioStreamGenerator.new()
 	gen.mix_rate = RATE
@@ -28,6 +29,7 @@ func _ready() -> void:
 
 	_sfx = AudioStreamPlayer.new()
 	_sfx.name = "SFX"
+	_sfx.bus = "SFX"
 	_sfx.volume_db = -6.0
 	add_child(_sfx)
 

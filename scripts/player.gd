@@ -79,6 +79,9 @@ const SPAWN_CLEARANCE := 1.6
 ## pinned to this value so she stands ON the ground rather than 3 cm above it.
 const CHARACTER_SOLE_Y := 0.05
 
+var _dodge_time := 0.0
+var _dodge_cooldown := 0.0
+var _dodge_direction := Vector3.ZERO
 var _attack_cd := 0.0
 var _skill_cd := 0.0
 var _attack_combo := 0
@@ -112,6 +115,7 @@ func _ready() -> void:
 	Game.respawned.connect(_on_respawn)
 	Game.spell_cast.connect(_on_spell_cast)
 	Game.character_changed.connect(_on_character_changed)
+	Game.collection_changed.connect(_update_equipment)
 	Game.game_won.connect(_on_game_won)
 	if not Game.is_mobile():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -120,7 +124,9 @@ func _ready() -> void:
 
 func _make_wander() -> void:
 	wander = Wander.new()
+	wander.restore(Game.wander_levels, Game.wander_slots)
 	Game.wander = wander
+	wander.progress_changed.connect(Game.save_wander)
 
 
 func _build_rig() -> void:
@@ -254,7 +260,9 @@ func _build_camera() -> void:
 	# cropping the landscape.
 	_camera.fov = 54.0
 	_camera.near = 0.05
-	_camera.far = 900.0
+	# Long enough to see the far ridge (3.2 km) and the far shell behind it. The
+	# streamed tiles only reach 4.7 km, so this is where the world stops anyway.
+	_camera.far = 4200.0
 	_camera.current = true
 	_spring.add_child(_camera)
 
@@ -267,6 +275,9 @@ func _update_contact_shadow() -> void:
 	## hover in a dip. Resolve the real surface under her and sit on it, and fade it
 	## out while she is airborne so it does not stay glued to her boots mid-jump.
 	if _contact_shadow == null:
+		return
+	_contact_shadow.visible = not Game.in_final_dungeon
+	if Game.in_final_dungeon:
 		return
 	var terr := _terrain()
 	if terr == null or not terr.has_method("surface_height_at"):
@@ -397,10 +408,19 @@ func _apply_rig_colors() -> void:
 	# match the new party member.
 	var old := _visual_node()
 	if old and is_instance_valid(old):
+		# Free the name immediately: a queued child otherwise causes the replacement
+		# Visual to be auto-renamed until the end of the frame.
+		remove_child(old)
 		old.queue_free()
 	var data: Dictionary = Game.character()
 	rig = CharacterBuilder.build(self, data)
 	element_id = int(data["element_id"])
+
+
+func _update_equipment() -> void:
+	var pack := _rig_part("backpack")
+	if pack != null:
+		pack.visible = Game.equipped_backpack > 0
 
 
 func _on_character_changed(_index: int) -> void:
@@ -455,6 +475,8 @@ func _guard_world_bounds() -> void:
 	## This runs every physics frame and is deliberately cheap: one analytic
 	## height lookup with no physics query. Being lifted a little happens
 	## invisibly; falling for 60 seconds does not.
+	if Game.in_final_dungeon:
+		return
 	var terrain := _terrain()
 	if terrain == null:
 		return
@@ -499,8 +521,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
 		if drag.position.x > get_viewport().get_visible_rect().size.x * 0.40:
-			_target_yaw -= drag.relative.x * MOUSE_SENS * STICK_SENS
-			_target_pitch -= drag.relative.y * MOUSE_SENS * STICK_SENS
+			_target_yaw -= drag.relative.x * MOUSE_SENS * STICK_SENS * Game.camera_sensitivity
+			_target_pitch -= drag.relative.y * MOUSE_SENS * STICK_SENS * Game.camera_sensitivity
 			_target_pitch = clampf(_target_pitch, -1.15, 0.62)
 
 
@@ -509,24 +531,65 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		_target_yaw -= event.relative.x * MOUSE_SENS
-		_target_pitch -= event.relative.y * MOUSE_SENS
+		_target_yaw -= event.relative.x * MOUSE_SENS * Game.camera_sensitivity
+		_target_pitch -= event.relative.y * MOUSE_SENS * Game.camera_sensitivity
 		_target_pitch = clampf(_target_pitch, -1.15, 0.62)
 
 	if event.is_action_pressed("party_next"):
 		Game.next_character()
-	if event.is_action_pressed("attack"):
-		_do_attack()
+	if _is_world_attack_input(event):
+		combat_action("attack")
+	if event.is_action_pressed("dodge"):
+		combat_action("dodge")
+	if event.is_action_pressed("heavy_attack"):
+		combat_action("heavy_attack")
 	if event.is_action_pressed("skill"):
-		_do_skill()
+		combat_action("skill")
 	if event.is_action_pressed("burst"):
-		_do_burst()
+		combat_action("burst")
+
+
+func _is_world_attack_input(event: InputEvent) -> bool:
+	# Godot converts a finger tap into a left mouse click for the UI. That
+	# synthetic click must not also trigger a world attack on every touch.
+	if event is InputEventMouseButton and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return false
+	return event.is_action_pressed("attack")
+
+
+func combat_action(action: String) -> void:
+	if Game.is_paused or Game.has_won:
+		return
+	match action:
+		"attack":
+			if _gliding:
+				_gliding = false
+				_diving = true
+				velocity.y = -30.0
+			else:
+				_do_attack()
+		"dodge":
+			_dodge()
+		"heavy_attack":
+			_do_attack(true)
+		"skill":
+			_do_skill()
+		"burst":
+			_do_burst()
 
 
 func _physics_process(delta: float) -> void:
 	if Game.is_paused:
 		return
 
+	var controllers := Input.get_connected_joypads()
+	if not controllers.is_empty():
+		var look := Vector2(Input.get_joy_axis(controllers[0], JOY_AXIS_RIGHT_X), Input.get_joy_axis(controllers[0], JOY_AXIS_RIGHT_Y))
+		if look.length() > 0.2:
+			_target_yaw -= look.x * 2.3 * Game.camera_sensitivity * delta
+			_target_pitch = clampf(_target_pitch - look.y * 2.3 * Game.camera_sensitivity * delta, -1.15, 0.62)
+	_dodge_time = maxf(0.0, _dodge_time - delta)
+	_dodge_cooldown = maxf(0.0, _dodge_cooldown - delta)
 	_yaw = lerp_angle(_yaw, _target_yaw, 1.0 - exp(-16.0 * delta))
 	_pitch = lerpf(_pitch, _target_pitch, 1.0 - exp(-16.0 * delta))
 	_pivot.rotation = Vector3(_pitch, _yaw, 0.0)
@@ -577,12 +640,6 @@ func _physics_process(delta: float) -> void:
 	if not on_floor and not _gliding and Input.is_action_pressed("jump") and velocity.y < -3.0 and not _double_jump_used:
 		_gliding = true
 
-	# Plunge: attack while falling from a glide.
-	if _gliding and Input.is_action_just_pressed("attack"):
-		_gliding = false
-		_diving = true
-		velocity.y = -30.0
-
 	if _diving and on_floor:
 		_diving = false
 		_plunge_impact()
@@ -627,12 +684,17 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0.0, drag * delta * speed)
 		velocity.z = move_toward(velocity.z, 0.0, drag * delta * speed)
 
+	if _dodge_time > 0.0:
+		velocity.x = _dodge_direction.x * 13.0
+		velocity.z = _dodge_direction.z * 13.0
 	move_and_slide()
 
 	_guard_world_bounds()
 
 	# Falling out of the world? Return to the checkpoint.
-	if global_position.y < -60.0:
+	if Game.in_final_dungeon and global_position.y < -260.0:
+		Game._on_party_down()
+	elif not Game.in_final_dungeon and global_position.y < -60.0:
 		_on_respawn()
 
 	_update_animation(delta, Vector2(velocity.x, velocity.z).length(), on_floor, sprinting)
@@ -651,6 +713,19 @@ func _update_animation(delta: float, speed: float, on_floor: bool, sprinting: bo
 	var leg_r := _rig_part("leg_r")
 	var torso := _rig_part("torso")
 	var wings := _rig_part("wings")
+	# Cheap joint-like secondary motion on hanging cloth and backpack. This is
+	# intentionally not a collision-based cloth simulation.
+	var follow := 1.0 - exp(-7.0 * delta)
+	var swing_target := clampf(speed * 0.045 + absf(velocity.y) * 0.012, 0.0, 0.45)
+	var cape_root := _rig_part("cape_root")
+	if cape_root != null:
+		cape_root.rotation.x = lerpf(cape_root.rotation.x, -swing_target, follow)
+	var pack := _rig_part("backpack")
+	if pack != null:
+		pack.rotation.x = lerpf(pack.rotation.x, -swing_target * 0.35, follow)
+	for panel in rig.get("cloth_panels", []):
+		if is_instance_valid(panel):
+			panel.rotation.x = lerpf(panel.rotation.x, swing_target * 0.35, follow)
 
 	if torso == null or arm_l == null or arm_r == null or leg_l == null or leg_r == null:
 		return
@@ -727,15 +802,36 @@ func _play_sfx(method: String) -> void:
 		amb.call(method)
 
 
-func _do_attack() -> void:
+func _dodge() -> void:
+	if _dodge_cooldown > 0.0 or Game.stamina < 20.0 or not is_on_floor():
+		return
+	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if Game.touch_active and Game.touch_move.length() > 0.05:
+		input_dir = Game.touch_move
+	_dodge_direction = Basis.from_euler(Vector3(0, _yaw, 0)) * Vector3(input_dir.x, 0.0, input_dir.y)
+	if _dodge_direction.length() < 0.1:
+		_dodge_direction = -get_forward()
+	_dodge_direction = _dodge_direction.normalized()
+	_dodge_time = 0.28
+	_dodge_cooldown = 0.65
+	Game.drain_stamina(20.0)
+	_stamina_regen_hold = 0.8
+	FX.dust_puff(get_parent(), global_position, Color(0.85, 0.9, 1.0, 0.5))
+
+
+func _do_attack(heavy: bool = false) -> void:
 	if _attack_cd > 0.0 or Game.is_paused:
 		return
-	_attack_cd = 0.42
+	if heavy and Game.stamina < 15.0:
+		return
+	if heavy:
+		Game.drain_stamina(15.0)
+	_attack_cd = 0.85 if heavy else 0.42
 	_attack_combo = (_attack_combo + 1) % 3
 	_combo_reset = 1.1
 
 	var data: Dictionary = Game.character()
-	var power: float = float(data["attack"]) * (1.25 if _attack_combo == 2 else 1.0)
+	var power: float = Game.attack_power() * (2.0 if heavy else (1.25 if _attack_combo == 2 else 1.0))
 	var forward := get_forward()
 	var hit_center: Vector3 = global_position + forward * 1.45 + Vector3(0, 0.95, 0)
 
@@ -825,12 +921,33 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 	FX.element_burst(get_parent(), origin + forward * 1.4, color, element)
 	FX.ring_burst(get_parent(), origin, color, 1.4)
 
+	# Defensive mastery produces an actual damage-absorbing shield.
+	if id == "stone_bulwark":
+		Game.shield_points = maxf(Game.shield_points, 120.0 * mastery)
+		Game.toast.emit("Stone Bulwark: %.0f shield" % Game.shield_points)
+		return
+
+	if id == "tide_remedy":
+		var healed := Game.max_hp() * 0.18 * mastery
+		Game.heal(healed)
+		Game.toast.emit("Tide Remedy: +%.0f health" % healed)
+		return
+	if id == "winter_resolve":
+		Game.stamina = minf(Game.MAX_STAMINA, Game.stamina + 35.0 * mastery)
+		Game.stats_changed.emit()
+		Game.toast.emit("Winter Resolve: stamina restored")
+		return
+	if id == "dusk_seal":
+		for foe in get_tree().get_nodes_in_group("enemy"):
+			if foe is Node3D and is_instance_valid(foe) and foe.global_position.distance_to(global_position) < radius and foe.has_method("interrupt_attack") and _spell_has_line_of_sight(origin, foe):
+				foe.call("interrupt_attack", 2.0)
+				foe.call("take_hit", power, element, forward)
+		Game.toast.emit("Dusk Seal interrupts nearby scouts")
+		return
+
 	# Spatial spells relocate the caster instead of dealing damage.
 	if id == "tide_step":
-		var dest := global_position + forward * minf(reach, 14.0)
-		var terrain := _terrain()
-		if terrain != null:
-			dest.y = terrain.get_height_at(dest.x, dest.z) + SPAWN_CLEARANCE
+		var dest := _safe_spatial_destination(forward, minf(reach, 14.0))
 		global_position = dest
 		velocity = Vector3.ZERO
 		FX.sparkle(get_parent(), dest + Vector3(0, 1.0, 0), color)
@@ -849,13 +966,25 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 		# Cone in front of the caster, widened for area spells.
 		var aim := to_enemy.normalized().dot(forward)
 		var in_cone := aim > 0.45
+		if id.begins_with("research_") and radius > 0.0:
+			in_cone = false
 		var in_area := radius > 0.0 and dist < radius
 		var along := dist < maxf(reach, radius)
 		if (in_cone and along) or in_area:
-			if enemy.has_method("take_hit"):
+			if not _spell_has_line_of_sight(origin, target): continue
+			if data.has("secondary_element") and enemy.has_method("take_combined_hit"):
+				enemy.take_combined_hit(power, element, int(data["secondary_element"]), forward)
+				hit_any = true
+				hit_point = target.global_position
+			elif enemy.has_method("take_hit"):
 				enemy.take_hit(power, element, forward)
 				hit_any = true
 				hit_point = target.global_position
+			if is_instance_valid(enemy) and not enemy.is_queued_for_deletion() and wander != null:
+				if id == "frost_shard" and wander.level_of(id) >= 10 and enemy.has_method("apply_slow"):
+					enemy.call("apply_slow", 4.5 if wander.level_of(id) >= 20 else 2.5)
+				elif id == "gale_palm" and wander.level_of(id) >= 15 and enemy.has_method("interrupt_attack"):
+					enemy.call("interrupt_attack", 1.5)
 
 	FX.hit_flash(get_parent(), hit_point, color)
 	if hit_any:
@@ -867,6 +996,39 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 		arm.rotation.x = -2.2
 		var tw := create_tween()
 		tw.tween_property(arm, "rotation:x", 0.2, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _spell_has_line_of_sight(origin: Vector3, target: Node3D) -> bool:
+	# Physics layer 1 contains walls, terrain and gates; enemies are on layer 8.
+	# Keeping spell damage behind the same barriers as movement avoids hitting
+	# defenders through a closed dungeon gate.
+	if not is_instance_valid(target) or get_world_3d() == null: return false
+	var ray := PhysicsRayQueryParameters3D.create(origin, target.global_position + Vector3(0, 0.8, 0), 1)
+	ray.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_ray(ray).is_empty()
+
+
+func _safe_spatial_destination(forward: Vector3, distance: float) -> Vector3:
+	# Never use the outdoor terrain height inside a Hollow, and do not blink
+	# through walls or onto empty air. Query the same collision layer as walking.
+	var space := get_world_3d().direct_space_state
+	var direction := Vector3(forward.x, 0, forward.z).normalized()
+	if direction.length_squared() < 0.01:
+		return global_position
+	var start := global_position + Vector3(0, 0.9, 0)
+	var ray := PhysicsRayQueryParameters3D.create(start, start + direction * distance, 1)
+	ray.exclude = [get_rid()]
+	var hit := space.intersect_ray(ray)
+	var travel: float = distance
+	if not hit.is_empty():
+		travel = maxf(0.0, start.distance_to(hit["position"]) - 0.8)
+	var dest := global_position + direction * travel
+	var floor_ray := PhysicsRayQueryParameters3D.create(dest + Vector3(0, 3, 0), dest - Vector3(0, 10, 0), 1)
+	floor_ray.exclude = [get_rid()]
+	var floor_hit := space.intersect_ray(floor_ray)
+	if floor_hit.is_empty():
+		return global_position
+	return Vector3(dest.x, float(floor_hit["position"].y) + SPAWN_CLEARANCE, dest.z)
 
 
 func _plunge_impact() -> void:
@@ -881,6 +1043,9 @@ func _plunge_impact() -> void:
 
 
 func take_damage(amount: float, from: Vector3) -> void:
+	if _dodge_time > 0.0:
+		Game.toast.emit("Dodged!")
+		return
 	Game.damage(amount)
 	FX.hit_flash(get_parent(), global_position + Vector3(0, 1.0, 0), Color(1, 0.35, 0.3))
 	var push := (global_position - from)

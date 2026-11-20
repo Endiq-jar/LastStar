@@ -39,12 +39,10 @@ func _ready() -> void:
 	for spec in Presets.species():
 		if not all_species and spec["name"] != "grass":
 			continue
-		var tex := Presets.texture(spec["tex"])
-		if tex == null:
-			push_warning("VegetationDemo: missing texture %s" % spec["tex"])
+		var mat := Presets.material_for(spec)
+		if mat == null:
+			push_warning("VegetationDemo: no material for %s" % spec["name"])
 			continue
-		var mat := Presets.material_for(spec["name"], spec["wind"], spec["tint"])
-		mat.set_shader_parameter("albedo_texture", tex)
 		if _wind.has_method("register_material"):
 			_wind.call("register_material", mat)
 
@@ -56,7 +54,7 @@ func _ready() -> void:
 		layer.set("min_height", spec["hmin"])
 		layer.set("max_height", spec["hmax"])
 		layer.set("max_slope", spec["slope"])
-		layer.set("mesh_kind", spec["mesh"])
+		layer.set("model_kind", spec["model"])
 		layer.set("material", mat)
 		layer.call("setup", terrain, player, hash(spec["name"]))
 		_layers.append(layer)

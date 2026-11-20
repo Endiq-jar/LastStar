@@ -46,6 +46,8 @@ def main() -> int:
             srcs.extend(f for f in p.rglob("*")
                         if f.is_file() and f.suffix in SOURCE_SUFFIXES)
 
+    # glTF files reference shared textures directly; treat those as real wiring.
+    srcs.extend(pathlib.Path("assets").rglob("*.gltf"))
     corpus = {f: f.read_text(encoding="utf-8", errors="replace") for f in srcs}
     joined = "\n".join(corpus.values())
     problems = []

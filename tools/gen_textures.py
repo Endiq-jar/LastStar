@@ -14,6 +14,7 @@ Style targets, consistent across the set:
 import math
 import os
 import random
+import sys
 
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -48,65 +49,154 @@ def shade(col, f):
 # grass blade
 # --------------------------------------------------------------------------
 def blade(draw, x, base_y, length, width, lean, col, tip_col, rim=(18, 46, 26)):
-    """A single tapered blade: quadratic curve, dark rim, lighter tip."""
+    """A single tapering blade of grass, drawn as a filled tapered polygon.
+
+    `width` is the blade's full width at the root, in pixels. Everything about how
+    the card reads comes from this number: a 4 px blade over 200 px of height is
+    a hairline, and 95 000 hairlines in a field read as a wire brush rather than
+    as grass. The reference tuft's median blade is 13 px on a 256 px card.
+
+    The body is drawn as the whole blade, not as an inset of a dark outline. The
+    previous version drew a rim polygon and then an inner polygon at 62% of the
+    half-width - two plies of a 4 px shape - so the "blade" was a 1 px dark line
+    with a 1 px lighter line inside it, which is exactly what the screenshots
+    showed.
+    """
     pts = []
-    steps = 14
+    steps = 16
     for i in range(steps + 1):
         t = i / steps
         y = base_y - length * t
         dx = lean * (t ** 1.7) * length
-        w = width * (1.0 - t * 0.92) * 0.5
-        pts.append((x + dx, y, max(w, 0.6)))
-    left = [(p[0] - p[2], p[1]) for p in pts]
-    right = [(p[0] + p[2], p[1]) for p in reversed(pts)]
-    poly = left + right
-    # rim first, then the body inset slightly
-    draw.polygon([(px, py) for px, py in poly], fill=tuple(rim[:3]) + (255,))
-    inner_l = [(p[0] - p[2] * 0.62, p[1]) for p in pts]
-    inner_r = [(p[0] + p[2] * 0.62, p[1]) for p in reversed(pts)]
-    draw.polygon(inner_l + inner_r, fill=tuple(col[:3]) + (255,))
+        # Taper: fat at the root, a point at the tip, but held wide through the
+        # lower half. A linear taper is a triangle, and a field of triangles reads
+        # as thorns; a taper too gradual reads as a ribbon.
+        w = 0.5 * width * (1.0 - t ** 1.45) + 0.30
+        pts.append((x + dx, y, w))
+    poly = [(p[0] - p[2], p[1]) for p in pts] + \
+           [(p[0] + p[2], p[1]) for p in reversed(pts)]
+    draw.polygon(poly, fill=tuple(col[:3]) + (255,))
+    # One side in shade: the pack is drawn in two or three value bands, and a
+    # blade lit identically on both edges looks like a plastic ribbon. This is a
+    # colour shift, not an outline, so it costs the blade no width at all.
+    shade_poly = [(p[0] - p[2], p[1]) for p in pts] + \
+                 [(p[0] - p[2] * 0.15, p[1]) for p in reversed(pts)]
+    draw.polygon(shade_poly, fill=tuple(shade(col, 0.94)[:3]) + (255,))
+    # The tip catches light.
+    tip = pts[-1]
+    if tip[2] > 0.8:
+        draw.polygon([(tip[0] - tip[2] * 2.2, tip[1] + length * 0.06),
+                      (tip[0] + tip[2] * 2.2, tip[1] + length * 0.06),
+                      (tip[0], tip[1] - length * 0.02)],
+                     fill=tuple(tip_col[:3]) + (255,))
 
 
-def draw_tuft(draw, cx, cy, scale, rng, palette):
-    """A fan of blades from one root - the shape of a real grass clump."""
-    n = rng.randint(11, 17)
+## The meadow's card is painted in near-white, not green, and that is the whole
+## reason it reads as a meadow instead of as a starburst of green spikes.
+##
+## The shader owns the colour: it lays a root-to-tip gradient over the card and
+## multiplies that by a per-tuft value. A sheet that is already saturated green
+## gets that green mixed in on top (the old code blended 35% of the sheet's own
+## colour back in), so every tuft lands on the same acid green and the field reads
+## as one flat surface. A pale sheet carries only the *shading* - which blade is
+## in front, where its rim is, how dark it is at the root - and the shader turns
+## that into grass. This is the same trick the old tuft used, and it is why the
+## old frame is a soft pale carpet while the new one was a lime starburst.
+## Two per-tuft value steps rather than a continuous ramp, because the whole set
+## is drawn in two or three bands by design.
+PALE_GREENS = [
+    (228, 228, 224), (243, 243, 236), (214, 216, 208),
+    (250, 250, 242), (206, 208, 200),
+]
+
+def draw_tuft(draw, cx, cy, scale, rng, palette=None):
+    """A dense, wide fan of blades from one root: the reference tuft's shape.
+
+    Measured against the tuft that produced the old carpet, on a 256 px card:
+
+        old   50.6% of the card opaque, median blade 13 px, widest 19 px
+        first attempt   27.4% opaque, median 4 px - a wire brush
+
+    Three things make the difference, and all three are proportions rather than
+    counts: blades wide enough to overlap (0.035-0.075 of the sheet), a lean that
+    only reaches about half the card's width at the extremes, and enough blades
+    (22-34) that the gaps between them close.
+    """
+    palette = palette or PALE_GREENS
+    # A solid bank of blades at the base, before the tall fan.
+    #
+    # This is the difference between the reference and every version drawn here.
+    # Measured band coverage, top to bottom:
+    #
+    #     reference   0%  5%  19%  37%  63%  86%  99%  96%
+    #     this, before  0%  1%   6%  21%  52%  73%  82%  72%
+    #
+    # The bottom two bands are the tell. A tuft of real grass is opaque at ground
+    # level - you cannot see between the blades - and a fan of long blades leaving
+    # one point is mostly gaps down there. So the base is drawn as its own layer:
+    # short wide blades at every angle, filling the lower third solid.
+    n_base = rng.randint(7, 10)
+    for i in range(n_base):
+        t = i / max(n_base - 1, 1)
+        lean = (t - 0.5) * 2.0 * rng.uniform(0.65, 1.15)
+        length = scale * rng.uniform(0.14, 0.34)
+        width = scale * rng.uniform(0.085, 0.150)
+        col = rng.choice(palette)
+        blade(draw, cx + lean * scale * 0.22, cy, length, width, lean,
+              shade(col, 0.88), lerp(col, (255, 255, 246), 0.30))
+
+    n = rng.randint(12, 17)
     for i in range(n):
         t = i / max(n - 1, 1)
-        lean = (t - 0.5) * 2.0 * rng.uniform(0.45, 1.0)
-        length = scale * rng.uniform(0.55, 1.0)
-        width = scale * rng.uniform(0.035, 0.062)
-        col = rng.choice(palette)
-        # Back blades are darker and shorter, front blades lighter: cheap depth.
-        depth = 0.72 + 0.28 * (1.0 - abs(lean))
-        blade(draw, cx + lean * scale * 0.10, cy, length, width, lean,
-              shade(col, depth), lerp(col, (210, 240, 160), 0.35))
-
-
-GRASS_GREENS = [
-    (86, 148, 62), (98, 163, 68), (74, 133, 55), (110, 176, 74),
-    (66, 122, 50), (124, 186, 82), (92, 156, 58),
-]
-BORDER_GREENS = [
-    (62, 118, 48), (74, 136, 54), (52, 100, 42), (88, 150, 60),
-    (46, 92, 40), (96, 158, 62),
-]
+        edge = abs(t - 0.5) * 2.0
+        # The lean reaches about 0.55 of the card's half-width at the extremes,
+        # not the 0.52 the hairlines had - the blades are four times wider now,
+        # so the same lean spreads the silhouette much further.
+        lean = (t - 0.5) * 2.0 * rng.uniform(0.30, 0.80) * (0.55 + edge * 0.70)
+        # Outer blades shorter, and never past 0.94 of the sheet: a blade that
+        # runs off the top of the card is a blade with its tip cut off, and at
+        # instance scale that reads as a flat-topped hedge.
+        length = scale * rng.uniform(0.70, 1.02) * (1.0 - 0.16 * edge * edge)
+        # 0.030-0.055 of the sheet, i.e. 8-14 px on a 256 px card at the ROOT,
+        # tapering to a point. Measured off the reference tuft in bands: its
+        # individual blades are 3-6 px at the tips and 8-15 px where several have
+        # merged, so the blades themselves are narrow and the *clump* is dense.
+        # An earlier pass mistook the merged figure for the blade width and drew
+        # 20 px ribbons.
+        width = scale * rng.uniform(0.075, 0.135)
+        # Brightened after the value ramp: the shade band and the tip both pull
+        # the mean down, and the sheet's mean luminance is what the shader
+        # multiplies the meadow's albedo by. The tuft this replaces measures
+        # 0.90; anything lower is a meadow lit a third too dim.
+        col = lerp(rng.choice(palette), (255, 255, 255), 0.60)
+        # Back blades darker and shorter, front blades lighter: cheap depth.
+        depth = 0.92 + 0.08 * (1.0 - abs(lean))
+        # Origin at the root on the sheet's bottom edge. This used to sit
+        # 0.13*scale above it, so the lower fifth of the card was empty and the
+        # clump floated - the reference fills 97.6% of its bottom 64 rows and
+        # this filled 58%.
+        blade(draw, cx + lean * scale * 0.11, cy, length, width, lean,
+              shade(col, depth), lerp(col, (255, 255, 246), 0.30))
 
 
 def gen_grass(path, w=512, h=512):
-    """Normal field grass: dense, even, mid-tone. Reads as a carpet."""
+    """The meadow's instance card: one tuft, filling the sheet.
+
+    The MultiMesh stamps this tens of thousands of times, so what it has to be is
+    a single convincing clump with clean alpha and nothing else in the frame. The
+    card's proportions matter more than the count: see draw_tuft() for the
+    measured comparison against the tuft that produced the old carpet.
+    """
     img = canvas(w, h)
     d = ImageDraw.Draw(img)
     rng = random.Random(11)
     W, H = w * SS, h * SS
-    # One tuft, centred. This is an instance card, not a mat: the MultiMesh
-    # builds the meadow by stamping this tens of thousands of times, so what it
-    # has to be is a single convincing clump with clean alpha. Filling the frame
-    # with a dozen overlapping clumps made it useless at instance scale.
-    draw_tuft(d, W * 0.5, H * 1.01, H * 0.90, rng, GRASS_GREENS)
-    # A couple of shorter companions at the root, off-centre, so the stamp does
-    # not read as a symmetrical fountain when repeated.
-    draw_tuft(d, W * 0.24, H * 1.01, H * 0.58, rng, GRASS_GREENS)
-    draw_tuft(d, W * 0.78, H * 1.01, H * 0.52, rng, GRASS_GREENS)
+    draw_tuft(d, W * 0.5, H * 1.01, H * 0.96, rng)
+    # Two shorter companions at the root, off-centre, so the stamp does not read
+    # as a symmetrical fountain when repeated. Low and wide, not tall: they widen
+    # the silhouette at ground level, which is where the eye reads "carpet".
+    draw_tuft(d, W * 0.24, H * 1.01, H * 0.74, rng)
+    draw_tuft(d, W * 0.78, H * 1.01, H * 0.68, rng)
     return finish(img, w, h, path)
 
 
@@ -593,6 +683,35 @@ def generate_all():
     return made
 
 
+## The meadow's tuft is NOT generated here.
+##
+## assets/grass/tuft.webp is the hand-painted tuft that shipped with the old
+## carpet, kept verbatim (it came from icons/grass/tuft.png at c7b415f). Three
+## attempts to redraw it procedurally all landed somewhere the owner did not want,
+## and the file he wanted was always that one, so this script no longer writes
+## over it: `--grass-atlas` reports where the card lives and stops.
+##
+## What that sheet actually is, because it is not what it looks like: a flat
+## white stencil. Every opaque pixel lies between 0.85 and 0.95 luminance and it is
+## 100% greyscale - no green in it at all. The old shader read `tex.a` and nothing
+## else, and got every scrap of its colour from uniforms. That is why the card
+## shader reads alpha only and there is no sheet-luminance term left in it;
+## draw_tuft() and gen_grass() below are kept as a record of how that card was
+## drawn, not as something that runs.
+def generate_grass_atlas(out_dir="assets/grass"):
+    card = os.path.join(out_dir, "tuft.webp")
+    if os.path.exists(card):
+        print("%s (hand-painted and losslessly encoded, kept as-is)" % card)
+    else:
+        print("%s is missing: it is committed art, restore it with "
+              "`git checkout -- %s`" % (card, card))
+    return []
+
+
 if __name__ == "__main__":
-    for p in generate_all():
-        print(p)
+    if "--grass-atlas" in sys.argv:
+        for p in generate_grass_atlas():
+            print(p)
+    else:
+        for p in generate_all():
+            print(p)

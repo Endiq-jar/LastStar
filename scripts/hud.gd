@@ -4,6 +4,10 @@ extends CanvasLayer
 ## and the victory banner.
 
 const TOUCH := preload("res://scripts/touch_controls.gd")
+const UI := preload("res://scripts/ui_style.gd")
+const AdventureMenu := preload("res://scripts/adventure_menu.gd")
+const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
+const PerformanceMonitor := preload("res://scripts/performance/performance_monitor.gd")
 ## Loaded at runtime rather than preloaded: a preload that fails to resolve
 ## reports only "could not resolve script" against *this* file, which hides the
 ## real error inside the wheel. load() keeps the failure local and survivable -
@@ -12,6 +16,8 @@ const SPELL_WHEEL_PATH := "res://scripts/spell_wheel.gd"
 
 var _spell_wheel: Control
 var _quest_label: Label
+var _quest_box: PanelContainer
+var _quest_list: Label
 var _compass: Label
 var _stamina: ProgressBar
 var _energy: ProgressBar
@@ -22,17 +28,23 @@ var _win_label: Label
 var _skill_button: Button
 var _burst_button: Button
 var _pause_panel: PanelContainer
+var _pause_dimmer: ColorRect
 var _quality_btn: Button
+var _perf_monitor: Control
+var _adventure_menu: Control
 var _toast_tween: Tween
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build()
+	_perf_monitor = PerformanceMonitor.new()
+	add_child(_perf_monitor)
 	Game.sigils_changed.connect(_on_sigils_changed)
 	Game.stats_changed.connect(_refresh_stats)
 	Game.character_changed.connect(_on_character_changed)
 	Game.quest_changed.connect(_on_quest_changed)
+	Game.collection_changed.connect(_refresh_quest_box)
 	Game.toast.connect(_on_toast)
 	Game.game_won.connect(_on_game_won)
 	_refresh_stats()
@@ -66,14 +78,20 @@ func _build() -> void:
 	add_child(root)
 
 	# ---- top-left: sigils + quest ---------------------------------------
+	var quest_panel := PanelContainer.new()
+	quest_panel.name = "QuestPanel"
+	quest_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	quest_panel.offset_left = 22
+	quest_panel.offset_top = 16
+	quest_panel.offset_right = 570
+	quest_panel.offset_bottom = 110
+	quest_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	quest_panel.add_theme_stylebox_override("panel", UI.panel(12.0, 0.62))
+	root.add_child(quest_panel)
 	var top_left := VBoxContainer.new()
-	top_left.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	top_left.offset_left = 22
-	top_left.offset_top = 16
-	top_left.offset_right = 700
-	top_left.offset_bottom = 110
-	top_left.add_theme_constant_override("separation", 6)
-	root.add_child(top_left)
+	top_left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_left.add_theme_constant_override("separation", 4)
+	quest_panel.add_child(top_left)
 
 	var sigil_row := HBoxContainer.new()
 	sigil_row.add_theme_constant_override("separation", 8)
@@ -81,7 +99,7 @@ func _build() -> void:
 	var sigil_icon := Label.new()
 	sigil_icon.text = "✦"
 	sigil_icon.add_theme_font_size_override("font_size", 26)
-	sigil_icon.add_theme_color_override("font_color", Color(1.0, 0.86, 0.45))
+	sigil_icon.add_theme_color_override("font_color", UI.ACCENT)
 	sigil_row.add_child(sigil_icon)
 	_sigil_label = Label.new()
 	_sigil_label.text = "0 / 12 star sigils"
@@ -116,15 +134,55 @@ func _build() -> void:
 	_compass = Label.new()
 	_compass.text = "✦ —"
 	_compass.add_theme_font_size_override("font_size", 18)
-	_compass.add_theme_color_override("font_color", Color(1.0, 0.9, 0.6))
+	_compass.add_theme_color_override("font_color", UI.ACCENT)
 	_compass.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
 	_compass.add_theme_constant_override("shadow_offset_x", 2)
 	_compass.add_theme_constant_override("shadow_offset_y", 2)
 	top_right.add_child(_compass)
 
-	var pause_btn := _round_button("II", Vector2(46, 46))
+	var quest_button := Button.new()
+	quest_button.name = "QuestsButton"
+	quest_button.text = "Quests"
+	quest_button.custom_minimum_size = Vector2(88, 46)
+	UI.button(quest_button)
+	UI.icon(quest_button, "Quests")
+	quest_button.pressed.connect(_toggle_quest_box)
+	top_right.add_child(quest_button)
+
+	var pause_btn := _round_button("", Vector2(46, 46))
+	UI.icon(pause_btn, "Pause")
+	pause_btn.tooltip_text = "Pause"
 	pause_btn.pressed.connect(_pause)
 	top_right.add_child(pause_btn)
+
+	# Compact, scrollable quest list; the game continues while it is open.
+	_quest_box = PanelContainer.new()
+	_quest_box.name = "QuestBox"
+	_quest_box.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_quest_box.offset_left = -370
+	_quest_box.offset_right = -22
+	_quest_box.offset_top = 76
+	_quest_box.offset_bottom = 370
+	_quest_box.add_theme_stylebox_override("panel", UI.panel(12.0, 0.96))
+	_quest_box.visible = false
+	root.add_child(_quest_box)
+	var box_contents := VBoxContainer.new()
+	_quest_box.add_child(box_contents)
+	var box_heading := Label.new()
+	box_heading.text = "QUESTS"
+	box_heading.add_theme_color_override("font_color", UI.ACCENT)
+	box_heading.add_theme_font_size_override("font_size", 18)
+	box_contents.add_child(box_heading)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box_contents.add_child(scroll)
+	_quest_list = Label.new()
+	_quest_list.name = "QuestList"
+	_quest_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_quest_list.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_quest_list.add_theme_font_size_override("font_size", 15)
+	scroll.add_child(_quest_list)
 
 	# ---- bottom-left: the Wander spell wheel ---------------------------
 	# (The old party-swap strip used to live here. Party switching is on the
@@ -143,10 +201,47 @@ func _build() -> void:
 	bottom_center.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	bottom_center.offset_left = -230
 	bottom_center.offset_right = 230
-	bottom_center.offset_top = -92
+	bottom_center.offset_top = -195
 	bottom_center.offset_bottom = -18
 	bottom_center.add_theme_constant_override("separation", 7)
 	root.add_child(bottom_center)
+
+	var navigation := HBoxContainer.new()
+	navigation.name = "GameplayNavigation"
+	navigation.alignment = BoxContainer.ALIGNMENT_CENTER
+	navigation.add_theme_constant_override("separation", 8)
+	bottom_center.add_child(navigation)
+	for entry in [["Inventory", "Inventory"], ["Journal", "Character"]]:
+		var button := Button.new()
+		button.name = entry[0] + "Button"
+		button.text = entry[0]
+		button.custom_minimum_size = Vector2(82, 42)
+		UI.button(button)
+		UI.icon(button, "Quests" if entry[0] == "Journal" else entry[0])
+		button.pressed.connect(_open_adventure.bind(entry[1]))
+		navigation.add_child(button)
+
+	var talk := Button.new()
+	talk.name = "TalkButton"
+	talk.text = "Talk / Use"
+	talk.custom_minimum_size = Vector2(82, 42)
+	UI.button(talk)
+	talk.pressed.connect(_talk_to_guard)
+	navigation.add_child(talk)
+	var dodge := Button.new()
+	dodge.name = "DodgeButton"
+	dodge.text = "Dodge"
+	dodge.custom_minimum_size = Vector2(82, 42)
+	UI.button(dodge)
+	dodge.pressed.connect(func(): _emit_action("dodge"))
+	navigation.add_child(dodge)
+	var heavy := Button.new()
+	heavy.name = "HeavyButton"
+	heavy.text = "Heavy"
+	heavy.custom_minimum_size = Vector2(82, 42)
+	UI.button(heavy)
+	heavy.pressed.connect(func(): _emit_action("heavy_attack"))
+	navigation.add_child(heavy)
 
 	var energy_row := HBoxContainer.new()
 	energy_row.add_theme_constant_override("separation", 8)
@@ -162,7 +257,7 @@ func _build() -> void:
 	_energy.custom_minimum_size = Vector2(320, 13)
 	_energy.show_percentage = false
 	_energy.add_theme_stylebox_override("background", _bar_bg())
-	_energy.add_theme_stylebox_override("fill", _bar_fill(Color(1.0, 0.82, 0.35)))
+	_energy.add_theme_stylebox_override("fill", _bar_fill(Color(0.70, 0.65, 0.98)))
 	energy_row.add_child(_energy)
 
 	_stamina = ProgressBar.new()
@@ -170,7 +265,7 @@ func _build() -> void:
 	_stamina.custom_minimum_size = Vector2(460, 11)
 	_stamina.show_percentage = false
 	_stamina.add_theme_stylebox_override("background", _bar_bg())
-	_stamina.add_theme_stylebox_override("fill", _bar_fill(Color(0.55, 0.95, 0.85)))
+	_stamina.add_theme_stylebox_override("fill", _bar_fill(Color(0.65, 0.80, 1.0)))
 	bottom_center.add_child(_stamina)
 
 	# ---- bottom-right: actions ------------------------------------------
@@ -220,12 +315,19 @@ func _build() -> void:
 	root.add_child(_toast)
 
 	# ---- pause menu -----------------------------------------------------
+	_pause_dimmer = ColorRect.new()
+	_pause_dimmer.name = "PauseDimmer"
+	_pause_dimmer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_pause_dimmer.color = Color(0.035, 0.025, 0.12, 0.72)
+	_pause_dimmer.mouse_filter = Control.MOUSE_FILTER_STOP
+	_pause_dimmer.visible = false
+	root.add_child(_pause_dimmer)
 	_pause_panel = PanelContainer.new()
 	_pause_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_pause_panel.offset_left = -230
 	_pause_panel.offset_right = 230
-	_pause_panel.offset_top = -190
-	_pause_panel.offset_bottom = 190
+	_pause_panel.offset_top = -235
+	_pause_panel.offset_bottom = 235
 	_pause_panel.add_theme_stylebox_override("panel", _panel_style())
 	_pause_panel.visible = false
 	root.add_child(_pause_panel)
@@ -233,25 +335,33 @@ func _build() -> void:
 	pv.add_theme_constant_override("separation", 12)
 	_pause_panel.add_child(pv)
 	var ptitle := Label.new()
-	ptitle.text = "Paused"
+	ptitle.text = "✦  JOURNEY PAUSED  ✦"
 	ptitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ptitle.add_theme_font_size_override("font_size", 32)
-	ptitle.add_theme_color_override("font_color", Color(1.0, 0.92, 0.7))
+	ptitle.add_theme_font_size_override("font_size", 24)
+	ptitle.add_theme_color_override("font_color", UI.TEXT)
 	pv.add_child(ptitle)
 	var resume := _round_button("Resume", Vector2(300, 48))
+	UI.button(resume, true)
 	resume.pressed.connect(_resume)
 	pv.add_child(resume)
 	_quality_btn = _round_button("Quality: Balanced", Vector2(300, 44))
+	UI.button(_quality_btn)
 	_quality_btn.pressed.connect(_cycle_quality)
 	pv.add_child(_quality_btn)
+	var monitor_btn := _round_button("Performance monitor (F3)", Vector2(300, 44))
+	UI.button(monitor_btn)
+	monitor_btn.pressed.connect(_toggle_perf_monitor)
+	pv.add_child(monitor_btn)
 	var repair := _round_button("Repair view (if the world is black)", Vector2(300, 44))
+	UI.button(repair)
 	repair.pressed.connect(_repair_view)
 	pv.add_child(repair)
 	var to_menu := _round_button("Return to the menu", Vector2(300, 44))
+	UI.button(to_menu)
 	to_menu.pressed.connect(func(): Game.quit_to_menu())
 	pv.add_child(to_menu)
 	var hint := Label.new()
-	hint.text = "WASD · Shift sprint · Space jump/glide\nLMB attack · E skill · Q burst · T switch"
+	hint.text = "WASD · Shift sprint · Space jump/glide · C dodge\nLMB attack · R heavy · E skill · Q burst · 1–5 spells"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9, 0.85))
@@ -286,29 +396,17 @@ func _build() -> void:
 	back.pressed.connect(func(): Game.quit_to_menu())
 	wv.add_child(back)
 
+	_adventure_menu = AdventureMenu.new()
+	root.add_child(_adventure_menu)
+
 
 func _panel_style() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.04, 0.09, 0.14, 0.94)
-	sb.border_width_left = 2
-	sb.border_width_top = 2
-	sb.border_width_right = 2
-	sb.border_width_bottom = 2
-	sb.border_color = Color(1.0, 0.88, 0.58, 0.85)
-	sb.corner_radius_top_left = 18
-	sb.corner_radius_top_right = 18
-	sb.corner_radius_bottom_left = 18
-	sb.corner_radius_bottom_right = 18
-	sb.content_margin_left = 28
-	sb.content_margin_top = 24
-	sb.content_margin_right = 28
-	sb.content_margin_bottom = 24
-	return sb
+	return UI.panel(24.0)
 
 
 func _bar_bg() -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.09, 0.14, 0.8)
+	sb.bg_color = Color(0.07, 0.06, 0.17, 0.82)
 	sb.corner_radius_top_left = 5
 	sb.corner_radius_top_right = 5
 	sb.corner_radius_bottom_left = 5
@@ -332,12 +430,12 @@ func _round_button(text: String, size: Vector2) -> Button:
 	b.custom_minimum_size = size
 	b.add_theme_font_size_override("font_size", 16)
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.14, 0.20, 0.85)
+	sb.bg_color = Color(0.12, 0.10, 0.25, 0.88)
 	sb.border_width_left = 1
 	sb.border_width_top = 1
 	sb.border_width_right = 1
 	sb.border_width_bottom = 1
-	sb.border_color = Color(0.7, 0.85, 0.95, 0.55)
+	sb.border_color = Color(0.75, 0.74, 0.98, 0.75)
 	var r := int(min(size.x, size.y) * 0.5)
 	sb.corner_radius_top_left = r
 	sb.corner_radius_top_right = r
@@ -345,7 +443,7 @@ func _round_button(text: String, size: Vector2) -> Button:
 	sb.corner_radius_bottom_right = r
 	b.add_theme_stylebox_override("normal", sb)
 	var hov := sb.duplicate() as StyleBoxFlat
-	hov.bg_color = Color(0.14, 0.24, 0.34, 0.95)
+	hov.bg_color = Color(0.31, 0.27, 0.50, 0.96)
 	b.add_theme_stylebox_override("hover", hov)
 	b.add_theme_stylebox_override("pressed", hov)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
@@ -356,7 +454,7 @@ func _round_button(text: String, size: Vector2) -> Button:
 func _icon_texture(icon_name: String) -> Texture2D:
 	if icon_name == "":
 		return null
-	var path := "res://icons/actions/%s.png" % icon_name
+	var path := "res://icons/actions/%s.webp" % icon_name
 	if ResourceLoader.exists(path):
 		return load(path) as Texture2D
 	return null
@@ -365,15 +463,15 @@ func _icon_texture(icon_name: String) -> Texture2D:
 ## A round action button with a drawn icon plus a small caption underneath.
 ## Text-only buttons read poorly on a phone: an icon is recognisable at a glance
 ## while a word has to be read every time.
-func _action_button(text: String, color: Color, size: Vector2, icon_name: String = "") -> Button:
+func _action_button(text: String, _color: Color, size: Vector2, icon_name: String = "") -> Button:
 	var b := _round_button("", size)
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(color.r * 0.18, color.g * 0.2, color.b * 0.24, 0.82)
+	sb.bg_color = Color(0.12, 0.10, 0.25, 0.84)
 	sb.border_width_left = 2
 	sb.border_width_top = 2
 	sb.border_width_right = 2
 	sb.border_width_bottom = 2
-	sb.border_color = Color(color.r, color.g, color.b, 0.9)
+	sb.border_color = Color(0.76, 0.75, 0.98, 0.88)
 	var r := int(min(size.x, size.y) * 0.5)
 	sb.corner_radius_top_left = r
 	sb.corner_radius_top_right = r
@@ -381,7 +479,7 @@ func _action_button(text: String, color: Color, size: Vector2, icon_name: String
 	sb.corner_radius_bottom_right = r
 	b.add_theme_stylebox_override("normal", sb)
 	var hov := sb.duplicate() as StyleBoxFlat
-	hov.bg_color = Color(color.r * 0.3, color.g * 0.32, color.b * 0.36, 0.95)
+	hov.bg_color = Color(0.30, 0.26, 0.50, 0.96)
 	b.add_theme_stylebox_override("hover", hov)
 	b.add_theme_stylebox_override("pressed", hov)
 	b.add_theme_font_size_override("font_size", 17)
@@ -430,30 +528,103 @@ func _press_jump() -> void:
 
 
 func _emit_action(action: String) -> void:
-	Input.action_press(action)
-	Input.action_release(action)
+	# action_press changes polling state but does not dispatch an input event.
+	# Send HUD actions directly so the explicit attack button still works.
+	var player := get_tree().get_first_node_in_group("player")
+	if player != null and player.has_method("combat_action"):
+		player.call("combat_action", action)
 
 
 func _pause() -> void:
 	if Game.has_won:
 		return
+	_pause_dimmer.visible = true
 	_pause_panel.visible = true
 	Game.set_paused(true)
 	_update_quality_label()
 
 
 func _resume() -> void:
+	_pause_dimmer.visible = false
 	_pause_panel.visible = false
 	Game.set_paused(false)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("interact") and not Game.is_paused:
+		_talk_to_guard()
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("journal"):
+		if _adventure_menu != null and _adventure_menu.visible:
+			_adventure_menu.call("close_menu")
+		elif not Game.is_paused:
+			_open_adventure()
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("pause") and _adventure_menu != null and _adventure_menu.visible:
+		_adventure_menu.call("close_menu")
+		get_viewport().set_input_as_handled()
+		return
+	if not Game.is_paused and not Game.has_won and _spell_wheel != null:
+		for i in range(5):
+			if event.is_action_pressed("spell_%d" % (i + 1)):
+				_spell_wheel.call("_cast_slot", i)
+				get_viewport().set_input_as_handled()
+				return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
+		_toggle_perf_monitor()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("pause") and not Game.has_won:
 		if _pause_panel.visible:
 			_resume()
 		else:
 			_pause()
 		get_viewport().set_input_as_handled()
+
+
+func _talk_to_guard() -> void:
+	if Game.is_paused or Game.has_won:
+		return
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null:
+		return
+	for hollow in get_tree().get_nodes_in_group("hollow_entrance"):
+		if hollow.call("try_interact", player):
+			return
+	for house in get_tree().get_nodes_in_group("village_house"):
+		if house.call("try_interact", player):
+			return
+	var nearest: Node3D = null
+	var distance := 8.0
+	for npc in get_tree().get_nodes_in_group("story_npc"):
+		if npc is Node3D:
+			var d: float = player.global_position.distance_to(npc.global_position)
+			if d < distance:
+				distance = d
+				nearest = npc
+	if nearest == null:
+		Game.toast.emit("Move closer to a resident to talk.")
+		return
+	var id := ""
+	var index := 0
+	if nearest.get_script() != null and nearest.get_script().resource_path == "res://scripts/settler.gd":
+		id = str(nearest.get("site_id"))
+		index = int(nearest.get("resident_index"))
+	_adventure_menu.set("dialogue_site_id", id)
+	_adventure_menu.set("dialogue_resident_index", index)
+	_open_adventure("Dialogue")
+
+
+func _open_adventure(tab: String = "Character") -> void:
+	if _adventure_menu != null and not Game.is_paused and not Game.has_won:
+		_adventure_menu.call("open_menu", tab)
+
+
+func _toggle_perf_monitor() -> void:
+	if _perf_monitor != null:
+		_perf_monitor.visible = not _perf_monitor.visible
 
 
 func _repair_view() -> void:
@@ -549,6 +720,7 @@ func _on_sigils_changed(collected: int, total: int) -> void:
 
 func _on_quest_changed(text: String) -> void:
 	_quest_label.text = text
+	_refresh_quest_box()
 
 
 func _on_toast(text: String) -> void:
@@ -569,3 +741,34 @@ func _on_game_won() -> void:
 		Game.slimes_defeated, Game.waypoints_activated,
 	]
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _toggle_quest_box() -> void:
+	_quest_box.visible = not _quest_box.visible
+	_refresh_quest_box()
+
+
+func _refresh_quest_box() -> void:
+	if _quest_box == null or not _quest_box.visible:
+		return
+	var lines: Array[String] = []
+	var story: Dictionary = Game.guard_story
+	if bool(story.get("seal_accepted", false)):
+		var status := "Completed" if bool(story.get("seal_done", false)) else "Recover a star sigil (%d/1), then return to Ilyra" % mini(Game.sigils_collected, 1)
+		lines.append("Ilyra · A Light Remembered\n%s" % status)
+	if bool(story.get("hollow_accepted", false)):
+		var status := "Completed" if bool(story.get("hollow_done", false)) else "Defeat slimes (%d/3), then return to Ilyra" % mini(Game.slimes_defeated, 3)
+		lines.append("Ilyra · Hollow Signs\n%s" % status)
+	if bool(story.get("memory_accepted", false)):
+		var memory_status := "Completed" if bool(story.get("memory_done", false)) else ("Return the fragment to Ilyra" if bool(story.get("memory_found", false)) else "Defeat the Warden and search its chest")
+		lines.append("Ilyra · A Memory in the Hollow\n%s" % memory_status)
+	for site in SETTLEMENTS.SITES:
+		for index in range(SETTLEMENTS.RESIDENT_COUNT):
+			for kind in ["main", "side"]:
+				var state: String = Game.settlement_quest_status(site["id"], kind, index)
+				if state == "available":
+					continue
+				var resident: Dictionary = SETTLEMENTS.resident(site["id"], index)
+				var detail: String = "Find nearby" if state == "active" else ("Return to resident" if state == "found" else "Completed")
+				lines.append("%s · %s · %s\n%s: %s" % [site["name"], resident["name"], kind.capitalize(), resident[kind], detail])
+	_quest_list.text = "\n\n".join(lines) if not lines.is_empty() else "No quests accepted yet. Talk to residents to find quests."

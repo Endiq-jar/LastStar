@@ -1,5 +1,7 @@
 * text=auto eol=lf
 *.png binary
+*.glb binary
+*.gltf binary
 *.jpg binary
 *.jpeg binary
 *.ogg binary

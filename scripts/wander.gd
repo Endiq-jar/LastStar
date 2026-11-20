@@ -12,6 +12,7 @@ extends RefCounted
 ## through repeated use. Light is the casting resource (Game.energy).
 
 signal slots_changed()
+signal progress_changed()
 signal spell_levelled(id: String, level: int)
 signal spell_cast(id: String)
 
@@ -34,7 +35,7 @@ const CATALOGUE := {
 		"power": 1.5,
 		"radius": 0.0,
 		"range": 26.0,
-		"desc": "A dart of fire that bursts on impact.",
+		"desc": "A focused burst of fire in front of you.",
 		"starter": true,
 	},
 	"gale_palm": {
@@ -62,7 +63,7 @@ const CATALOGUE := {
 		"power": 2.0,
 		"radius": 0.0,
 		"range": 30.0,
-		"desc": "A splinter of ice that slows what it touches.",
+		"desc": "A focused burst of ice in front of you.",
 		"starter": true,
 	},
 	"stone_bulwark": {
@@ -76,7 +77,7 @@ const CATALOGUE := {
 		"power": 0.4,
 		"radius": 3.0,
 		"range": 0.0,
-		"desc": "Raises a slab of rock that soaks a hit.",
+		"desc": "Wraps the party in a damage-absorbing stone shield.",
 		"starter": false,
 	},
 	"arc_lance": {
@@ -90,7 +91,7 @@ const CATALOGUE := {
 		"power": 2.6,
 		"radius": 2.2,
 		"range": 34.0,
-		"desc": "A spear of raw current that chains between foes.",
+		"desc": "A powerful arcane strike against foes ahead.",
 		"starter": false,
 	},
 	"sun_spear": {
@@ -135,12 +136,34 @@ const CATALOGUE := {
 		"desc": "Brambles erupt and hold the ground.",
 		"starter": false,
 	},
+	"tide_remedy": {
+		"name": "Tide Remedy", "category": "Defensive", "element": 3,
+		"color": Color(0.38, 0.8, 0.92), "icon": "aqua", "cost": 24.0,
+		"cooldown": 16.0, "power": 0.0, "radius": 0.0, "range": 0.0,
+		"desc": "Restore a portion of your health. Mastery improves the healing.", "starter": false,
+	},
+	"winter_resolve": {
+		"name": "Winter Resolve", "category": "Enhancement", "element": 4,
+		"color": Color(0.65, 0.85, 1.0), "icon": "aqua", "cost": 18.0,
+		"cooldown": 12.0, "power": 0.0, "radius": 0.0, "range": 0.0,
+		"desc": "Recover stamina for dodging and sprinting.", "starter": false,
+	},
+	"dusk_seal": {
+		"name": "Dusk Seal", "category": "Arcane", "element": 2,
+		"color": Color(0.72, 0.55, 0.95), "icon": "arcane", "cost": 26.0,
+		"cooldown": 10.0, "power": 1.0, "radius": 6.0, "range": 0.0,
+		"desc": "Interrupt nearby Hollow scouts and raiders. Bosses resist the interrupt.", "starter": false,
+	},
 }
 
 ## Equipped slot ids, length MAX_SLOTS. Empty string means an empty slot.
 var slots: Array[String] = ["ember_shot", "gale_palm", "", "", ""]
 ## id -> mastery level
 var levels: Dictionary = {}
+# Indices 0–2 are kept stable for existing research recipes and save files.
+const RESEARCH_ELEMENTS := ["Wind", "Fire", "Lightning", "Water", "Ice", "Earth"]
+const RESEARCH_COLORS := [Color(0.45, 0.95, 0.8), Color(1.0, 0.55, 0.25), Color(0.72, 0.6, 1.0), Color(0.36, 0.75, 0.95), Color(0.63, 0.85, 1.0), Color(0.78, 0.65, 0.42)]
+const RESEARCH_ICONS := ["aqua", "ember", "arcane", "aqua", "aqua", "verdant"]
 ## id -> seconds remaining on cooldown (0 = ready)
 var cooldowns: Dictionary = {}
 
@@ -151,12 +174,87 @@ func _init() -> void:
 			levels[id] = 1
 
 
+func learn(id: String) -> bool:
+	if spell(id).is_empty() or known(id):
+		return false
+	levels[id] = 1
+	progress_changed.emit()
+	slots_changed.emit()
+	return true
+
+
+func restore(saved_levels: Dictionary, saved_slots: Array) -> void:
+	# Ignore unrecognised data; starter spells are always available.
+	for id in saved_levels:
+		if not spell(str(id)).is_empty():
+			levels[id] = clampi(int(saved_levels[id]), 1, MAX_SPELL_LEVEL)
+			levels[str(id) + "_xp"] = clampi(int(saved_levels.get(str(id) + "_xp", 0)), 0, 180)
+	if saved_slots.size() == MAX_SLOTS:
+		var used: Array[String] = []
+		for i in range(MAX_SLOTS):
+			var id := str(saved_slots[i])
+			if id == "" or (known(id) and not used.has(id)):
+				slots[i] = id
+				if id != "":
+					used.append(id)
+			else:
+				slots[i] = ""
+
+
+static func research_id(first: int, second: int, shape: int, reach: int, intensity: int) -> String:
+	if first < 0 or first >= RESEARCH_ELEMENTS.size() or second < 0 or second >= RESEARCH_ELEMENTS.size() or shape < 0 or shape > 1 or reach < 0 or reach > 1 or intensity < 0 or intensity > 1:
+		return ""
+	return "research_%d_%d_%d_%d_%d" % [first, second, shape, reach, intensity]
+
+
 func spell(id: String) -> Dictionary:
-	return CATALOGUE.get(id, {})
+	if CATALOGUE.has(id):
+		return CATALOGUE[id]
+	var parts := id.split("_")
+	if parts.size() != 6 or parts[0] != "research":
+		return {}
+	for i in range(1, 6):
+		if not parts[i].is_valid_int():
+			return {}
+	var a := int(parts[1])
+	var b := int(parts[2])
+	var shape := int(parts[3])
+	var reach := int(parts[4])
+	var intensity := int(parts[5])
+	if research_id(a, b, shape, reach, intensity) != id:
+		return {}
+	var shape_name := "Pulse" if shape == 1 else "Focused"
+	return {
+		"name": "%s / %s %s %s %s" % [RESEARCH_ELEMENTS[a], RESEARCH_ELEMENTS[b], shape_name, "Long" if reach else "Close", "Strong" if intensity else "Efficient"],
+		"category": "Elemental", "element": a, "secondary_element": b,
+		"color": RESEARCH_COLORS[a].lerp(RESEARCH_COLORS[b], 0.5),
+		"icon": RESEARCH_ICONS[a],
+		"cost": 12.0 + shape * 4.0 + reach * 5.0 + intensity * 8.0,
+		"cooldown": 2.0 + shape * 1.0 + intensity * 0.8,
+		"power": 1.2 + intensity * 1.0,
+		"radius": (4.0 + reach * 2.0) if shape == 1 else 0.0,
+		"range": (5.0 + reach * 4.0) if shape == 1 else (10.0 + reach * 12.0),
+		"desc": "Experimental two-element spell. Both elements affect damage.",
+	}
+
+
+func mastery_hint(id: String) -> String:
+	match id:
+		"frost_shard": return "Lv.10 slows Hollow scouts and raiders; Lv.20 extends the slow. Bosses resist it."
+		"gale_palm": return "Lv.15 interrupts Hollow scouts and raiders. Bosses resist it."
+		_: return "Repeated use raises mastery up to level 30."
+
+
+func known_ids() -> Array[String]:
+	var result: Array[String] = []
+	for id in levels:
+		if known(str(id)):
+			result.append(str(id))
+	return result
 
 
 func known(id: String) -> bool:
-	return id != "" and levels.has(id) and CATALOGUE.has(id)
+	return id != "" and levels.has(id) and not spell(id).is_empty()
 
 
 func level_of(id: String) -> int:
@@ -180,6 +278,7 @@ func set_slot(i: int, id: String) -> bool:
 			slots[j] = ""
 	slots[i] = id
 	slots_changed.emit()
+	progress_changed.emit()
 	return true
 
 
@@ -219,6 +318,7 @@ func begin_cast(id: String) -> Dictionary:
 	cooldowns[id] = float(data["cooldown"])
 	spell_cast.emit(id)
 	_add_mastery(id)
+	progress_changed.emit()
 	return data
 
 

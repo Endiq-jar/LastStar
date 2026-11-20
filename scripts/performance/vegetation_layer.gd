@@ -30,7 +30,7 @@ extends Node3D
 ## instances land, so the meadow has thick and thin patches. Uniform random
 ## placement is the single most reliable way to make a field look synthetic.
 
-const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
+const Nature := preload("res://scripts/nature_pack.gd")
 
 ## World size of one chunk, in metres.
 @export var chunk_size: float = 26.0
@@ -46,15 +46,14 @@ const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
 ## Reject if the ground is steeper than this (rise over run).
 @export var max_slope: float = 0.55
 @export var material: ShaderMaterial
-@export var alpha_texture: Texture2D
-## Which generated mesh to instance: "crossed" for foliage cards, "rock", "lobe".
-@export var mesh_kind: String = "crossed"
-## Which generated variant to use for kinds that have several (flowers, bushes).
-@export var mesh_variant: int = 0
-## Seed for randomised cluster meshes, so a species looks the same every run.
-@export var seed_for_mesh: int = 1
-## Which leaf silhouette a "leaf" layer instances: lance, oval, round, needle, lobed.
-@export var leaf_variety: String = "lance"
+## Which model of the nature pack to instance, by NaturePack kind - "grass_2",
+## "bush_1", "rock_4" and so on.
+@export var model_kind: String = ""
+## Whether this species casts shadows. Off by default: these are small props
+## instanced in the thousands, and each one that casts is geometry the shadow
+## pass has to draw again. The trees and boulders that shape the light are the
+## spawner's job; a pebble's shadow is not worth a second submission.
+@export var casts_shadow: bool = false
 
 var _terrain: Node
 var _player: Node3D
@@ -77,48 +76,33 @@ func setup(terrain: Node, player: Node3D, seed_value: int = 1) -> void:
 	_player = player
 	_rng.seed = seed_value
 	_mesh = _resolve_mesh()
-	# Report which mesh path is actually live. The flower and leaf meshes were
-	# written, tested and never instanced for two commits - the layer fell through
-	# to `rock()` for every kind it did not recognise, so the field was pebbles and
-	# cards and nothing said so.
-	print("VEG_LAYER %s mesh_kind=%s mesh=%s" % [name, mesh_kind, _mesh.resource_name if _mesh else "null"])
+	# Report which model is actually live. A layer whose kind does not resolve
+	# used to fall through to `rock()` in silence; now it says so and builds
+	# nothing, because a species that quietly becomes the wrong mesh is a bug
+	# that only shows up in a screenshot.
+	print("VEG_LAYER %s model=%s mesh=%s" % [name, model_kind, _mesh.resource_name if _mesh else "null"])
 	_noise.seed = seed_value
 	# Low frequency: patches roughly 40 m across, which is the scale at which a
 	# real meadow varies as the ground changes.
 	_noise.frequency = 0.022
 	_noise.fractal_octaves = 2
-	if material != null and alpha_texture != null:
-		material.set_shader_parameter("albedo_texture", alpha_texture)
+	if _mesh == null:
+		push_warning("VegetationLayer '%s': no mesh for model '%s' - layer disabled" % [name, model_kind])
+		return
 	_refresh_center()
 
 
-## Maps `mesh_kind` onto a generated mesh.
-##
-## The fallthrough is deliberately a rock and not a card: an unrecognised kind
-## should look wrong, loudly, rather than silently degrade to something plausible.
-## It used to be the other way round for every non-"crossed" value, which is how
-## flowers spent two commits as pebbles.
+## Resolves the species' model. One path, no fallthrough: the pack either has
+## the kind or it does not, and a missing kind disables the layer loudly instead
+## of drawing something else in its place.
 func _resolve_mesh() -> Mesh:
-	match mesh_kind:
-		"crossed":
-			return VegMeshes.crossed()
-		"lobe":
-			return VegMeshes.lobe()
-		"rock":
-			return VegMeshes.rock()
-		"boulder":
-			return VegMeshes.boulder()
-		"bush":
-			return VegMeshes.bush_cluster(seed_for_mesh)
-		"leaf":
-			return VegMeshes.leaf_cluster(leaf_variety, 5)
-		"flower":
-			return VegMeshes.flower_cluster(mesh_variant, 5, max_height)
-		"trunk":
-			return VegMeshes.trunk(2.6, 0.16, 0.32, 0.05)
-		_:
-			push_warning("VegetationLayer '%s': unknown mesh_kind '%s'" % [name, mesh_kind])
-			return VegMeshes.rock()
+	if model_kind == "":
+		push_warning("VegetationLayer '%s': model_kind is empty" % name)
+		return null
+	if not Nature.has(model_kind):
+		push_warning("VegetationLayer '%s': unknown nature model '%s'" % [name, model_kind])
+		return null
+	return Nature.mesh_of(model_kind)
 
 
 func _process(_delta: float) -> void:
@@ -162,17 +146,20 @@ func _refresh_center() -> void:
 
 
 func _build_chunk(key: Vector2i) -> void:
+	if _mesh == null:
+		return
 	var origin_x := float(key.x) * chunk_size
 	var origin_z := float(key.y) * chunk_size
 
 	var area := chunk_size * chunk_size
 	var wanted := int(area * density)
 	var transforms: Array[Transform3D] = []
-	var customs: Array[Color] = []
 
 	for i in range(wanted):
 		var x := origin_x + _rng.randf() * chunk_size
 		var z := origin_z + _rng.randf() * chunk_size
+		if _terrain.has_method("is_path") and _terrain.is_path(x, z):
+			continue
 
 		# Density variation: a noise field thins the field in patches. Below the
 		# threshold, skip - which is what produces natural clearings instead of
@@ -205,22 +192,21 @@ func _build_chunk(key: Vector2i) -> void:
 		# (A centred quad would need +s*0.5 here; getting this wrong puts every
 		# tuft half a metre underground.)
 		transforms.append(Transform3D(basis, Vector3(x, h, z)))
-		# INSTANCE_CUSTOM.r is read by the shader as a per-instance tint.
-		customs.append(Color(_rng.randf(), 0.0, 0.0, 0.0))
 
 	if transforms.is_empty():
 		return
 
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	# Custom data is what lets the shader vary each instance without a second
-	# draw call or a per-instance material.
-	mm.use_custom_data = true
+	# No custom data on purpose. The per-instance tint used to live here, and on
+	# the Compatibility renderer a MultiMesh with custom data enabled loses the
+	# mesh's vertex colours - the whole batch draws as a black silhouette. The
+	# shader now derives its tint from world position instead; see the note in
+	# shaders/vegetation/nature_foliage.gdshader.
 	mm.mesh = _mesh
 	mm.instance_count = transforms.size()
 	for i in range(transforms.size()):
 		mm.set_instance_transform(i, transforms[i])
-		mm.set_instance_custom_data(i, customs[i])
 
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "Chunk_%d_%d" % [key.x, key.y]
@@ -229,7 +215,8 @@ func _build_chunk(key: Vector2i) -> void:
 		mmi.material_override = material
 	# Grass does not cast shadows: at this density the shadow map cost dwarfs
 	# the benefit, and the terrain's own shading carries the shape.
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts_shadow \
+		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mmi.set_meta("count", transforms.size())
 	add_child(mmi)
 	_chunks[key] = mmi
@@ -261,7 +248,7 @@ func census() -> Dictionary:
 		"instances": _instances_built,
 		"built": _chunks_built,
 		"pending": _queued.size(),
-		"mesh_kind": mesh_kind,
+		"model_kind": model_kind,
 		"mesh_verts": _mesh_vert_count(),
 		"mesh_class": _mesh.get_class() if _mesh else "null",
 	}

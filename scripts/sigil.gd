@@ -11,6 +11,8 @@ var _sparkle_timer := 2.5
 var _picked := false
 var _time := 0.0
 var _color := Color(1.0, 0.86, 0.45)
+## Set by the entity culler while the player cannot see this sigil.
+var _view_culled := false
 
 
 func _ready() -> void:
@@ -123,6 +125,22 @@ func _process(delta: float) -> void:
 		FX.sparkle(get_parent(), global_position + Vector3(0, 0.8, 0), _color, 0.8)
 
 
+## Called by the entity culler when the sigil is behind geometry the player is
+## looking through. Its spin, bob, halo pulse and sparkle timer are pure
+## per-frame cost for something nobody can see, so they stop with it.
+func set_view_culled(hidden: bool) -> void:
+	if _picked or _view_culled == hidden:
+		return
+	_view_culled = hidden
+	if _mesh != null and is_instance_valid(_mesh):
+		_mesh.visible = not hidden
+	set_process(not hidden)
+
+
+func is_view_culled() -> bool:
+	return _view_culled
+
+
 func _on_body_entered(body: Node3D) -> void:
 	if _picked or not body.is_in_group("player"):
 		return
@@ -131,7 +149,7 @@ func _on_body_entered(body: Node3D) -> void:
 	# but there is no reason to keep running sin() and a smoke check every frame
 	# for a sigil that no longer exists in the world.
 	set_process(false)
-	Game.collect_sigil()
+	Game.collect_sigil(name)
 	FX.heal_burst(get_parent(), global_position + Vector3(0, 0.8, 0), _color)
 	_play_chime()
 	var amb := get_tree().get_first_node_in_group("ambience")
@@ -146,6 +164,7 @@ func _on_body_entered(body: Node3D) -> void:
 func _play_chime() -> void:
 	var player := AudioStreamPlayer3D.new()
 	player.stream = _make_chime()
+	player.bus = "SFX"
 	player.volume_db = -4.0
 	player.max_distance = 40.0
 	get_parent().add_child(player)
