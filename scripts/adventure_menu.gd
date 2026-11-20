@@ -683,7 +683,7 @@ func _story() -> void:
 		if not bool(Game.guard_story.get("seal_done", false)):
 			_line("Complete Ilyra's A Light Remembered quest to unlock spell research.")
 		else:
-			_line("Combine two elements and adjust shape, range and power. Each new recipe costs 10 starlight. Both elements affect enemy reactions.")
+			_line("Combine two elements and adjust shape, range and power. Each recipe costs 10 starlight. Water, Ice and Earth unlock through memories near Tidefall, Frostmere and The Deep.")
 			_action("First element: %s" % Wander.RESEARCH_ELEMENTS[_research_first], _cycle_research.bind("first"))
 			_action("Second element: %s" % Wander.RESEARCH_ELEMENTS[_research_second], _cycle_research.bind("second"))
 			_action("Shape: %s" % ("Pulse around you" if _research_shape else "Focused ahead"), _cycle_research.bind("shape"))
@@ -692,7 +692,9 @@ func _story() -> void:
 			var recipe := Wander.research_id(_research_first, _research_second, _research_shape, _research_reach, _research_intensity)
 			var preview: Dictionary = Game.wander.spell(recipe)
 			_line("%s · %.0f Light · %.0fm range · %.1f power" % [preview["name"], preview["cost"], preview["range"], preview["power"]])
-			_action("Discover this spell · 10 starlight", _research_spell, Game.starlight >= 10 and not Game.wander.known(recipe))
+			var elements_ready: bool = Game.research_element_unlocked(_research_first) and Game.research_element_unlocked(_research_second)
+			if not elements_ready: _line("Recover the matching memory before researching this element.")
+			_action("Discover this spell · 10 starlight", _research_spell, elements_ready and Game.starlight >= 10 and not Game.wander.known(recipe))
 		_line("WANDER MASTERY & EQUIPMENT", 18, UI.ACCENT)
 		var equipped := Game.wander.equipped_at(_wander_slot)
 		var equipped_name: String = str(Game.wander.spell(equipped).get("name", "Empty"))
@@ -701,12 +703,13 @@ func _story() -> void:
 		for id in Game.wander.known_ids():
 			if Game.wander.known(id):
 				_action("%s · Level %d / 30 · equip in slot %d" % [Game.wander.spell(id)["name"], Game.wander.level_of(id), _wander_slot + 1], _equip_wander.bind(id))
+				if id == "frost_shard" or id == "gale_palm": _line(Game.wander.mastery_hint(id))
 
 
 func _cycle_research(field: String) -> void:
 	match field:
-		"first": _research_first = (_research_first + 1) % 3
-		"second": _research_second = (_research_second + 1) % 3
+		"first": _research_first = (_research_first + 1) % Wander.RESEARCH_ELEMENTS.size()
+		"second": _research_second = (_research_second + 1) % Wander.RESEARCH_ELEMENTS.size()
 		"shape": _research_shape = 1 - _research_shape
 		"reach": _research_reach = 1 - _research_reach
 		"intensity": _research_intensity = 1 - _research_intensity

@@ -731,6 +731,17 @@ func _run() -> void:
 	Game.starlight = 30
 	var locked := Game.research_spell(0, 1, 1, 1, 1) == "" and Game.starlight == 30
 	Game.guard_story["seal_done"] = true
+	var research_clears := Game.dungeon_clears.duplicate(true)
+	Game.dungeon_clears.erase("memory_10")
+	Game.dungeon_clears.erase("memory_15")
+	Game.dungeon_clears.erase("memory_24")
+	var extra_locked := Game.research_spell(3, 4, 0, 0, 0) == "" and Game.starlight == 30
+	Game.dungeon_clears["memory_10"] = true
+	Game.dungeon_clears["memory_15"] = true
+	Game.dungeon_clears["memory_24"] = true
+	var extra_ids_ok := Game.research_element_unlocked(3) and Game.research_element_unlocked(4) and Game.research_element_unlocked(5)
+	extra_ids_ok = extra_ids_ok and Wander.research_id(6, 0, 0, 0, 0) == "" and not Game.wander.spell(Wander.research_id(3, 4, 0, 0, 0)).is_empty()
+	Game.dungeon_clears = research_clears
 	var recipe_id: String = Game.research_spell(0, 1, 1, 1, 1)
 	var recipe_data: Dictionary = Game.wander.spell(recipe_id)
 	var created := recipe_id != "" and Game.starlight == 20 and Game.wander.known(recipe_id)
@@ -760,7 +771,7 @@ func _run() -> void:
 	Game.wander_levels = research_saved_levels
 	Game.wander_slots = research_saved_slots
 	Game.save_collection()
-	_log("INFO" if locked and created and no_double and shape_ok and research_saved and reaction_ok else "FAIL", "spell research locked=%s created=%s duplicate=%s shape=%s saved=%s combined=%s" % [str(locked), str(created), str(no_double), str(shape_ok), str(research_saved), str(reaction_ok)])
+	_log("INFO" if locked and extra_locked and extra_ids_ok and created and no_double and shape_ok and research_saved and reaction_ok else "FAIL", "spell research locked=%s new_elements_locked=%s new_elements_valid=%s created=%s duplicate=%s shape=%s saved=%s combined=%s" % [str(locked), str(extra_locked), str(extra_ids_ok), str(created), str(no_double), str(shape_ok), str(research_saved), str(reaction_ok)])
 
 	# Each of the 14 residents has independent, persistent main and side quests.
 	var site_data = load("res://scripts/settlement_data.gd")

@@ -585,8 +585,17 @@ func save_wander() -> void:
 	save_collection()
 
 
+func research_element_unlocked(index: int) -> bool:
+	if index >= 0 and index <= 2: return true
+	match index:
+		3: return story_memory_owned("memory_10")
+		4: return story_memory_owned("memory_15")
+		5: return story_memory_owned("memory_24")
+	return false
+
+
 func research_spell(first: int, second: int, shape: int, reach: int, intensity: int) -> String:
-	if wander == null or not bool(guard_story.get("seal_done", false)) or starlight < 10:
+	if wander == null or not bool(guard_story.get("seal_done", false)) or starlight < 10 or not research_element_unlocked(first) or not research_element_unlocked(second):
 		return ""
 	var id := Wander.research_id(first, second, shape, reach, intensity)
 	if id == "" or wander.known(id):

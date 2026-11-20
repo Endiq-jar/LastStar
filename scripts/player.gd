@@ -939,7 +939,7 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 		return
 	if id == "dusk_seal":
 		for foe in get_tree().get_nodes_in_group("enemy"):
-			if foe is Node3D and is_instance_valid(foe) and foe.global_position.distance_to(global_position) < radius and foe.has_method("interrupt_attack"):
+			if foe is Node3D and is_instance_valid(foe) and foe.global_position.distance_to(global_position) < radius and foe.has_method("interrupt_attack") and _spell_has_line_of_sight(origin, foe):
 				foe.call("interrupt_attack", 2.0)
 				foe.call("take_hit", power, element, forward)
 		Game.toast.emit("Dusk Seal interrupts nearby scouts")
@@ -971,6 +971,7 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 		var in_area := radius > 0.0 and dist < radius
 		var along := dist < maxf(reach, radius)
 		if (in_cone and along) or in_area:
+			if not _spell_has_line_of_sight(origin, target): continue
 			if data.has("secondary_element") and enemy.has_method("take_combined_hit"):
 				enemy.take_combined_hit(power, element, int(data["secondary_element"]), forward)
 				hit_any = true
@@ -979,6 +980,11 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 				enemy.take_hit(power, element, forward)
 				hit_any = true
 				hit_point = target.global_position
+			if is_instance_valid(enemy) and not enemy.is_queued_for_deletion() and wander != null:
+				if id == "frost_shard" and wander.level_of(id) >= 10 and enemy.has_method("apply_slow"):
+					enemy.call("apply_slow", 4.5 if wander.level_of(id) >= 20 else 2.5)
+				elif id == "gale_palm" and wander.level_of(id) >= 15 and enemy.has_method("interrupt_attack"):
+					enemy.call("interrupt_attack", 1.5)
 
 	FX.hit_flash(get_parent(), hit_point, color)
 	if hit_any:
@@ -990,6 +996,16 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 		arm.rotation.x = -2.2
 		var tw := create_tween()
 		tw.tween_property(arm, "rotation:x", 0.2, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _spell_has_line_of_sight(origin: Vector3, target: Node3D) -> bool:
+	# Physics layer 1 contains walls, terrain and gates; enemies are on layer 8.
+	# Keeping spell damage behind the same barriers as movement avoids hitting
+	# defenders through a closed dungeon gate.
+	if not is_instance_valid(target) or get_world_3d() == null: return false
+	var ray := PhysicsRayQueryParameters3D.create(origin, target.global_position + Vector3(0, 0.8, 0), 1)
+	ray.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_ray(ray).is_empty()
 
 
 func _safe_spatial_destination(forward: Vector3, distance: float) -> Vector3:

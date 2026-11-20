@@ -341,6 +341,7 @@ func _editor_row(id: String, label: String, data) -> Button:
 		b.tooltip_text = "%s\n%s\nLight %d · cooldown %.1fs · Lv.%d" % [
 			data["name"], data.get("desc", ""), int(data["cost"]),
 			float(data["cooldown"]), wander.level_of(id)]
+		b.tooltip_text += "\n" + wander.mastery_hint(id)
 	if id == "":
 		b.pressed.connect(_on_editor_pick.bind(""))
 	else:

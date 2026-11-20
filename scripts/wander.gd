@@ -160,8 +160,10 @@ const CATALOGUE := {
 var slots: Array[String] = ["ember_shot", "gale_palm", "", "", ""]
 ## id -> mastery level
 var levels: Dictionary = {}
-const RESEARCH_ELEMENTS := ["Wind", "Fire", "Lightning"]
-const RESEARCH_COLORS := [Color(0.45, 0.95, 0.8), Color(1.0, 0.55, 0.25), Color(0.72, 0.6, 1.0)]
+# Indices 0–2 are kept stable for existing research recipes and save files.
+const RESEARCH_ELEMENTS := ["Wind", "Fire", "Lightning", "Water", "Ice", "Earth"]
+const RESEARCH_COLORS := [Color(0.45, 0.95, 0.8), Color(1.0, 0.55, 0.25), Color(0.72, 0.6, 1.0), Color(0.36, 0.75, 0.95), Color(0.63, 0.85, 1.0), Color(0.78, 0.65, 0.42)]
+const RESEARCH_ICONS := ["aqua", "ember", "arcane", "aqua", "aqua", "verdant"]
 ## id -> seconds remaining on cooldown (0 = ready)
 var cooldowns: Dictionary = {}
 
@@ -200,7 +202,7 @@ func restore(saved_levels: Dictionary, saved_slots: Array) -> void:
 
 
 static func research_id(first: int, second: int, shape: int, reach: int, intensity: int) -> String:
-	if first < 0 or first > 2 or second < 0 or second > 2 or shape < 0 or shape > 1 or reach < 0 or reach > 1 or intensity < 0 or intensity > 1:
+	if first < 0 or first >= RESEARCH_ELEMENTS.size() or second < 0 or second >= RESEARCH_ELEMENTS.size() or shape < 0 or shape > 1 or reach < 0 or reach > 1 or intensity < 0 or intensity > 1:
 		return ""
 	return "research_%d_%d_%d_%d_%d" % [first, second, shape, reach, intensity]
 
@@ -226,7 +228,7 @@ func spell(id: String) -> Dictionary:
 		"name": "%s / %s %s %s %s" % [RESEARCH_ELEMENTS[a], RESEARCH_ELEMENTS[b], shape_name, "Long" if reach else "Close", "Strong" if intensity else "Efficient"],
 		"category": "Elemental", "element": a, "secondary_element": b,
 		"color": RESEARCH_COLORS[a].lerp(RESEARCH_COLORS[b], 0.5),
-		"icon": ["aqua", "ember", "arcane"][a],
+		"icon": RESEARCH_ICONS[a],
 		"cost": 12.0 + shape * 4.0 + reach * 5.0 + intensity * 8.0,
 		"cooldown": 2.0 + shape * 1.0 + intensity * 0.8,
 		"power": 1.2 + intensity * 1.0,
@@ -234,6 +236,13 @@ func spell(id: String) -> Dictionary:
 		"range": (5.0 + reach * 4.0) if shape == 1 else (10.0 + reach * 12.0),
 		"desc": "Experimental two-element spell. Both elements affect damage.",
 	}
+
+
+func mastery_hint(id: String) -> String:
+	match id:
+		"frost_shard": return "Lv.10 slows Hollow scouts and raiders; Lv.20 extends the slow. Bosses resist it."
+		"gale_palm": return "Lv.15 interrupts Hollow scouts and raiders. Bosses resist it."
+		_: return "Repeated use raises mastery up to level 30."
 
 
 func known_ids() -> Array[String]:

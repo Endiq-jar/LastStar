@@ -380,8 +380,9 @@ func take_hit(power: float, hit_element: int, dir: Vector3) -> void:
 
 
 func take_combined_hit(power: float, first: int, second: int, dir: Vector3) -> void:
-	var a: Color = ELEMENT_COLORS[clampi(first, 0, ELEMENT_COLORS.size() - 1)]
-	var b: Color = ELEMENT_COLORS[clampi(second, 0, ELEMENT_COLORS.size() - 1)]
+	var colors := Wander.RESEARCH_COLORS
+	var a: Color = colors[clampi(first, 0, colors.size() - 1)]
+	var b: Color = colors[clampi(second, 0, colors.size() - 1)]
 	var multiplier := (_reaction_multiplier(first) + _reaction_multiplier(second)) * 0.5
 	_apply_hit(power * multiplier, a.lerp(b, 0.5), dir)
 

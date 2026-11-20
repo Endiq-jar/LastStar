@@ -12,6 +12,7 @@ var _label: Label3D
 var _warning: MeshInstance3D
 var _target := Vector3.ZERO
 var _timer := 2.5
+var _slow_remaining := 0.0
 var _state := "rest"
 var _dead := false
 
@@ -60,12 +61,14 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if _dead or Game.is_paused or not is_instance_valid(_player): return
 	_timer -= delta
+	_slow_remaining = maxf(0.0, _slow_remaining - delta)
 	if _state == "rest":
 		var toward := _player.global_position - global_position
 		toward.y = 0
 		if toward.length() > 2.5:
-			velocity.x = toward.normalized().x * 2.6
-			velocity.z = toward.normalized().z * 2.6
+			var move_speed := 1.3 if _slow_remaining > 0.0 else 2.6
+			velocity.x = toward.normalized().x * move_speed
+			velocity.z = toward.normalized().z * move_speed
 			_visual.rotation.y = lerp_angle(_visual.rotation.y, atan2(toward.x, toward.z), 6.0 * delta)
 		else:
 			velocity.x = 0.0
@@ -90,6 +93,10 @@ func _physics_process(delta: float) -> void:
 		_state = "rest"
 		_timer = 3.0
 		_play("Idle" if is_orc else "Flying_Idle")
+
+
+func apply_slow(duration: float) -> void:
+	if not _dead: _slow_remaining = maxf(_slow_remaining, duration)
 
 
 func interrupt_attack(recovery: float) -> void:
