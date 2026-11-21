@@ -128,8 +128,8 @@ func _physics_process(delta: float) -> void:
 				# A flat annulus leaves safe space inside and outside its visible band.
 				_target = global_position + Vector3(0, 0.08, 0)
 				var ring := TorusMesh.new()
-				ring.inner_radius = RING_INNER
 				ring.outer_radius = RING_OUTER
+				ring.inner_radius = RING_INNER
 				ring.rings = 32
 				ring.ring_segments = 8
 				_warning.mesh = ring
