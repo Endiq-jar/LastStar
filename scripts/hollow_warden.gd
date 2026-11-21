@@ -15,6 +15,8 @@ var difficulty_scale := 1.0
 var _radius := 2.6
 const LINE_LENGTH := 12.0
 const LINE_HALF_WIDTH := 1.0
+const RING_INNER := 2.2
+const RING_OUTER := 5.0
 var _attack_kind := "circle"
 var _line_origin := Vector3.ZERO
 var _line_direction := Vector3.FORWARD
@@ -101,9 +103,13 @@ func _physics_process(delta: float) -> void:
 			_timer = 1.6 if phase == 1 else (1.0 if is_keeper and phase >= 3 else (1.15 if is_vault else 1.25))
 			_attack_number += 1
 			var targeted := phase == 1 or ((is_vault or is_dragon or is_keeper) and _attack_number % 2 == 0)
-			_attack_kind = "line" if phase >= 2 and _attack_number % 3 == 0 else "circle"
+			_attack_kind = "circle"
+			if phase >= 2:
+				if _attack_number % 3 == 0: _attack_kind = "line"
+				elif _attack_number % 4 == 0: _attack_kind = "ring"
 			_radius = 3.8 if is_keeper and phase >= 3 and not targeted else (3.4 if is_dragon and phase >= 2 and not targeted else 2.6)
 			_play_animation("Headbutt" if is_dragon else "Punch")
+			_warning.scale = Vector3.ONE
 			if _attack_kind == "line":
 				_line_origin = global_position
 				_line_direction = _player.global_position - _line_origin
@@ -118,6 +124,19 @@ func _physics_process(delta: float) -> void:
 				_warning.rotation.y = atan2(_line_direction.x, _line_direction.z)
 				_timer = 1.25 if is_keeper and phase >= 4 else 1.45 # Readable committed wind-up.
 				Game.toast.emit("%s: star slash — dodge sideways!" % _boss_name())
+			elif _attack_kind == "ring":
+				# A flat annulus leaves safe space inside and outside its visible band.
+				_target = global_position + Vector3(0, 0.08, 0)
+				var ring := TorusMesh.new()
+				ring.inner_radius = RING_INNER
+				ring.outer_radius = RING_OUTER
+				ring.rings = 32
+				ring.ring_segments = 8
+				_warning.mesh = ring
+				_warning.scale.y = 0.03
+				_warning.rotation.y = 0.0
+				_timer = 1.5
+				Game.toast.emit("%s: eclipse ring — move inside or beyond the ring!" % _boss_name())
 			else:
 				var disc := CylinderMesh.new()
 				disc.top_radius = _radius
@@ -137,7 +156,9 @@ func _physics_process(delta: float) -> void:
 		var delta_pos := _player.global_position - _target
 		delta_pos.y = 0
 		var hit := delta_pos.length() < _radius
-		if _attack_kind == "line":
+		if _attack_kind == "ring":
+			hit = delta_pos.length() >= RING_INNER and delta_pos.length() <= RING_OUTER
+		elif _attack_kind == "line":
 			var offset := _player.global_position - _line_origin
 			offset.y = 0
 			var along := offset.dot(_line_direction)

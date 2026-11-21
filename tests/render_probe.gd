@@ -1111,6 +1111,29 @@ func _run() -> void:
 			dragon.call("_physics_process", 0.01)
 			roost_ok = roost_ok and Game.current_hp() < slash_hp
 			Game.set_hp(slash_hp)
+			# Eclipse ring has a visible wind-up, a safe centre and a dangerous band.
+			hollow_player.global_position = dragon.global_position + Vector3(0, 0, 3.5)
+			dragon.set("_attack_number", 3)
+			dragon.set("_state", "rest")
+			dragon.set("_timer", 0.0)
+			dragon.call("_physics_process", 0.01)
+			roost_ok = roost_ok and str(dragon.get("_attack_kind")) == "ring" and float(dragon.get("_timer")) >= 1.4
+			var ring_center: Vector3 = dragon.get("_target")
+			hollow_player.global_position = ring_center + Vector3(1, 0, 0)
+			dragon.set("_timer", 0.0)
+			dragon.call("_physics_process", 0.01)
+			roost_ok = roost_ok and is_equal_approx(Game.current_hp(), slash_hp)
+			hollow_player.global_position = dragon.global_position + Vector3(0, 0, 3.5)
+			dragon.set("_attack_number", 3)
+			dragon.set("_state", "rest")
+			dragon.set("_timer", 0.0)
+			dragon.call("_physics_process", 0.01)
+			ring_center = dragon.get("_target")
+			hollow_player.global_position = ring_center + Vector3(3.5, 0, 0)
+			dragon.set("_timer", 0.0)
+			dragon.call("_physics_process", 0.01)
+			roost_ok = roost_ok and Game.current_hp() < slash_hp
+			Game.set_hp(slash_hp)
 			dragon.call("take_hit", 9999.0, 0, Vector3.ZERO)
 			roost_ok = roost_ok and Game.story_memory_count() == 3 and Game.story_memory_owned("suncrest_roost") and Game.coins == roost_coins + 200 and Game.starlight == roost_light + 60
 			roost.call("_on_defeated")
