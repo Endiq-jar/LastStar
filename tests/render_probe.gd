@@ -940,13 +940,9 @@ func _run() -> void:
 	Game.collection_changed.emit()
 	_log("INFO" if rewards_ok else "FAIL", "quest reward persistence, equipment and blueprint=%s" % str(rewards_ok))
 
-	# Cataclysm snapshots 20x health and damage for new actors, persists as an
-	# explicit setting, and does not mutate existing encounters on a toggle.
-	var old_cataclysm: bool = Game.cataclysm_mode
-	Game.set_cataclysm_mode(true)
-	Game.cataclysm_mode = false
-	Game._setup_settings()
-	var cataclysm_ok: bool = Game.cataclysm_mode and is_equal_approx(Game.enemy_power_multiplier(), 20.0)
+	# Fixed tiers: the first twenty named memories use normal tuning; the next
+	# twenty regional Hollows and final Keeper use 20x tuning without a setting.
+	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 1.0)
 	var challenge_fixture := Node3D.new()
 	world.add_child(challenge_fixture)
 	challenge_fixture.global_position = Vector3(0, 800, 0)
@@ -956,21 +952,21 @@ func _run() -> void:
 	var challenge_trap = load("res://scripts/story_hollow_trap.gd").new()
 	var damage_receiver = load("res://tests/damage_receiver.gd").new()
 	challenge_fixture.add_child(damage_receiver)
+	challenge_scout._power_multiplier = 20.0
+	challenge_boss._power_multiplier = 20.0
+	challenge_trap._power_multiplier = 20.0
 	challenge_trap.player = damage_receiver
 	challenge_fixture.add_child(challenge_scout)
 	challenge_fixture.add_child(challenge_boss)
 	challenge_fixture.add_child(challenge_slime)
 	challenge_fixture.add_child(challenge_trap)
-	cataclysm_ok = cataclysm_ok and is_equal_approx(challenge_scout.hp, 5200.0) and is_equal_approx(challenge_boss.max_hp, 22000.0) and is_equal_approx(challenge_slime.max_hp, 3000.0)
-	cataclysm_ok = cataclysm_ok and is_equal_approx(challenge_scout._power_multiplier, 20.0) and is_equal_approx(challenge_slime._power_multiplier, 20.0)
+	tier_ok = tier_ok and is_equal_approx(challenge_scout.hp, 5200.0) and is_equal_approx(challenge_boss.max_hp, 22000.0) and is_equal_approx(challenge_slime.max_hp, 150.0)
 	challenge_trap._state = "warning"
 	challenge_trap._timer = 0.0
 	challenge_trap._physics_process(0.01)
-	cataclysm_ok = cataclysm_ok and is_equal_approx(damage_receiver.last_damage, Game.max_hp() * 0.08 * 20.0)
-	Game.set_cataclysm_mode(false)
-	cataclysm_ok = cataclysm_ok and is_equal_approx(challenge_boss._power_multiplier, 20.0) and is_equal_approx(Game.enemy_power_multiplier(), 1.0)
+	tier_ok = tier_ok and is_equal_approx(damage_receiver.last_damage, Game.max_hp() * 0.08 * 20.0)
 	challenge_fixture.queue_free()
-	_log("INFO" if cataclysm_ok else "FAIL", "Cataclysm setting, 20x enemy and trial scaling, snapshots and persistence=%s" % str(cataclysm_ok))
+	_log("INFO" if tier_ok else "FAIL", "Fixed dungeon tiers: normal first 20, 20x regional enemies and trial damage=%s" % str(tier_ok))
 
 	# Progression requires Ilyra's memory quest and the local leader's guide.
 	var progression_story := Game.guard_story.duplicate(true)
@@ -997,6 +993,15 @@ func _run() -> void:
 		progression_ok = false
 	Game.settlement_quests["lunareth:main"] = "done"
 	progression_ok = progression_ok and Game.can_enter_hollow("memory_09", "lunareth", false) and Game.can_enter_hollow("memory_09", "lunareth", true)
+	var progression_old_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+	Game.dungeon_clears = {}
+	Game.settlement_quests["ashvale:main"] = "done"
+	progression_ok = progression_ok and not Game.can_enter_hollow("optional_000", "ashvale", false)
+	for number in range(4, 23): Game.dungeon_clears["memory_%02d" % number] = true
+	progression_ok = progression_ok and Game.first_tier_clear_count() == 19 and not Game.can_enter_hollow("optional_000", "ashvale", false)
+	Game.dungeon_clears["memory_23"] = true
+	progression_ok = progression_ok and Game.first_tier_clear_count() == 20 and Game.can_enter_hollow("optional_000", "ashvale", false)
+	Game.dungeon_clears = progression_old_clears
 	Game.settlement_quests["ashvale:3:side"] = "found"
 	var potion_before: int = Game.potions
 	progression_ok = Game.complete_settlement_quest("ashvale", "side", 3) and progression_ok
@@ -1421,6 +1426,7 @@ func _run() -> void:
 	if stream != null and hollow_player != null:
 		var optional_pos := hollow_player.global_position
 		var optional_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+		for story_clear_id in verified_story_clears: Game.dungeon_clears[story_clear_id] = verified_story_clears[story_clear_id]
 		var optional_coins: int = Game.coins
 		var optional_light: int = Game.starlight
 		var optional_memory_count: int = Game.story_memory_count()
@@ -1473,6 +1479,9 @@ func _run() -> void:
 			for optional_enemy in get_tree().get_nodes_in_group("enemy"):
 				if optional_enemy.get_parent() == optional_dungeon.get("chamber") and not optional_enemy.is_queued_for_deletion(): optional_guards.append(optional_enemy)
 			optional_ok = optional_ok and optional_guards.size() >= 2 and optional_guards.size() <= 4
+			var expected_multiplier: float = Game.hollow_power_multiplier(optional_chosen)
+			for optional_guard in optional_guards:
+				optional_ok = optional_ok and is_equal_approx(float(optional_guard.get("hp")), 260.0 * expected_multiplier)
 			var extra_design: Dictionary = optional_dungeon.get("_design")
 			if not extra_design.is_empty():
 				var extra_echoes: Array = optional_dungeon.get("_rune_nodes")
@@ -1498,8 +1507,9 @@ func _run() -> void:
 						optional_ok = optional_dungeon.call("try_interact", hollow_player) and optional_ok
 			var optional_boss := optional_dungeon.get("boss") as Node3D
 			if optional_boss != null:
+				optional_ok = optional_ok and is_equal_approx(float(optional_boss.get("_power_multiplier")), expected_multiplier)
 				var optional_before_coins: int = Game.coins
-				optional_boss.call("take_hit", 9999.0, 0, Vector3.ZERO)
+				optional_boss.call("take_hit", 999999.0, 0, Vector3.ZERO)
 				optional_ok = optional_ok and bool(Game.dungeon_clears.get(optional_chosen, false)) and Game.coins > optional_before_coins
 				var optional_after_coins: int = Game.coins
 				optional_dungeon.call("_on_defeated")
@@ -1584,14 +1594,14 @@ func _run() -> void:
 					finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and hollow_player.global_position.distance_to(checkpoint_pos) < 0.1 and int(finale.get("sector")) == 1
 			var keeper := finale.get("boss") as Node3D
 			if keeper != null:
-				finale_ok = finale_ok and bool(keeper.get("is_keeper")) and float(keeper.get("max_hp")) > 1800.0
-				keeper.call("take_hit", 1200.0, 0, Vector3.ZERO)
+				finale_ok = finale_ok and bool(keeper.get("is_keeper")) and is_equal_approx(float(keeper.get("max_hp")), 90000.0)
+				keeper.call("take_hit", 24000.0, 0, Vector3.ZERO)
 				finale_ok = finale_ok and int(keeper.get("phase")) == 2
-				keeper.call("take_hit", 1200.0, 0, Vector3.ZERO)
+				keeper.call("take_hit", 24000.0, 0, Vector3.ZERO)
 				finale_ok = finale_ok and int(keeper.get("phase")) == 3
-				keeper.call("take_hit", 1200.0, 0, Vector3.ZERO)
+				keeper.call("take_hit", 24000.0, 0, Vector3.ZERO)
 				finale_ok = finale_ok and int(keeper.get("phase")) == 4
-				keeper.call("take_hit", 9999.0, 0, Vector3.ZERO)
+				keeper.call("take_hit", 999999.0, 0, Vector3.ZERO)
 				finale_ok = finale_ok and bool(Game.guard_story.get("keeper_defeated", false)) and Game.coins == finale_coins + 1000 and Game.starlight == finale_light + 200
 				finale.call("_keeper_defeated")
 				finale_ok = finale_ok and Game.coins == finale_coins + 1000
@@ -1614,7 +1624,6 @@ func _run() -> void:
 	Game.guard_story = progression_story
 	Game.settlement_quests = progression_quests
 	Game.save_collection()
-	Game.set_cataclysm_mode(old_cataclysm)
 
 	# The compact HUD list opens from its button and shows independent NPC quests.
 	var quest_box_ok := false

@@ -107,7 +107,7 @@ trials and tuned guardians. The same modular environment, enemies and puzzle
 rules are reused; none has received a full manual playtest. Twenty named memory
 Hollows have been expanded in this way, not twenty fully bespoke dungeons.
 
-### Twenty regional expeditions and Cataclysm
+### Twenty regional expeditions and fixed difficulty tiers
 
 The first 20 regional Hollow IDs (`optional_000` through `optional_019`) now
 have named guardians, authored echoes, deeper modular chambers and two
@@ -116,10 +116,14 @@ named memory Hollow inner rooms have also been lengthened and given a second
 trial. These are expansions of the existing shared systems, not 40 bespoke
 levels; the remaining regional Hollows still use the simpler arena template.
 
-Settings offers an optional Cataclysm mode. Newly spawned enemies have 20 times
-as much health and deal 20 times as much damage; newly spawned floor trials also
-inflict 20 times as much damage. This is intentionally extreme and can result in
-one-hit defeats. A toggle affects newly spawned actors, so re-enter a dungeon or
-restart the world to apply the change throughout. Existing saves remain in normal
-mode unless the player enables it. It has automated scaling checks but has not
-been balanced through a full manual playthrough.
+The first tier is the twenty named memory Hollows `memory_04` through
+`memory_23`, which use normal strength. Once those are cleared, the twenty
+regional expeditions `optional_000` through `optional_019` unlock (alongside
+the existing story and regional-guide requirements). Their enemies have 20×
+health and deal 20× damage, and their floor trials deal 20× damage. No difficulty
+setting is required. Previously cleared regional Hollows remain revisitable on
+older saves. The Last Seal's defenders and Keeper also use 20× strength so the
+Keeper remains the strongest current boss. The other, not-yet-expanded regional
+Hollows retain their old tuning; later difficulty tiers are not implemented.
+This strength can cause one-hit defeats and has not been balanced in a full
+manual playthrough.

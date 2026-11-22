@@ -343,6 +343,7 @@ func _quests() -> void:
 		_line("Main · A Memory in the Hollow: %s" % memory_status)
 	_line("STORY PATH", 18, UI.ACCENT)
 	_line("1. Complete Ilyra's A Light Remembered; accept and resolve A Memory in the Hollow. 2. In each settlement, complete the named leader's main quest for a written dungeon guide. 3. Clear all 100 Hollows, then enter the Last Seal in Aetheris.")
+	_line("First tier: %d / 20 named memory Hollows cleared. The next 20 regional expeditions unlock afterwards; their enemies have 20× health and damage, and trials deal 20× damage. Many attacks are lethal in one hit." % Game.first_tier_clear_count())
 	_line("Total Hollows cleared: %d / 100. Side quests grant potions, weapons and other equipment or spell blueprints." % Game.dungeon_count())
 	_line("ASHVALE HOLLOW", 18, UI.ACCENT)
 	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Accept Ilyra's A Memory in the Hollow, then find the entrance near Ashvale. Dodge the Warden's warning circles.")
@@ -379,7 +380,7 @@ func _quests() -> void:
 			for optional_index in range(Game.OPTIONAL_DUNGEONS.COUNT):
 				var guide_entry: Dictionary = Game.OPTIONAL_DUNGEONS.entry(optional_index)
 				if int(guide_entry["site"]) == optional_site:
-					_line("%s · %s · %s" % [guide_entry["name"], "cleared" if bool(Game.dungeon_clears.get(guide_entry["id"], false)) else "uncleared", _dungeon_direction(str(guide_entry["id"]), optional_site)])
+					_line("%s%s · %s · %s" % [guide_entry["name"], " · Tier 2 (20×)" if Game.hollow_power_multiplier(str(guide_entry["id"])) > 1.0 else "", "cleared" if bool(Game.dungeon_clears.get(guide_entry["id"], false)) else "uncleared", _dungeon_direction(str(guide_entry["id"]), optional_site)])
 		else:
 			_line("%s · guide locked: complete %s's main quest" % [guide_site["name"], guide_site["npc"]])
 	_line("THE LAST SEAL", 18, UI.ACCENT)
@@ -513,9 +514,6 @@ func _settings() -> void:
 	_line("GRAPHICS", 23, UI.ACCENT)
 	_line("Current quality: %s" % Game.quality_name())
 	_action("Change graphics quality", _change_quality)
-	_line("DIFFICULTY", 23, UI.ACCENT)
-	_line("Cataclysm: enemies and dungeon trials spawned in this mode have 20× health and deal 20× damage. Many attacks can defeat you in one hit. Changes apply to newly spawned enemies and trials; leave and re-enter a dungeon or restart to apply it everywhere.")
-	_action("Cataclysm · %s · tap to %s" % ["ON" if Game.cataclysm_mode else "OFF", "disable" if Game.cataclysm_mode else "enable"], _toggle_cataclysm)
 	_line("AUDIO", 23, UI.ACCENT)
 	for bus in ["Master", "Ambience", "SFX"]:
 		var index := AudioServer.get_bus_index(bus)
@@ -531,12 +529,6 @@ func _settings() -> void:
 	for action in Game.REBIND_ACTIONS:
 		_action("%s   ·   %s" % [action.replace("_", " ").capitalize(), OS.get_keycode_string(Game.key_for_action(action))], _begin_binding.bind(action))
 	_action("Restore default keys", _reset_bindings)
-
-
-func _toggle_cataclysm() -> void:
-	Game.set_cataclysm_mode(not Game.cataclysm_mode)
-	_status = "Difficulty saved. It applies to newly spawned enemies and trials."
-	_refresh()
 
 
 func _slider(title: String, value: float, minimum: float, maximum: float, callback: Callable) -> void:

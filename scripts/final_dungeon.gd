@@ -110,6 +110,7 @@ func _spawn_guardians() -> void:
 	_remaining = 2
 	for x in [-2.5, 2.5]:
 		var scout := SENTRY.new()
+		scout.set("_power_multiplier", 20.0)
 		scout.is_orc = sector % 2 == 1
 		scout.position = Vector3(x, -DESCENT_PER_SECTOR * (float(sector) + 0.65) + 0.2, -SECTOR_LENGTH * (float(sector) + 0.65))
 		chamber.add_child(scout)
@@ -134,6 +135,7 @@ func _guardian_defeated() -> void:
 
 func _spawn_keeper() -> void:
 	boss = BOSS.new()
+	boss.set("_power_multiplier", 20.0)
 	boss.set("is_keeper", true)
 	boss.position = Vector3(0, -79.8, -1013)
 	chamber.add_child(boss)

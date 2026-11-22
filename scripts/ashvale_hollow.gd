@@ -44,7 +44,7 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2, which: String
 	add_child(door)
 	var label := Label3D.new()
 	var title := str(_optional_entry["name"]) if not _optional_entry.is_empty() else (str(_story_entry.get("name", "")) if not _story_entry.is_empty() else ("SUNCREST ROOST" if dungeon_id == "roost" else ("MEMORY VAULT" if dungeon_id == "vault" else "ASHVALE HOLLOW")))
-	label.text = "%s\nF / Talk to enter · Challenging" % title.to_upper()
+	label.text = "%s\nF / Talk to enter · %s" % [title.to_upper(), "Tier 2 · 20× stronger" if Game.hollow_power_multiplier(which) > 1.0 else "Challenging"]
 	label.position = Vector3(0, 4.5, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 48
@@ -81,6 +81,8 @@ func try_interact(actor: Node3D) -> bool:
 				Game.toast.emit("Speak to Ilyra, complete A Light Remembered and accept A Memory in the Hollow.")
 			elif not bool(Game.guard_story.get("memory_done", false)):
 				Game.toast.emit("First resolve A Memory in the Hollow with Ilyra in Ashvale.")
+			elif Game.hollow_power_multiplier(dungeon_id) > 1.0 and Game.first_tier_clear_count() < 20:
+				Game.toast.emit("Tier 2: first clear the 20 named memory Hollows (%d / 20). Enemies are 20× stronger." % Game.first_tier_clear_count())
 			else:
 				Game.toast.emit("Complete %s's main quest in %s to receive the regional dungeon guide." % [site["npc"], site["name"]])
 			return true
@@ -159,6 +161,7 @@ func _enter() -> void:
 		var positions := [Vector3(-4, 0.15, -2), Vector3(4, 0.15, -2), Vector3(-5, 0.15, 2), Vector3(5, 0.15, 2)]
 		for index in range(_sentries_left):
 			var scout := SENTRY.new()
+			scout.set("_power_multiplier", Game.hollow_power_multiplier(dungeon_id))
 			scout.is_orc = dungeon_id == "vault" or ((not _story_entry.is_empty() or not _optional_entry.is_empty()) and (index + encounter_rank) % 2 == 0)
 			scout.position = positions[index]
 			chamber.add_child(scout)
@@ -264,6 +267,7 @@ func _build_inner_story_room(side: int) -> void:
 	if not _is_cleared():
 		for index in range(2):
 			var trap := TRAP.new()
+			trap.set("_power_multiplier", Game.hollow_power_multiplier(dungeon_id))
 			trap.name = "StoryTrial" if index == 0 else "StoryTrial2"
 			trap.trial_name = str(_design["hazard"])
 			trap.position = Vector3(side * (18.0 + depth * (0.3 if index == 0 else 0.7)), 0.05, -2.0 if index == 0 else 2.0)
@@ -337,6 +341,7 @@ func _on_sentry_defeated() -> void:
 func _spawn_warden() -> void:
 	if not inside or not is_instance_valid(chamber) or is_instance_valid(boss): return
 	boss = WARDEN.new()
+	boss.set("_power_multiplier", Game.hollow_power_multiplier(dungeon_id))
 	boss.set("is_vault", dungeon_id == "vault")
 	boss.set("is_dragon", dungeon_id == "roost")
 	if not _story_entry.is_empty() or not _optional_entry.is_empty():

@@ -38,7 +38,6 @@ const CULLED_TICK_EVERY := 8
 
 var _ai_timer := 0.0
 var max_hp := 150.0
-var _power_multiplier := 1.0
 var hp := 150.0
 var element := 0
 var home := Vector3.ZERO
@@ -62,9 +61,6 @@ var _culled_frames := 0
 
 
 func _ready() -> void:
-	_power_multiplier = Game.enemy_power_multiplier()
-	max_hp *= _power_multiplier
-	hp = max_hp
 	add_to_group("enemy")
 	collision_layer = 8
 	collision_mask = 1 | 2
@@ -355,7 +351,7 @@ func _physics_process(delta: float) -> void:
 		if global_position.distance_to(_player.global_position) < 1.5:
 			_attack_timer = 1.1
 			if _player.has_method("take_damage"):
-				_player.take_damage(38.0 * _power_multiplier, global_position)
+				_player.take_damage(38.0, global_position)
 				FX.hit_flash(get_parent(), _player.global_position + Vector3(0, 1.0, 0), ELEMENT_COLORS[element])
 
 	# Fell out of the world.

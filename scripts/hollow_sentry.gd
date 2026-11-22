@@ -19,7 +19,6 @@ var _dead := false
 
 
 func _ready() -> void:
-	_power_multiplier = Game.enemy_power_multiplier()
 	hp *= _power_multiplier
 	add_to_group("enemy")
 	collision_layer = 8

@@ -11,7 +11,6 @@ const RADIUS := 1.7
 
 
 func _ready() -> void:
-	_power_multiplier = Game.enemy_power_multiplier()
 	_warning = MeshInstance3D.new()
 	var disc := CylinderMesh.new()
 	disc.top_radius = RADIUS
