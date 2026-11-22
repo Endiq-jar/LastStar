@@ -26,8 +26,7 @@ it for research, changing Ilyra's bond and the spell learned.
 Elaris's settlements hold different parts of a broken account. In Lunareth's
 Memory Vault, a record describes the Seals as a shield for the people. At
 Suncrest, a dragon guards the memory of a caravan that carried knowledge through
-the catastrophe. Twenty-five story dungeons each reveal one memory. Twenty-two
-are repeatable arena templates with different defenders, bosses and story text;
+the catastrophe. Twenty-five story dungeons each reveal one memory. The named encounters share arena templates and creature families;
 their one-time memory and currency rewards persist.
 
 ## Act III — The Keeper
@@ -56,5 +55,19 @@ echoes and a named guardian. Both echoes and the scouts must be dealt with
 before the guardian appears; leaving or dying resets the unfinished encounter.
 Their existing memory IDs and one-time rewards are unchanged. These rooms still
 share the main arena and creature/attack systems; they are not yet five fully
-bespoke multi-room dungeons. The other story and optional Hollows retain their
-existing layouts.
+bespoke multi-room dungeons. The next five — The Wander's Mark, The Tidal Road, The Drowned Bell, A Prism
+of Voices and The Broken Lens — now have the same style of authored side
+chamber, echoes and named guardian. They too still share the central arena and
+combat systems; the remaining Hollows retain their existing layouts.
+
+## Current progression rules
+
+Complete Ilyra's A Light Remembered and A Memory in the Hollow. Each regional
+leader's main retrieval quest provides a written dungeon guide in the journal
+(no graphical map), with directions to the regional encounters. Defeat all 25
+memory dungeons and all 75 other Hollows before entering the Last Seal. Existing
+cleared Hollows and a completed ending remain revisitable on older saves. Side
+quest rewards now include a potion and weapon, plus existing cosmetics or spell
+blueprints; the mason-style side quest grants equippable stat-only armor. These
+quests still use a shared retrieval template, and the full narrative remains
+unfinished.

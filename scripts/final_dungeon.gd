@@ -30,7 +30,7 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
 	position = entrance
 	add_child(DOOR.instantiate())
 	var label := Label3D.new()
-	label.text = "THE LAST SEAL\nF / Talk · 25 story memories required"
+	label.text = "THE LAST SEAL\nF / Talk · 100 Hollow victories required"
 	label.position.y = 4.5
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 48
@@ -46,8 +46,8 @@ func try_interact(actor: Node3D) -> bool:
 			_leave()
 			return true
 	elif actor.global_position.distance_to(entrance) < 5.0:
-		if Game.story_memory_count() < Game.STORY_MEMORY_GOAL:
-			Game.toast.emit("The Last Seal requires 25 story memories (%d / 25)." % Game.story_memory_count())
+		if not Game.can_enter_finale():
+			Game.toast.emit("Resolve Ilyra's memory quest and clear all 100 Hollows (%d / 100)." % Game.dungeon_count())
 		else:
 			_enter()
 		return true

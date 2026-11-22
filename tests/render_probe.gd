@@ -778,6 +778,7 @@ func _run() -> void:
 	var quests_before := Game.settlement_quests.duplicate(true)
 	var site_coins := Game.coins
 	var site_starlight := Game.starlight
+	var site_potions := Game.potions
 	Game.settlement_quests = {}
 	var village_ok: bool = site_data.SITES.size() == 14
 	for site in site_data.SITES:
@@ -794,6 +795,7 @@ func _run() -> void:
 	Game.settlement_quests = quests_before
 	Game.coins = site_coins
 	Game.starlight = site_starlight
+	Game.potions = site_potions
 	Game.save_collection()
 	Game.collection_changed.emit()
 	var settlement_manager := world.get_node_or_null("Settlements")
@@ -937,6 +939,52 @@ func _run() -> void:
 	Game.character_changed.emit(Game.party_index)
 	Game.collection_changed.emit()
 	_log("INFO" if rewards_ok else "FAIL", "quest reward persistence, equipment and blueprint=%s" % str(rewards_ok))
+
+	# Progression requires Ilyra's memory quest and the local leader's guide.
+	var progression_story := Game.guard_story.duplicate(true)
+	var progression_quests := Game.settlement_quests.duplicate(true)
+	var progression_armor_owned: bool = Game.owned_wayfarer_armor
+	var progression_armor_equipped: bool = Game.equipped_wayfarer_armor
+	var progression_potions: int = Game.potions
+	var progression_hp: float = Game.current_hp()
+	Game.guard_story = {}
+	Game.settlement_quests = {}
+	var progression_ok := not Game.can_enter_hollow("ashvale", "ashvale", false) and not Game.can_enter_hollow("memory_09", "lunareth", false)
+	Game.guard_story["memory_accepted"] = true
+	progression_ok = progression_ok and Game.can_enter_hollow("ashvale", "ashvale", false) and not Game.can_enter_hollow("memory_09", "lunareth", false)
+	Game.guard_story["memory_done"] = true
+	progression_ok = progression_ok and not Game.can_enter_hollow("memory_09", "lunareth", false)
+	var locked_vault := world.get_node_or_null("MemoryVault")
+	var progression_player := world.get_node_or_null("Player") as CharacterBody3D
+	if locked_vault != null and progression_player != null:
+		var before_gate_pos := progression_player.global_position
+		progression_player.global_position = locked_vault.get("entrance")
+		progression_ok = locked_vault.call("try_interact", progression_player) and not bool(locked_vault.get("inside")) and progression_ok
+		progression_player.global_position = before_gate_pos
+	else:
+		progression_ok = false
+	Game.settlement_quests["lunareth:main"] = "done"
+	progression_ok = progression_ok and Game.can_enter_hollow("memory_09", "lunareth", false) and Game.can_enter_hollow("memory_09", "lunareth", true)
+	Game.settlement_quests["ashvale:3:side"] = "found"
+	var potion_before: int = Game.potions
+	progression_ok = Game.complete_settlement_quest("ashvale", "side", 3) and progression_ok
+	progression_ok = progression_ok and Game.potions == potion_before + 1 and Game.owned_wayfarer_armor and Game.equip_wayfarer_armor(true)
+	Game.shield_points = 0.0
+	Game.set_hp(Game.max_hp())
+	Game.damage(100.0)
+	progression_ok = progression_ok and is_equal_approx(Game.current_hp(), Game.max_hp() - 90.0)
+	Game.load_collection()
+	progression_ok = progression_ok and Game.owned_wayfarer_armor and Game.equipped_wayfarer_armor and Game.potions == potion_before + 1
+	Game.owned_wayfarer_armor = progression_armor_owned
+	Game.equipped_wayfarer_armor = progression_armor_equipped
+	Game.potions = progression_potions
+	Game.set_hp(progression_hp)
+	Game.guard_story = {"memory_done": true, "memory_accepted": true}
+	Game.settlement_quests = {}
+	for progression_site in Game.SETTLEMENT_DATA.SITES:
+		Game.settlement_quests[str(progression_site["id"]) + ":main"] = "done"
+	Game.save_collection()
+	_log("INFO" if progression_ok else "FAIL", "story gates, quest guide, potion, armor and save=%s" % str(progression_ok))
 
 	# Real entrance, two-phase telegraph combat, one-time reward, and safe exit.
 	var hollow_ok := false
@@ -1275,6 +1323,7 @@ func _run() -> void:
 
 	# Optional Hollows have stable independent IDs and a compact streamed roster.
 	var optional_ok := false
+	var verified_optional_clears: Dictionary = {}
 	if stream != null and hollow_player != null:
 		var optional_pos := hollow_player.global_position
 		var optional_clears: Dictionary = Game.dungeon_clears.duplicate(true)
@@ -1340,6 +1389,7 @@ func _run() -> void:
 		Game.load_collection()
 		for optional_saved_id in optional_to_check:
 			optional_ok = optional_ok and bool(Game.dungeon_clears.get(optional_saved_id, false))
+		verified_optional_clears = Game.dungeon_clears.duplicate(true)
 		Game.dungeon_clears = optional_clears
 		Game.coins = optional_coins
 		Game.starlight = optional_light
@@ -1368,7 +1418,18 @@ func _run() -> void:
 		Game.dungeon_clears = verified_story_clears.duplicate(true)
 		Game.dungeon_clears["memory_vault"] = true
 		Game.dungeon_clears["suncrest_roost"] = true
-		finale_ok = Game.story_memory_count() == 25 and finale.call("try_interact", hollow_player) and finale_ok
+		# All memories alone are insufficient. Check the 99/100 boundary too.
+		finale_ok = Game.story_memory_count() == 25 and finale.call("try_interact", hollow_player) and not bool(finale.get("inside")) and finale_ok
+		for optional_index in range(Game.OPTIONAL_DUNGEONS.COUNT):
+			var finale_optional_id: String = Game.OPTIONAL_DUNGEONS.entry(optional_index)["id"]
+			# The headless probe actually cleared every optional encounter; framebuffer
+			# runs use four representatives and synthesize the other save flags.
+			if DisplayServer.get_name() == "headless": finale_ok = finale_ok and bool(verified_optional_clears.get(finale_optional_id, false))
+			Game.dungeon_clears[finale_optional_id] = true
+		Game.dungeon_clears.erase("optional_074")
+		finale_ok = finale_ok and Game.dungeon_count() == 99 and finale.call("try_interact", hollow_player) and not bool(finale.get("inside"))
+		Game.dungeon_clears["optional_074"] = true
+		finale_ok = finale_ok and Game.dungeon_count() == 100 and finale.call("try_interact", hollow_player)
 		var depths := finale.get("chamber") as Node3D
 		finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and depths != null and depths.global_position.y < 0 and (finale.get("_gates") as Array).size() == 10
 		if depths != null:
@@ -1426,6 +1487,9 @@ func _run() -> void:
 		Game.set_hp(finale_hp)
 		Game.save_collection()
 	_log("INFO" if finale_ok else "FAIL", "Last Seal gate, guarded kilometre, four boss phases, ending and save=%s" % str(finale_ok))
+	Game.guard_story = progression_story
+	Game.settlement_quests = progression_quests
+	Game.save_collection()
 
 	# The compact HUD list opens from its button and shows independent NPC quests.
 	var quest_box_ok := false

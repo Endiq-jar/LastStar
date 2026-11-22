@@ -67,6 +67,20 @@ func try_interact(actor: Node3D) -> bool:
 			_leave()
 			return true
 	elif actor.global_position.distance_to(entrance) < 5.0:
+		var site_index := 0
+		if dungeon_id == "vault": site_index = 2
+		elif dungeon_id == "roost": site_index = 6
+		elif not _story_entry.is_empty(): site_index = int(_story_entry["site"])
+		elif not _optional_entry.is_empty(): site_index = int(_optional_entry["site"])
+		var site: Dictionary = Game.SETTLEMENT_DATA.SITES[site_index]
+		if not Game.can_enter_hollow(dungeon_id, str(site["id"]), _is_cleared()):
+			if dungeon_id == "ashvale":
+				Game.toast.emit("Speak to Ilyra, complete A Light Remembered and accept A Memory in the Hollow.")
+			elif not bool(Game.guard_story.get("memory_done", false)):
+				Game.toast.emit("First resolve A Memory in the Hollow with Ilyra in Ashvale.")
+			else:
+				Game.toast.emit("Complete %s's main quest in %s to receive the regional dungeon guide." % [site["npc"], site["name"]])
+			return true
 		_enter()
 		return true
 	return false

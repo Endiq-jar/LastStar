@@ -36,6 +36,41 @@ const DESIGNS := {
 		"second": "Those memories could anchor the light when Gifts alone could not.",
 		"runes": [Vector3(6, 0, -6), Vector3(-14, 0, -2)],
 		"columns": [Vector3(-6, 0, -6), Vector3(6, 0, 3), Vector3(-14, 0, 3)]
+	},
+	"memory_09": {
+		"side": 1, "color": Color(0.60, 0.67, 1.0), "boss": "The Silent Scribe",
+		"theme": "THE WANDER'S VAULT", "first": "A Wander gathered the voices of those who could no longer speak.",
+		"second": "Its pages prove that a Gift belongs to the people it protects.",
+		"runes": [Vector3(-6, 0, -5), Vector3(14, 0, 2)],
+		"columns": [Vector3(-6, 0, -6), Vector3(6, 0, 3), Vector3(14, 0, -3)]
+	},
+	"memory_10": {
+		"side": -1, "color": Color(0.25, 0.72, 0.94), "boss": "The Tidebound Warden",
+		"theme": "THE TIDAL ROAD", "first": "Tidefall's boats waited beyond the darkened harbour.",
+		"second": "Their crews ferried strangers to safety through the black water.",
+		"runes": [Vector3(6, 0, -6), Vector3(-14, 0, 2)],
+		"columns": [Vector3(-6, 0, -6), Vector3(6, 0, -6), Vector3(-14, 0, -3)]
+	},
+	"memory_11": {
+		"side": 1, "color": Color(0.42, 0.82, 0.80), "boss": "The Drowned Bellkeeper",
+		"theme": "THE DROWNED BELFRY", "first": "A bell rang beneath the waves when the Hollow returned.",
+		"second": "The warning carried across the coast and gave the boats time to flee.",
+		"runes": [Vector3(-6, 0, -6), Vector3(14, 0, -2)],
+		"columns": [Vector3(-6, 0, 3), Vector3(6, 0, 3), Vector3(14, 0, 3)]
+	},
+	"memory_12": {
+		"side": -1, "color": Color(0.94, 0.68, 1.0), "boss": "The Fractured Voice",
+		"theme": "THE PRISM CHOIR", "first": "Glassheaven's crystals held the voices of the lost.",
+		"second": "Together those voices preserved the night of the First Silence.",
+		"runes": [Vector3(5, 0, -6), Vector3(-14, 0, -2)],
+		"columns": [Vector3(-6, 0, -6), Vector3(6, 0, 3), Vector3(-14, 0, 3)]
+	},
+	"memory_13": {
+		"side": 1, "color": Color(0.90, 0.84, 1.0), "boss": "The Shattered Lens",
+		"theme": "THE BROKEN OBSERVATORY", "first": "A broken lens scattered the light of the Seven Seals.",
+		"second": "When freely shared, those fragments could renew what was failing.",
+		"runes": [Vector3(-6, 0, -5), Vector3(14, 0, 2)],
+		"columns": [Vector3(-5, 0, 3), Vector3(6, 0, -6), Vector3(14, 0, -3)]
 	}
 }
 

@@ -240,6 +240,11 @@ func _inventory() -> void:
 			var id: String = Game.WEAPONS.id_for_index(number)
 			if Game.owned_weapons.has(id):
 				_action("%s · +%d%% attack%s" % [Game.WEAPONS.name_for_id(id), roundi(Game.WEAPONS.bonus(id) * 100.0), " · Equipped" if Game.equipped_weapon == id else " · Equip"], _equip_reward_weapon.bind(id), Game.equipped_weapon != id)
+	_line("ARMOR", 18, UI.ACCENT)
+	if Game.owned_wayfarer_armor:
+		_action("Wayfarer armor · 10% damage reduction · %s" % ("Unequip" if Game.equipped_wayfarer_armor else "Equip"), _toggle_armor)
+	else:
+		_line("Wayfarer armor: complete a mason's side quest. Armor is a stat item, not a character model.")
 	if Game.owned_blueprints.has(Game.BLUEPRINT_ID):
 		var known: bool = Game.wander != null and Game.wander.known(Game.BLUEPRINT_ID)
 		_action("Wind / Fire blueprint · %s" % ("Learned" if known else "Learn spell"), _learn_blueprint, Game.wander != null and not known)
@@ -336,8 +341,11 @@ func _quests() -> void:
 	if bool(story.get("memory_accepted", false)):
 		var memory_status := "Completed · choice: %s" % str(story.get("memory_choice", "")) if bool(story.get("memory_done", false)) else ("Return the fragment to Ilyra" if bool(story.get("memory_found", false)) else "Defeat the Warden, then recover the fragment from the chest")
 		_line("Main · A Memory in the Hollow: %s" % memory_status)
+	_line("STORY PATH", 18, UI.ACCENT)
+	_line("1. Complete Ilyra's A Light Remembered; accept and resolve A Memory in the Hollow. 2. In each settlement, complete the named leader's main quest for a written dungeon guide. 3. Clear all 100 Hollows, then enter the Last Seal in Aetheris.")
+	_line("Total Hollows cleared: %d / 100. Side quests grant potions, weapons and other equipment or spell blueprints." % Game.dungeon_count())
 	_line("ASHVALE HOLLOW", 18, UI.ACCENT)
-	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Optional challenge: find the Hollow entrance near Ashvale. Dodge the Warden's red warning circles. Defeat it for 100 Ane and 30 starlight.")
+	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Accept Ilyra's A Memory in the Hollow, then find the entrance near Ashvale. Dodge the Warden's warning circles.")
 	_line("MEMORY VAULT", 18, UI.ACCENT)
 	_line("Cleared · Verdant Bloom recovered" if bool(Game.dungeon_clears.get("memory_vault", false)) else "Find the Memory Vault near Lunareth. Defeat its scouts and the two-phase sentinel to learn Verdant Bloom.")
 	_line("SUNCREST ROOST", 18, UI.ACCENT)
@@ -350,10 +358,13 @@ func _quests() -> void:
 			var hint := str(SETTLEMENTS.SITES[int(memory["site"])]["name"]) if memory.has("site") else str(memory["id"]).replace("_", " ").capitalize()
 			var reward_id := str(Game.MEMORY_SPELLS.get(str(memory["id"]), ""))
 			var reward_hint := " · spell discovery" if not reward_id.is_empty() else ""
-			_line("Undiscovered memory · near %s%s" % [hint, reward_hint])
+			if memory.has("site") and Game.region_chart_unlocked(str(SETTLEMENTS.SITES[int(memory["site"])]["id"])):
+				_line("%s · %s%s" % [memory["name"], _dungeon_direction(str(memory["id"]), int(memory["site"])), reward_hint])
+			else:
+				_line("Undiscovered memory · near %s%s" % [hint, reward_hint])
 	_line("Find two memory Hollows near each listed settlement. Their arenas share a common Hollow design.")
-	_line("OPTIONAL HOLLOWS · %d / %d" % [Game.optional_dungeon_count(), Game.OPTIONAL_DUNGEONS.COUNT], 18, UI.ACCENT)
-	_line("Explore near settlements for optional challenges. These encounters reuse Hollow arenas and enemy families; their Ane and starlight rewards are claimed once.")
+	_line("REGIONAL HOLLOWS · %d / %d" % [Game.optional_dungeon_count(), Game.OPTIONAL_DUNGEONS.COUNT], 18, UI.ACCENT)
+	_line("Complete each settlement leader's main quest to earn its written dungeon guide. These encounters reuse Hollow arenas and enemy families; rewards are claimed once.")
 	for optional_site in range(SETTLEMENTS.SITES.size()):
 		var optional_done := 0
 		var optional_total := 0
@@ -362,12 +373,20 @@ func _quests() -> void:
 			if int(optional_entry["site"]) == optional_site:
 				optional_total += 1
 				if bool(Game.dungeon_clears.get(optional_entry["id"], false)): optional_done += 1
-		_line("%s · %d / %d cleared" % [SETTLEMENTS.SITES[optional_site]["name"], optional_done, optional_total])
+		var guide_site: Dictionary = SETTLEMENTS.SITES[optional_site]
+		if Game.region_chart_unlocked(str(guide_site["id"])):
+			_line("%s · guide earned · %d / %d regional Hollows cleared" % [guide_site["name"], optional_done, optional_total])
+			for optional_index in range(Game.OPTIONAL_DUNGEONS.COUNT):
+				var guide_entry: Dictionary = Game.OPTIONAL_DUNGEONS.entry(optional_index)
+				if int(guide_entry["site"]) == optional_site:
+					_line("%s · %s · %s" % [guide_entry["name"], "cleared" if bool(Game.dungeon_clears.get(guide_entry["id"], false)) else "uncleared", _dungeon_direction(str(guide_entry["id"]), optional_site)])
+		else:
+			_line("%s · guide locked: complete %s's main quest" % [guide_site["name"], guide_site["npc"]])
 	_line("THE LAST SEAL", 18, UI.ACCENT)
 	if bool(Game.guard_story.get("keeper_defeated", false)):
 		_line("The Keeper is defeated. The Seals hold because the people of Elaris chose to share their light. The world remembers again.")
 	else:
-		_line("Aetheris · The underground gate requires all 25 memories.")
+		_line("Aetheris · The underground gate requires Ilyra's memory quest and all 100 Hollow victories.")
 	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
 	var any_quest := false
 	for site in SETTLEMENTS.SITES:
@@ -622,6 +641,26 @@ func _dialogue() -> void:
 				_line("Defeat the Warden in Ashvale Hollow, then interact with the chest to recover the fragment. You can leave and try again.")
 
 
+func _dungeon_direction(id: String, site_index: int) -> String:
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null: return "near the settlement"
+	var world := player.get_parent()
+	var stream := world.get_node_or_null("StoryDungeons")
+	var settlements := world.get_node_or_null("Settlements")
+	if stream == null or settlements == null: return "near the settlement"
+	var sites: Array = settlements.get("_sites")
+	if site_index < 0 or site_index >= sites.size(): return "near the settlement"
+	var center: Vector2 = sites[site_index]["resolved"]
+	var locations: Array = stream.get("_extra_locations") + stream.get("_locations")
+	for location in locations:
+		if str(location["id"]) != id: continue
+		var offset: Vector2 = location["pos"] - center
+		var north_south := "south" if offset.y > 15 else ("north" if offset.y < -15 else "")
+		var east_west := "east" if offset.x > 15 else ("west" if offset.x < -15 else "")
+		return "about %d m %s%s of the settlement" % [roundi(offset.length()), north_south, east_west]
+	return "near the settlement"
+
+
 func _settlement_dialogue() -> void:
 	var site := SETTLEMENTS.by_id(dialogue_site_id)
 	if site.is_empty():
@@ -633,6 +672,7 @@ func _settlement_dialogue() -> void:
 		return
 	_line("%s  ·  %s" % [resident["name"], site["name"]], 25, UI.ACCENT)
 	_line("%s — %s" % [resident["role"], site["lore"]])
+	if dialogue_resident_index == 0: _line("Complete my main quest to receive a written guide to this region's Hollows.")
 	for kind in ["main", "side"]:
 		var status: String = Game.settlement_quest_status(dialogue_site_id, kind, dialogue_resident_index)
 		var title := "Main" if kind == "main" else "Side"
@@ -675,7 +715,7 @@ func _story() -> void:
 	_line("✦  Recover twelve sigils and discover the landmarks of the valley.")
 	_line("Long ago, the First Silence nearly extinguished Elaris. Seven Seals guard the world, but Hollows have begun to open and memories of the past are scattered.")
 	_line("Visit Star Guard Ilyra in Ashvale. A recovered sigil leads to a memory in the Hollow, and a choice about who should hear its story.")
-	_line("Seek the memories in Ashvale Hollow, the Memory Vault and Suncrest Roost. Recover all 25 memories to open the Last Seal.")
+	_line("Seek the memories in Ashvale Hollow, the Memory Vault and Suncrest Roost. Recover all 25 memories and clear the other 75 Hollows to open the Last Seal.")
 	if bool(Game.guard_story.get("keeper_defeated", false)):
 		_line("At the Last Seal, the Keeper's control was broken. With their shared memories, the people renewed the Seals together, and Elaris remembered its light.")
 	if Game.wander != null:
@@ -732,6 +772,12 @@ func _equip_wander(id: String) -> void:
 		_status = "Spell slot updated."
 	else:
 		_status = "Unable to equip spell."
+	_refresh()
+
+
+func _toggle_armor() -> void:
+	Game.equip_wayfarer_armor(not Game.equipped_wayfarer_armor)
+	_status = "Armor equipment updated."
 	_refresh()
 
 

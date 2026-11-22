@@ -189,6 +189,28 @@ func story_memory_count() -> int:
 func optional_dungeon_count() -> int:
 	return OPTIONAL_DUNGEONS.count_cleared(dungeon_clears)
 
+
+func dungeon_count() -> int:
+	return story_memory_count() + optional_dungeon_count()
+
+
+func region_chart_unlocked(site_id: String) -> bool:
+	# A written guide rather than a graphical map. Existing completed quests
+	# automatically unlock their chart without altering the save format.
+	return settlement_quest_status(site_id, "main", 0) == "done"
+
+
+func can_enter_hollow(id: String, site_id: String, cleared: bool) -> bool:
+	# Previously cleared dungeons remain revisit-able on older saves.
+	if cleared: return true
+	if id == "ashvale": return bool(guard_story.get("memory_accepted", false))
+	return bool(guard_story.get("memory_done", false)) and region_chart_unlocked(site_id)
+
+
+func can_enter_finale() -> bool:
+	# A completed ending remains revisit-able after updating an old save.
+	return bool(guard_story.get("keeper_defeated", false)) or (bool(guard_story.get("memory_done", false)) and dungeon_count() == STORY_MEMORY_GOAL + OPTIONAL_DUNGEONS.COUNT)
+
 const SETTLEMENT_DATA := preload("res://scripts/settlement_data.gd")
 var wander_levels: Dictionary = {}
 var wander_slots: Array = []
@@ -197,6 +219,8 @@ var outfit_style := 0
 var owned_outfits: Array = [0, 1, 2]
 var owned_weapons: Array = []
 var equipped_weapon := ""
+var owned_wayfarer_armor := false
+var equipped_wayfarer_armor := false
 var owned_cosmetics: Array = []
 var equipped_cosmetic := ""
 var owned_blueprints: Array = []
@@ -287,7 +311,7 @@ func heal(amount: float) -> void:
 
 
 func damage(amount: float) -> void:
-	var remaining := maxf(0.0, amount)
+	var remaining := maxf(0.0, amount) * (0.9 if equipped_wayfarer_armor else 1.0)
 	if shield_points > 0.0:
 		var absorbed := minf(shield_points, remaining)
 		shield_points -= absorbed
@@ -454,6 +478,8 @@ func save_collection() -> bool:
 	cfg.set_value("collection", "owned_outfits", owned_outfits)
 	cfg.set_value("collection", "owned_weapons", owned_weapons)
 	cfg.set_value("collection", "equipped_weapon", equipped_weapon)
+	cfg.set_value("collection", "owned_wayfarer_armor", owned_wayfarer_armor)
+	cfg.set_value("collection", "equipped_wayfarer_armor", equipped_wayfarer_armor)
 	cfg.set_value("collection", "owned_cosmetics", owned_cosmetics)
 	cfg.set_value("collection", "equipped_cosmetic", equipped_cosmetic)
 	cfg.set_value("collection", "owned_blueprints", owned_blueprints)
@@ -535,6 +561,8 @@ func load_collection() -> void:
 	equipped_weapon = str(cfg.get_value("collection", "equipped_weapon", ""))
 	if not owned_weapons.has(equipped_weapon) or WEAPONS.index_for_id(equipped_weapon) < 0:
 		equipped_weapon = ""
+	owned_wayfarer_armor = bool(cfg.get_value("collection", "owned_wayfarer_armor", false))
+	equipped_wayfarer_armor = owned_wayfarer_armor and bool(cfg.get_value("collection", "equipped_wayfarer_armor", false))
 	var cosmetics = cfg.get_value("collection", "owned_cosmetics", [])
 	owned_cosmetics = cosmetics if cosmetics is Array else []
 	equipped_cosmetic = str(cfg.get_value("collection", "equipped_cosmetic", ""))
@@ -547,6 +575,9 @@ func load_collection() -> void:
 		for index in range(SETTLEMENT_DATA.RESIDENT_COUNT):
 			if settlement_quest_status(site["id"], "main", index) == "done":
 				_grant_quest_weapon(site["id"], index)
+			if settlement_quest_status(site["id"], "side", index) == "done":
+				_grant_quest_weapon(site["id"], index)
+				if index % 6 == 3: owned_wayfarer_armor = true
 			if settlement_quest_status(site["id"], "main", index) == "done" or settlement_quest_status(site["id"], "side", index) == "done":
 				_grant_resident_reward(index)
 	owned_backpacks = [0]
@@ -646,6 +677,9 @@ func complete_settlement_quest(site_id: String, kind: String, resident_index: in
 		_grant_quest_weapon(site_id, resident_index)
 	else:
 		starlight += 10
+		potions += 1 # Quest rewards are never lost even when the backpack is full.
+		_grant_quest_weapon(site_id, resident_index)
+		if resident_index % 6 == 3: owned_wayfarer_armor = true
 	_grant_resident_reward(resident_index)
 	save_collection()
 	collection_changed.emit()
@@ -769,15 +803,25 @@ func set_outfit_style(index: int) -> void:
 
 
 func settlement_reward_text(kind: String, index: int, site_id: String) -> String:
-	var base := "25 Ane" if kind == "main" else "10 starlight"
+	var base := "25 Ane" if kind == "main" else "10 starlight + 1 potion"
 	var extras := ["Trail Blade", "Wind / Fire spell blueprint", "Star hairpin", "Forest traveller outfit", "Leaf Blade", ""]
 	var extra: String = extras[index % 6]
-	var weapon := WEAPONS.name_for_id(WEAPONS.quest_weapon(site_id, index)) if kind == "main" else ""
+	var weapon := WEAPONS.name_for_id(WEAPONS.quest_weapon(site_id, index))
 	if weapon != "":
 		base += " + " + weapon + " (unique)"
 	if extra != "" and extra != weapon:
 		base += " + " + extra + " (unique)"
+	if kind == "side" and index % 6 == 3: base += " + Wayfarer armor (10% damage reduction)"
+	if kind == "main" and index == 0: base += " + regional dungeon guide"
 	return base
+
+
+func equip_wayfarer_armor(equip: bool) -> bool:
+	if equip and not owned_wayfarer_armor: return false
+	equipped_wayfarer_armor = equip
+	save_collection()
+	collection_changed.emit()
+	return true
 
 
 func equip_reward_weapon(id: String) -> bool:
