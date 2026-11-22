@@ -1,5 +1,5 @@
 extends RefCounted
-## Twenty additional region-specific expeditions. IDs are the original save IDs.
+## Forty additional region-specific expeditions. IDs are the original save IDs.
 ## The chambers and enemies are modular; names and story fragments are authored.
 const ENTRIES := [
 	["Ashvale Lamp Catacombs", "The Lamp-Eater", "Ashen pulse", "A keeper carried the last lamp beneath Ashvale.", "Its flame guided families through the night."],
@@ -22,6 +22,26 @@ const ENTRIES := [
 	["Tidefall Bell Grotto", "The Drowned Ringer", "Bellwave", "A bell rang through the flooded grotto.", "Its sound warned the last boat away from danger."],
 	["Glassheaven Mirror Vault", "The Mirror Sentinel", "Mirror burst", "Artisans hid a mirror beneath the crystal city.", "It reflected the light of a Seal into the darkness."],
 	["Frostmere Winter Reliquary", "The Winter Revenant", "Winter pulse", "A guide left winter provisions for strangers.", "Their promise was that nobody would face the cold alone."],
+	["Suncrest Dune Observatory", "The Sandblind Seer", "Dune flash", "A desert observer watched the Seals dim beyond the dunes.", "Her warning brought the caravans together before nightfall."],
+	["Orchard Heartwood Vault", "The Thorn Crown", "Thorn pulse", "Orchard keepers hid a living seed deep below the roots.", "The seed held the memory of every family they sheltered."],
+	["Ravenhold Bastion Depths", "The Bastion Harrower", "Bastion strike", "Beneath the fortress, a wounded guard barred the descent.", "The final refugees crossed while the bastion held."],
+	["Duskhaven Night Archive", "The Night Archivist", "Night flare", "A twilight archivist copied testimony into hidden pages.", "The Keeper's censors never found every copy."],
+	["Deep Lantern Descent", "The Lantern Burrower", "Deep shock", "Miners followed lanterns down through the dark.", "Their path opened a shelter beneath the failing city."],
+	["Starfall Shard Reliquary", "The Shard Sovereign", "Shard burst", "The watchers gathered fragments of the fallen star.", "A single shared light kept the haven alive."],
+	["Evergloom Forsaken Choir", "The Choir of Ash", "Gloom chorus", "A choir sang as Evergloom's lights disappeared.", "One song escaped with the people who fled."],
+	["Aetheris Ancient Crucible", "The Crucible Judge", "Seal backlash", "The makers tested a Seal within the ancient crucible.", "They learned that its strength came from freely shared light."],
+	["Ashvale Keeper's Shelter", "The Shelter Wraith", "Hearth collapse", "An Ashvale family opened its shelter to strangers.", "The Keeper once sheltered beside them, before the losses."],
+	["Capital's Sunken Court", "The Court Executioner", "Court rupture", "Councillors argued while the streets fell dark.", "The people chose to help each other without waiting for orders."],
+	["Lunareth Memory Scriptorium", "The Scriptorium Shade", "Script flare", "A scribe wrote down stories the court rejected.", "Her work preserved the voices of those who had no title."],
+	["Tidefall Storm Reliquary", "The Stormborne Captain", "Storm surge", "A captain sailed into a storm to retrieve stranded boats.", "The crews returned together with every passenger they found."],
+	["Glassheaven Fractured Chorus", "The Fractured Chorister", "Prism resonance", "A crystal chorus recorded warnings from across Elaris.", "The fragments reveal a shared story, not a single ruler's account."],
+	["Frostmere Hollow Summit", "The Summit Revenant", "Avalanche pulse", "Mountain guides lost the trail in a whiteout.", "A rope passed from hand to hand led them home."],
+	["Suncrest Caravan Tomb", "The Dune Warden", "Sunscour", "A caravan buried its records to keep them from the Hollow.", "Its survivors returned to guide others along the route."],
+	["Orchard Whispering Hollow", "The Rootbound Dreamer", "Root surge", "A child heard voices among the oldest trees.", "They were the memories of neighbours the Orchard had sheltered."],
+	["Ravenhold Fallen Watch", "The Fallen Marshal", "Ironfall", "A marshal held the watch after the wall gave way.", "The survivors carried the names of the defenders to safety."],
+	["Duskhaven Moonless Vault", "The Moonless Reaver", "Twilight rupture", "The Keeper sealed a witness's memory in a moonless vault.", "The fragments show why the people must choose their own future."],
+	["Deep Forge of Echoes", "The Echo Forgemaster", "Forge blast", "Builders forged markers for the underground road.", "Each mark promised a safe path to those who came later."],
+	["Starfall Starlit Sanctum", "The Starlit Harbinger", "Starfall strike", "A star watcher guarded the last spark in the sanctum.", "The spark was carried to the people, never kept by one hand."],
 ]
 const COLORS := [Color(0.98, 0.65, 0.34), Color(0.74, 0.70, 0.88), Color(0.60, 0.79, 1.0), Color(0.40, 0.84, 0.84), Color(0.86, 0.67, 1.0)]
 
@@ -37,7 +57,7 @@ static func get_design(id: String) -> Dictionary:
 	return {"name": row[0], "theme": row[0].to_upper(), "boss": row[1],
 		"hazard": row[2], "first": row[3], "second": row[4],
 		"side": side, "color": COLORS[index % COLORS.size()],
-		"depth": 24 + (index % 4) * 4, "rule": "ordered" if index % 2 == 0 else "guarded",
+		"depth": (48 if index >= 20 else 24) + (index % 4) * 4, "rule": "ordered" if index % 2 == 0 else "guarded",
 		"attack": ["slash", "ring", "circle"][index % 3],
 		"runes": [Vector3(-side * 6, 0, -6), Vector3(side * 14, 0, 2 if index % 3 == 0 else -2)],
 		"columns": [Vector3(side * -6, 0, 3), Vector3(side * 6, 0, -6), Vector3(side * 14, 0, 3)]}

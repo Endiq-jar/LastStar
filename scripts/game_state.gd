@@ -207,18 +207,32 @@ func first_tier_clear_count() -> int:
 	return count
 
 
+func second_tier_clear_count() -> int:
+	var count := 0
+	for number in range(20):
+		if bool(dungeon_clears.get("optional_%03d" % number, false)): count += 1
+	return count
+
+
+func hollow_tier(id: String) -> int:
+	if OPTIONAL_DUNGEONS.DESIGNS.get_design(id).is_empty(): return 1
+	return 2 if int(id.substr(9)) < 20 else 3
+
+
 func hollow_power_multiplier(id: String) -> float:
-	# The twenty expanded memory Hollows are tier one; these next twenty
-	# regional expeditions are twenty times as strong. Other encounters retain
-	# their existing tuning until a later tier is designed.
-	return 20.0 if not OPTIONAL_DUNGEONS.DESIGNS.get_design(id).is_empty() else 1.0
+	match hollow_tier(id):
+		2: return 20.0
+		3: return 500.0
+	return 1.0
 
 
 func can_enter_hollow(id: String, site_id: String, cleared: bool) -> bool:
 	# Previously cleared dungeons remain revisit-able on older saves.
 	if cleared: return true
 	if id == "ashvale": return bool(guard_story.get("memory_accepted", false))
-	if hollow_power_multiplier(id) > 1.0 and first_tier_clear_count() < 20: return false
+	var tier := hollow_tier(id)
+	if tier >= 2 and first_tier_clear_count() < 20: return false
+	if tier >= 3 and second_tier_clear_count() < 20: return false
 	return bool(guard_story.get("memory_done", false)) and region_chart_unlocked(site_id)
 
 

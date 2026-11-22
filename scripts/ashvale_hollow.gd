@@ -44,7 +44,9 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2, which: String
 	add_child(door)
 	var label := Label3D.new()
 	var title := str(_optional_entry["name"]) if not _optional_entry.is_empty() else (str(_story_entry.get("name", "")) if not _story_entry.is_empty() else ("SUNCREST ROOST" if dungeon_id == "roost" else ("MEMORY VAULT" if dungeon_id == "vault" else "ASHVALE HOLLOW")))
-	label.text = "%s\nF / Talk to enter · %s" % [title.to_upper(), "Tier 2 · 20× stronger" if Game.hollow_power_multiplier(which) > 1.0 else "Challenging"]
+	var tier: int = Game.hollow_tier(which)
+	var difficulty := "Tier %d · %d× strength" % [tier, int(Game.hollow_power_multiplier(which))] if tier > 1 else "Challenging"
+	label.text = "%s\nF / Talk to enter · %s" % [title.to_upper(), difficulty]
 	label.position = Vector3(0, 4.5, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 48
@@ -81,8 +83,10 @@ func try_interact(actor: Node3D) -> bool:
 				Game.toast.emit("Speak to Ilyra, complete A Light Remembered and accept A Memory in the Hollow.")
 			elif not bool(Game.guard_story.get("memory_done", false)):
 				Game.toast.emit("First resolve A Memory in the Hollow with Ilyra in Ashvale.")
-			elif Game.hollow_power_multiplier(dungeon_id) > 1.0 and Game.first_tier_clear_count() < 20:
-				Game.toast.emit("Tier 2: first clear the 20 named memory Hollows (%d / 20). Enemies are 20× stronger." % Game.first_tier_clear_count())
+			elif Game.hollow_tier(dungeon_id) >= 2 and Game.first_tier_clear_count() < 20:
+				Game.toast.emit("First clear the 20 named memory Hollows (%d / 20)." % Game.first_tier_clear_count())
+			elif Game.hollow_tier(dungeon_id) >= 3 and Game.second_tier_clear_count() < 20:
+				Game.toast.emit("Tier 3: first clear the 20 stronger regional Hollows (%d / 20)." % Game.second_tier_clear_count())
 			else:
 				Game.toast.emit("Complete %s's main quest in %s to receive the regional dungeon guide." % [site["npc"], site["name"]])
 			return true
@@ -265,12 +269,14 @@ func _build_inner_story_room(side: int) -> void:
 	inner_torch.position = Vector3(side * (18 + depth - 2), 1.2, -5)
 	chamber.add_child(inner_torch)
 	if not _is_cleared():
-		for index in range(2):
+		var trial_count := 3 if Game.hollow_tier(dungeon_id) >= 3 else 2
+		for index in range(trial_count):
 			var trap := TRAP.new()
 			trap.set("_power_multiplier", Game.hollow_power_multiplier(dungeon_id))
-			trap.name = "StoryTrial" if index == 0 else "StoryTrial2"
+			trap.name = "StoryTrial" if index == 0 else "StoryTrial%d" % (index + 1)
 			trap.trial_name = str(_design["hazard"])
-			trap.position = Vector3(side * (18.0 + depth * (0.3 if index == 0 else 0.7)), 0.05, -2.0 if index == 0 else 2.0)
+			var fraction := float(index + 1) / float(trial_count + 1)
+			trap.position = Vector3(side * (18.0 + depth * fraction), 0.05, -2.0 if index % 2 == 0 else 2.0)
 			trap.player = player
 			chamber.add_child(trap)
 	var sign := Label3D.new()
@@ -360,7 +366,7 @@ func _spawn_warden() -> void:
 
 func _on_defeated() -> void:
 	if is_instance_valid(chamber):
-		for trial_name in ["StoryTrial", "StoryTrial2"]:
+		for trial_name in ["StoryTrial", "StoryTrial2", "StoryTrial3"]:
 			var trap := chamber.get_node_or_null(trial_name)
 			if trap != null: trap.queue_free()
 	if not _is_cleared():

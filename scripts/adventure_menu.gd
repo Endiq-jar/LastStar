@@ -344,6 +344,7 @@ func _quests() -> void:
 	_line("STORY PATH", 18, UI.ACCENT)
 	_line("1. Complete Ilyra's A Light Remembered; accept and resolve A Memory in the Hollow. 2. In each settlement, complete the named leader's main quest for a written dungeon guide. 3. Clear all 100 Hollows, then enter the Last Seal in Aetheris.")
 	_line("First tier: %d / 20 named memory Hollows cleared. The next 20 regional expeditions unlock afterwards; their enemies have 20× health and damage, and trials deal 20× damage. Many attacks are lethal in one hit." % Game.first_tier_clear_count())
+	_line("Second tier: %d / 20 cleared. The following 20 are 25× stronger again (500× the first tier). These values have not been balanced for a normal playthrough." % Game.second_tier_clear_count())
 	_line("Total Hollows cleared: %d / 100. Side quests grant potions, weapons and other equipment or spell blueprints." % Game.dungeon_count())
 	_line("ASHVALE HOLLOW", 18, UI.ACCENT)
 	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Accept Ilyra's A Memory in the Hollow, then find the entrance near Ashvale. Dodge the Warden's warning circles.")
@@ -380,7 +381,10 @@ func _quests() -> void:
 			for optional_index in range(Game.OPTIONAL_DUNGEONS.COUNT):
 				var guide_entry: Dictionary = Game.OPTIONAL_DUNGEONS.entry(optional_index)
 				if int(guide_entry["site"]) == optional_site:
-					_line("%s%s · %s · %s" % [guide_entry["name"], " · Tier 2 (20×)" if Game.hollow_power_multiplier(str(guide_entry["id"])) > 1.0 else "", "cleared" if bool(Game.dungeon_clears.get(guide_entry["id"], false)) else "uncleared", _dungeon_direction(str(guide_entry["id"]), optional_site)])
+					var guide_id := str(guide_entry["id"])
+					var guide_tier: int = Game.hollow_tier(guide_id)
+					var tier_label := " · Tier %d (%d×)" % [guide_tier, int(Game.hollow_power_multiplier(guide_id))] if guide_tier > 1 else ""
+					_line("%s%s · %s · %s" % [guide_entry["name"], tier_label, "cleared" if bool(Game.dungeon_clears.get(guide_id, false)) else "uncleared", _dungeon_direction(guide_id, optional_site)])
 		else:
 			_line("%s · guide locked: complete %s's main quest" % [guide_site["name"], guide_site["npc"]])
 	_line("THE LAST SEAL", 18, UI.ACCENT)
