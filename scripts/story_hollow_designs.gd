@@ -110,5 +110,29 @@ const DESIGNS := {
 }
 
 
+## Individual encounter tuning for the first fifteen memories. The depth is
+## measured beyond the first annex; rule and attack patterns are persisted by ID.
+const ENCOUNTERS := {
+	"memory_04": {"depth": 12, "rule": "ordered", "attack": "slash", "hazard": "Falling starlight"},
+	"memory_05": {"depth": 16, "rule": "guarded", "attack": "ring", "hazard": "Hearthfire"},
+	"memory_06": {"depth": 20, "rule": "ordered", "attack": "circle", "hazard": "Oath's trial"},
+	"memory_07": {"depth": 12, "rule": "guarded", "attack": "slash", "hazard": "Breach lightning"},
+	"memory_08": {"depth": 16, "rule": "ordered", "attack": "ring", "hazard": "Archive flare"},
+	"memory_09": {"depth": 20, "rule": "guarded", "attack": "circle", "hazard": "Inkstorm"},
+	"memory_10": {"depth": 12, "rule": "ordered", "attack": "ring", "hazard": "Tidal surge"},
+	"memory_11": {"depth": 16, "rule": "guarded", "attack": "slash", "hazard": "Drowned chime"},
+	"memory_12": {"depth": 20, "rule": "ordered", "attack": "circle", "hazard": "Prism burst"},
+	"memory_13": {"depth": 12, "rule": "guarded", "attack": "ring", "hazard": "Broken light"},
+	"memory_14": {"depth": 16, "rule": "ordered", "attack": "slash", "hazard": "Frostfall"},
+	"memory_15": {"depth": 20, "rule": "guarded", "attack": "circle", "hazard": "Winter pulse"},
+	"memory_16": {"depth": 12, "rule": "ordered", "attack": "ring", "hazard": "Sun flare"},
+	"memory_17": {"depth": 16, "rule": "guarded", "attack": "slash", "hazard": "Keeper's mark"},
+	"memory_18": {"depth": 20, "rule": "ordered", "attack": "circle", "hazard": "Root tremor"},
+}
+
+
 static func get_design(id: String) -> Dictionary:
-	return DESIGNS.get(id, {})
+	if not DESIGNS.has(id): return {}
+	var design: Dictionary = DESIGNS[id].duplicate(true)
+	design.merge(ENCOUNTERS.get(id, {}))
+	return design

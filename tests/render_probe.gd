@@ -1248,6 +1248,16 @@ func _run() -> void:
 			for memory_probe_enemy in get_tree().get_nodes_in_group("enemy"):
 				if memory_probe_enemy.get_parent() == memory_dungeon.get("chamber") and not memory_probe_enemy.is_queued_for_deletion(): memory_guards.append(memory_probe_enemy)
 			memories_ok = memories_ok and memory_guards.size() >= 2 and memory_guards.size() <= 4
+			var early_design: Dictionary = memory_dungeon.get("_design")
+			if not early_design.is_empty():
+				# The inner echo is locked either by ordering or by living guards.
+				var early_echoes: Array = memory_dungeon.get("_rune_nodes")
+				if early_echoes.size() == 2:
+					hollow_player.global_position = early_echoes[1].global_position + Vector3(0, 0.2, 0)
+					memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
+					memories_ok = memories_ok and not bool((memory_dungeon.get("_runes_found") as Array)[1])
+				else:
+					memories_ok = false
 			if memory_probe_chosen == "memory_22" and not memory_guards.is_empty():
 				var interrupted := memory_guards[0] as Node3D
 				hollow_player.global_position = interrupted.global_position + Vector3(0, 0, 2)
@@ -1270,6 +1280,33 @@ func _run() -> void:
 				var door_ray := PhysicsRayQueryParameters3D.create(story_room.to_global(Vector3(story_side * 8, 1, 0)), story_room.to_global(Vector3(story_side * 14, 1, 0)), 1)
 				var floor_ray := PhysicsRayQueryParameters3D.create(story_room.to_global(Vector3(story_side * 14, 2, 0)), story_room.to_global(Vector3(story_side * 14, -2, 0)), 1)
 				memories_ok = memories_ok and story_space.intersect_ray(door_ray).is_empty() and not story_space.intersect_ray(floor_ray).is_empty()
+				var inner_door_ray := PhysicsRayQueryParameters3D.create(story_room.to_global(Vector3(story_side * 16, 1, 0)), story_room.to_global(Vector3(story_side * 22, 1, 0)), 1)
+				var inner_x: float = story_side * (18.0 + float(story_design["depth"]) - 3.0)
+				var inner_floor_ray := PhysicsRayQueryParameters3D.create(story_room.to_global(Vector3(inner_x, 2, 0)), story_room.to_global(Vector3(inner_x, -2, 0)), 1)
+				memories_ok = memories_ok and story_space.intersect_ray(inner_door_ray).is_empty() and not story_space.intersect_ray(inner_floor_ray).is_empty()
+				var story_trap := story_room.get_node_or_null("StoryTrial") as Node3D
+				memories_ok = memories_ok and story_trap != null
+				if story_trap != null and memory_probe_chosen == "memory_04":
+					var trap_hp: float = Game.current_hp()
+					var trap_shield: float = Game.shield_points
+					Game.shield_points = 0.0
+					hollow_player.global_position = story_trap.global_position + Vector3(3, 0, 0)
+					story_trap.set("_state", "rest")
+					story_trap.set("_timer", 0.0)
+					story_trap.call("_physics_process", 0.01)
+					memories_ok = memories_ok and str(story_trap.get("_state")) == "warning" and float(story_trap.get("_timer")) >= 1.5
+					story_trap.set("_timer", 0.0)
+					story_trap.call("_physics_process", 0.01)
+					memories_ok = memories_ok and is_equal_approx(Game.current_hp(), trap_hp)
+					hollow_player.global_position = story_trap.global_position
+					story_trap.set("_timer", 0.0)
+					story_trap.call("_physics_process", 0.01)
+					story_trap.set("_timer", 0.0)
+					story_trap.call("_physics_process", 0.01)
+					memories_ok = memories_ok and Game.current_hp() < trap_hp
+					Game.set_hp(trap_hp)
+					Game.shield_points = trap_shield
+					hollow_player.velocity = Vector3.ZERO
 				if story_echoes.size() == 2:
 					hollow_player.global_position = story_echoes[0].global_position + Vector3(0, 0.2, 0)
 					memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
@@ -1278,6 +1315,10 @@ func _run() -> void:
 					memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
 			var memory_boss := memory_dungeon.get("boss") as Node3D
 			if memory_boss != null:
+				if not story_design.is_empty():
+					memories_ok = memories_ok and str(memory_boss.get("attack_profile")) == str(story_design["attack"])
+					var favoured := "line" if story_design["attack"] == "slash" else ("ring" if story_design["attack"] == "ring" else "circle")
+					memories_ok = memories_ok and str(memory_boss.call("_choose_attack", 2, 2)) == favoured
 				memory_boss.call("take_hit", 9999.0, 0, Vector3.ZERO)
 				memories_ok = memories_ok and Game.story_memory_owned(memory_probe_chosen)
 				if Game.MEMORY_SPELLS.has(memory_probe_chosen):

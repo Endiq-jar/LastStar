@@ -12,6 +12,8 @@ var is_dragon := false
 var is_keeper := false
 var custom_name := ""
 var difficulty_scale := 1.0
+# Story guardians can favour one readable technique; default keeps old fights.
+var attack_profile := ""
 var _radius := 2.6
 const LINE_LENGTH := 12.0
 const LINE_HALF_WIDTH := 1.0
@@ -103,10 +105,7 @@ func _physics_process(delta: float) -> void:
 			_timer = 1.6 if phase == 1 else (1.0 if is_keeper and phase >= 3 else (1.15 if is_vault else 1.25))
 			_attack_number += 1
 			var targeted := phase == 1 or ((is_vault or is_dragon or is_keeper) and _attack_number % 2 == 0)
-			_attack_kind = "circle"
-			if phase >= 2:
-				if _attack_number % 3 == 0: _attack_kind = "line"
-				elif _attack_number % 4 == 0: _attack_kind = "ring"
+			_attack_kind = _choose_attack(_attack_number, phase)
 			_radius = 3.8 if is_keeper and phase >= 3 and not targeted else (3.4 if is_dragon and phase >= 2 and not targeted else 2.6)
 			_play_animation("Headbutt" if is_dragon else "Punch")
 			_warning.scale = Vector3.ONE
@@ -169,6 +168,24 @@ func _physics_process(delta: float) -> void:
 		_state = "rest"
 		_timer = 2.4 if phase == 1 else (1.45 if is_keeper and phase >= 4 else 1.8)
 
+
+
+func _choose_attack(number: int, current_phase: int) -> String:
+	if current_phase < 2: return "circle"
+	match attack_profile:
+		"slash":
+			if number % 2 == 0: return "line"
+			if number % 3 == 0: return "ring"
+		"ring":
+			if number % 2 == 0: return "ring"
+			if number % 3 == 0: return "line"
+		"circle":
+			if number % 4 == 0: return "ring"
+			if number % 5 == 0: return "line"
+		_:
+			if number % 3 == 0: return "line"
+			if number % 4 == 0: return "ring"
+	return "circle"
 
 
 func take_hit(power: float, _element: int, _direction: Vector3) -> void:

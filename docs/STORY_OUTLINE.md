@@ -86,3 +86,14 @@ blended terrain palettes. Sparse pines and fantasy crystals stream by chunk;
 height, water, save positions and the hand-painted static grass remain unchanged.
 The tidal region does not yet have a dynamic tide. These are initial visual
 regions, not complete biome-specific ecosystems or questlines.
+
+### Deeper rooms and trials for the fifteen expanded Hollows
+
+Each of the fifteen named memory Hollows now continues beyond the annex into a
+second chamber. The depths vary; the second echo is either recovered in order
+or unsealed by defeating the guards. A named, telegraphed floor trial guards the
+inner room, and each named boss favours one of three attack patterns. Echoes can
+be reread after a victory. Save IDs, existing rewards and the Last Seal gate are
+unchanged. These improvements still reuse modular rooms, enemy models, and shared
+combat and puzzle mechanics; they do not yet constitute fifteen fully bespoke,
+individually playtested dungeons.

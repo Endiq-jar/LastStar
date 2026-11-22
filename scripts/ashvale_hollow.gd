@@ -1,5 +1,6 @@
 extends Node3D
 ## Two compact optional Hollows, each streamed only while inside.
+const TRAP := preload("res://scripts/story_hollow_trap.gd")
 const DESIGNS := preload("res://scripts/story_hollow_designs.gd")
 const OPTIONAL := preload("res://scripts/optional_dungeons.gd")
 const COLUMN := preload("res://assets/dungeon/column.gltf.glb")
@@ -53,7 +54,7 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2, which: String
 
 func try_interact(actor: Node3D) -> bool:
 	if inside:
-		if not _is_cleared() and _try_rune(actor): return true
+		if _try_rune(actor): return true
 		if _is_cleared() and is_instance_valid(chamber):
 			var chest := chamber.get_node_or_null("VictoryChest") as Node3D
 			if chest != null and actor.global_position.distance_to(chest.global_position) < 3.5:
@@ -163,7 +164,7 @@ func _enter() -> void:
 		if _design.is_empty():
 			Game.toast.emit("Defeat the guardians. Dodge the red circles! Exit is at the rear right.")
 		else:
-			Game.toast.emit("%s: defeat guardians and recover both echoes to awaken the guardian." % _design["theme"])
+			Game.toast.emit("%s: defeat guards, recall both echoes and avoid %s in the deeper chamber." % [_design["theme"], _design["hazard"]])
 	else:
 		_add_chest()
 		Game.toast.emit("This Hollow is cleared. Leave when ready.")
@@ -182,14 +183,17 @@ func _build_story_annex() -> void:
 			ceiling.rotation.x = PI
 			chamber.add_child(ceiling)
 	_box(chamber, Vector3(side * 14, -0.2, 0), Vector3(8, 0.4, 12))
-	_box(chamber, Vector3(side * 18, 2, 0), Vector3(0.5, 4, 12))
+	# The annex opens into a deeper room. The two wall segments leave a 4 m doorway.
+	_box(chamber, Vector3(side * 18, 2, -4), Vector3(0.5, 4, 4))
+	_box(chamber, Vector3(side * 18, 2, 4), Vector3(0.5, 4, 4))
+	_build_inner_story_room(side)
 	for z in [-6, 6]:
 		_box(chamber, Vector3(side * 14, 2, z), Vector3(8, 4, 0.5))
 		for x in [12, 16]:
 			var wall := WALL.instantiate() as Node3D
 			wall.position = Vector3(side * x, 0, z)
 			chamber.add_child(wall)
-	for z in [-4, 0, 4]:
+	for z in [-4, 4]:
 		var end_wall := WALL.instantiate() as Node3D
 		end_wall.position = Vector3(side * 18, 0, z)
 		end_wall.rotation.y = PI / 2.0
@@ -202,6 +206,8 @@ func _build_story_annex() -> void:
 		var rune := Node3D.new()
 		rune.name = "StoryEcho%d" % index
 		rune.position = _design["runes"][index]
+		if index == 1:
+			rune.position.x = side * (18.0 + float(_design["depth"]) - 3.0)
 		chamber.add_child(rune)
 		var marker := MeshInstance3D.new()
 		var sphere := SphereMesh.new()
@@ -225,6 +231,51 @@ func _build_story_annex() -> void:
 		_rune_nodes.append(rune)
 
 
+func _build_inner_story_room(side: int) -> void:
+	var depth: int = int(_design["depth"])
+	var middle := side * (18.0 + depth * 0.5)
+	for step in range(0, depth, 4):
+		var x := side * (20.0 + step)
+		for z in [-4, 0, 4]:
+			var tile := FLOOR.instantiate() as Node3D
+			tile.position = Vector3(x, 0, z)
+			chamber.add_child(tile)
+			var roof := FLOOR.instantiate() as Node3D
+			roof.position = Vector3(x, 5, z)
+			roof.rotation.x = PI
+			chamber.add_child(roof)
+		for z in [-6, 6]:
+			var wall := WALL.instantiate() as Node3D
+			wall.position = Vector3(x, 0, z)
+			chamber.add_child(wall)
+	_box(chamber, Vector3(middle, -0.2, 0), Vector3(depth, 0.4, 12))
+	_box(chamber, Vector3(side * (18 + depth), 2, 0), Vector3(0.5, 4, 12))
+	for z in [-6, 6]: _box(chamber, Vector3(middle, 2, z), Vector3(depth, 4, 0.5))
+	for z in [-4, 0, 4]:
+		var wall := WALL.instantiate() as Node3D
+		wall.position = Vector3(side * (18 + depth), 0, z)
+		wall.rotation.y = PI / 2.0
+		chamber.add_child(wall)
+	var inner_torch := TORCH.instantiate() as Node3D
+	inner_torch.position = Vector3(side * (18 + depth - 2), 1.2, -5)
+	chamber.add_child(inner_torch)
+	if not _is_cleared():
+		var trap := TRAP.new()
+		trap.name = "StoryTrial"
+		trap.trial_name = str(_design["hazard"])
+		trap.position = Vector3(side * (18.0 + depth * 0.5), 0.05, 0)
+		trap.player = player
+		chamber.add_child(trap)
+	var sign := Label3D.new()
+	sign.text = "%s\n%s" % [_design["theme"], "Recall the first echo before the second" if _design["rule"] == "ordered" else "Defeat the guards before recalling the second echo"]
+	sign.position = Vector3(side * 15, 2.3, -4.8)
+	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sign.font_size = 36
+	sign.pixel_size = 0.003
+	sign.outline_size = 6
+	chamber.add_child(sign)
+
+
 func _try_rune(actor: Node3D) -> bool:
 	if _design.is_empty(): return false
 	for index in range(_rune_nodes.size()):
@@ -233,11 +284,18 @@ func _try_rune(actor: Node3D) -> bool:
 			if _runes_found[index]:
 				Game.toast.emit("This echo has already been recalled.")
 				return true
+			if index == 1 and not _is_cleared():
+				if _design["rule"] == "ordered" and not _runes_found[0]:
+					Game.toast.emit("Recall the first echo in the main chamber before this one.")
+					return true
+				if _design["rule"] == "guarded" and _sentries_left > 0:
+					Game.toast.emit("This echo is warded. Defeat the guardians first.")
+					return true
 			_runes_found[index] = true
 			var label := rune.get_child(1) as Label3D
 			label.text = "Echo recalled"
 			Game.toast.emit(str(_design["first" if index == 0 else "second"]))
-			if _runes_found[0] and _runes_found[1] and _sentries_left == 0: _spawn_warden()
+			if not _is_cleared() and _runes_found[0] and _runes_found[1] and _sentries_left == 0: _spawn_warden()
 			return true
 	return false
 
@@ -285,6 +343,7 @@ func _spawn_warden() -> void:
 		boss.set("is_vault", rank % 3 == 1)
 		boss.set("custom_name", str(_design.get("boss", "Guardian of " + encounter_name)))
 		boss.set("difficulty_scale", 1.0 + float(rank % 26) * 0.02)
+		if not _design.is_empty(): boss.set("attack_profile", str(_design["attack"]))
 	boss.position = Vector3(0, 0.15, -4)
 	chamber.add_child(boss)
 	boss.connect("defeated", _on_defeated)
@@ -292,6 +351,9 @@ func _spawn_warden() -> void:
 
 
 func _on_defeated() -> void:
+	if is_instance_valid(chamber):
+		var trap := chamber.get_node_or_null("StoryTrial")
+		if trap != null: trap.queue_free()
 	if not _is_cleared():
 		if not _optional_entry.is_empty():
 			var rank := int(_optional_entry["rank"])
