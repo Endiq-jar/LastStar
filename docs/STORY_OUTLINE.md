@@ -46,3 +46,15 @@ multi-phase battle. The Keeper is defeated, the people renew the Seals together 
 remembers its light. The ending is a short journal conclusion rather than a
 cinematic or a branching finale. The full narrative and companion arcs remain
 unfinished.
+
+
+### First five named memory Hollows
+
+The First Warning, A Shared Flame, The Guard's Oath, The Crown's Bargain and
+The Scholar's Page each have an authored side chamber, two distinct story
+echoes and a named guardian. Both echoes and the scouts must be dealt with
+before the guardian appears; leaving or dying resets the unfinished encounter.
+Their existing memory IDs and one-time rewards are unchanged. These rooms still
+share the main arena and creature/attack systems; they are not yet five fully
+bespoke multi-room dungeons. The other story and optional Hollows retain their
+existing layouts.

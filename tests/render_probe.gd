@@ -1208,6 +1208,26 @@ func _run() -> void:
 				hollow_player.call("_on_spell_cast", "dusk_seal", Game.wander.spell("dusk_seal"))
 				memories_ok = memories_ok and str(interrupted.get("_state")) == "rest" and float(interrupted.get("_timer")) >= 2.0 and float(interrupted.get("hp")) < 260.0
 			for memory_probe_guard in memory_guards: memory_probe_guard.call("take_hit", 9999.0, 0, Vector3.ZERO)
+			var story_design: Dictionary = memory_dungeon.get("_design")
+			if not story_design.is_empty():
+				# Both echoes must be recalled through the normal interaction route.
+				memories_ok = memories_ok and memory_dungeon.get("boss") == null
+				var story_echoes: Array = memory_dungeon.get("_rune_nodes")
+				memories_ok = memories_ok and story_echoes.size() == 2
+				# Physics verifies the doorway is open and the annex has a floor.
+				await get_tree().physics_frame
+				var story_side: int = int(story_design["side"])
+				var story_room: Node3D = memory_dungeon.get("chamber")
+				var story_space := story_room.get_world_3d().direct_space_state
+				var door_ray := PhysicsRayQueryParameters3D.create(story_room.to_global(Vector3(story_side * 8, 1, 0)), story_room.to_global(Vector3(story_side * 14, 1, 0)), 1)
+				var floor_ray := PhysicsRayQueryParameters3D.create(story_room.to_global(Vector3(story_side * 14, 2, 0)), story_room.to_global(Vector3(story_side * 14, -2, 0)), 1)
+				memories_ok = memories_ok and story_space.intersect_ray(door_ray).is_empty() and not story_space.intersect_ray(floor_ray).is_empty()
+				if story_echoes.size() == 2:
+					hollow_player.global_position = story_echoes[0].global_position + Vector3(0, 0.2, 0)
+					memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
+					memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok and memory_dungeon.get("boss") == null
+					hollow_player.global_position = story_echoes[1].global_position + Vector3(0, 0.2, 0)
+					memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
 			var memory_boss := memory_dungeon.get("boss") as Node3D
 			if memory_boss != null:
 				memory_boss.call("take_hit", 9999.0, 0, Vector3.ZERO)

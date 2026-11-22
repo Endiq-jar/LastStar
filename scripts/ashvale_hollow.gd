@@ -1,5 +1,6 @@
 extends Node3D
 ## Two compact optional Hollows, each streamed only while inside.
+const DESIGNS := preload("res://scripts/story_hollow_designs.gd")
 const OPTIONAL := preload("res://scripts/optional_dungeons.gd")
 const COLUMN := preload("res://assets/dungeon/column.gltf.glb")
 const STORY_DUNGEONS := preload("res://scripts/story_dungeons.gd")
@@ -15,6 +16,9 @@ var dungeon_id := "ashvale"
 var _story_entry: Dictionary = {}
 var _optional_entry: Dictionary = {}
 var _sentries_left := 0
+var _design: Dictionary = {}
+var _runes_found := [false, false]
+var _rune_nodes: Array[Node3D] = []
 var player: CharacterBody3D
 var entrance := Vector3.ZERO
 var return_point := Vector3.ZERO
@@ -27,6 +31,7 @@ var _exit_point := Vector3.ZERO
 func setup(world: Node3D, actor: CharacterBody3D, center: Vector2, which: String = "ashvale") -> void:
 	dungeon_id = which
 	_story_entry = STORY_DUNGEONS.by_id(which)
+	_design = DESIGNS.get_design(which)
 	_optional_entry = OPTIONAL.by_id(which)
 	player = actor
 	var p := center + Vector2(0, -22)
@@ -48,6 +53,7 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2, which: String
 
 func try_interact(actor: Node3D) -> bool:
 	if inside:
+		if not _is_cleared() and _try_rune(actor): return true
 		if _is_cleared() and is_instance_valid(chamber):
 			var chest := chamber.get_node_or_null("VictoryChest") as Node3D
 			if chest != null and actor.global_position.distance_to(chest.global_position) < 3.5:
@@ -70,6 +76,8 @@ func _enter() -> void:
 	if inside or not is_instance_valid(player): return
 	return_point = player.global_position
 	inside = true
+	_runes_found = [false, false]
+	_rune_nodes.clear()
 	chamber = Node3D.new()
 	chamber.name = "HollowChamber"
 	get_parent().add_child(chamber)
@@ -88,15 +96,21 @@ func _enter() -> void:
 			var wall := WALL.instantiate() as Node3D
 			wall.position = Vector3(i * 4, 0, side * 10)
 			chamber.add_child(wall)
-			var side_wall := WALL.instantiate() as Node3D
-			side_wall.position = Vector3(side * 10, 0, i * 4)
-			side_wall.rotation.y = PI / 2.0
-			chamber.add_child(side_wall)
+			if not (_design.size() > 0 and int(_design["side"]) == side and i == 0):
+				var side_wall := WALL.instantiate() as Node3D
+				side_wall.position = Vector3(side * 10, 0, i * 4)
+				side_wall.rotation.y = PI / 2.0
+				chamber.add_child(side_wall)
 	_box(chamber, Vector3(0, -0.20, 0), Vector3(20, 0.4, 20))
 	_box(chamber, Vector3(0, 2, -10), Vector3(20, 4, 0.5))
 	_box(chamber, Vector3(0, 2, 10), Vector3(20, 4, 0.5))
-	_box(chamber, Vector3(-10, 2, 0), Vector3(0.5, 4, 20))
-	_box(chamber, Vector3(10, 2, 0), Vector3(0.5, 4, 20))
+	for side in [-1, 1]:
+		if not _design.is_empty() and int(_design["side"]) == side:
+			_box(chamber, Vector3(side * 10, 2, -6), Vector3(0.5, 4, 8))
+			_box(chamber, Vector3(side * 10, 2, 6), Vector3(0.5, 4, 8))
+		else:
+			_box(chamber, Vector3(side * 10, 2, 0), Vector3(0.5, 4, 20))
+	if not _design.is_empty(): _build_story_annex()
 	for x in [-8.0, 8.0]:
 		for z in [-8.0, 8.0]:
 			var torch := TORCH.instantiate() as Node3D
@@ -132,10 +146,86 @@ func _enter() -> void:
 			scout.position = positions[index]
 			chamber.add_child(scout)
 			scout.defeated.connect(_on_sentry_defeated)
-		Game.toast.emit("Defeat the guardians. Dodge the red circles! Exit is at the rear right.")
+		if _design.is_empty():
+			Game.toast.emit("Defeat the guardians. Dodge the red circles! Exit is at the rear right.")
+		else:
+			Game.toast.emit("%s: defeat guardians and recover both echoes to awaken the guardian." % _design["theme"])
 	else:
 		_add_chest()
 		Game.toast.emit("This Hollow is cleared. Leave when ready.")
+
+
+func _build_story_annex() -> void:
+	var side: int = int(_design["side"])
+	# Open a doorway into a small separately furnished side chamber.
+	for x in [12, 16]:
+		for z in [-4, 0, 4]:
+			var tile := FLOOR.instantiate() as Node3D
+			tile.position = Vector3(side * x, 0, z)
+			chamber.add_child(tile)
+			var ceiling := FLOOR.instantiate() as Node3D
+			ceiling.position = Vector3(side * x, 5, z)
+			ceiling.rotation.x = PI
+			chamber.add_child(ceiling)
+	_box(chamber, Vector3(side * 14, -0.2, 0), Vector3(8, 0.4, 12))
+	_box(chamber, Vector3(side * 18, 2, 0), Vector3(0.5, 4, 12))
+	for z in [-6, 6]:
+		_box(chamber, Vector3(side * 14, 2, z), Vector3(8, 4, 0.5))
+		for x in [12, 16]:
+			var wall := WALL.instantiate() as Node3D
+			wall.position = Vector3(side * x, 0, z)
+			chamber.add_child(wall)
+	for z in [-4, 0, 4]:
+		var end_wall := WALL.instantiate() as Node3D
+		end_wall.position = Vector3(side * 18, 0, z)
+		end_wall.rotation.y = PI / 2.0
+		chamber.add_child(end_wall)
+	for point in _design["columns"]:
+		var column := COLUMN.instantiate() as Node3D
+		column.position = point
+		chamber.add_child(column)
+	for index in range(2):
+		var rune := Node3D.new()
+		rune.name = "StoryEcho%d" % index
+		rune.position = _design["runes"][index]
+		chamber.add_child(rune)
+		var marker := MeshInstance3D.new()
+		var sphere := SphereMesh.new()
+		sphere.radius = 0.36
+		sphere.height = 0.72
+		marker.mesh = sphere
+		marker.position.y = 1.1
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = _design["color"]
+		marker.material_override = material
+		rune.add_child(marker)
+		var label := Label3D.new()
+		label.text = "F / Talk · Recall echo %d / 2" % (index + 1)
+		label.position.y = 2.0
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.font_size = 36
+		label.pixel_size = 0.003
+		label.outline_size = 6
+		rune.add_child(label)
+		_rune_nodes.append(rune)
+
+
+func _try_rune(actor: Node3D) -> bool:
+	if _design.is_empty(): return false
+	for index in range(_rune_nodes.size()):
+		var rune := _rune_nodes[index]
+		if is_instance_valid(rune) and actor.global_position.distance_to(rune.global_position) < 3.0:
+			if _runes_found[index]:
+				Game.toast.emit("This echo has already been recalled.")
+				return true
+			_runes_found[index] = true
+			var label := rune.get_child(1) as Label3D
+			label.text = "Echo recalled"
+			Game.toast.emit(str(_design["first" if index == 0 else "second"]))
+			if _runes_found[0] and _runes_found[1] and _sentries_left == 0: _spawn_warden()
+			return true
+	return false
 
 
 func _box(parent: Node3D, at: Vector3, size: Vector3) -> void:
@@ -161,7 +251,10 @@ func _on_sentry_defeated() -> void:
 	if not inside or _sentries_left <= 0: return
 	_sentries_left -= 1
 	if _sentries_left == 0:
-		_spawn_warden()
+		if _design.is_empty() or (_runes_found[0] and _runes_found[1]):
+			_spawn_warden()
+		else:
+			Game.toast.emit("Guardians defeated. Recover both glowing echoes, including the one in the side chamber.")
 	else:
 		Game.toast.emit("%d guardian(s) remain." % _sentries_left)
 
@@ -176,7 +269,7 @@ func _spawn_warden() -> void:
 		var encounter_name := str(_optional_entry.get("name", "")) if not _optional_entry.is_empty() else str(_story_entry["name"])
 		boss.set("is_dragon", rank % 3 == 0)
 		boss.set("is_vault", rank % 3 == 1)
-		boss.set("custom_name", "Guardian of " + encounter_name)
+		boss.set("custom_name", str(_design.get("boss", "Guardian of " + encounter_name)))
 		boss.set("difficulty_scale", 1.0 + float(rank % 26) * 0.02)
 	boss.position = Vector3(0, 0.15, -4)
 	chamber.add_child(boss)
