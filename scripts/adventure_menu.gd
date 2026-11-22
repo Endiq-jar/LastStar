@@ -513,6 +513,9 @@ func _settings() -> void:
 	_line("GRAPHICS", 23, UI.ACCENT)
 	_line("Current quality: %s" % Game.quality_name())
 	_action("Change graphics quality", _change_quality)
+	_line("DIFFICULTY", 23, UI.ACCENT)
+	_line("Cataclysm: enemies and dungeon trials spawned in this mode have 20× health and deal 20× damage. Many attacks can defeat you in one hit. Changes apply to newly spawned enemies and trials; leave and re-enter a dungeon or restart to apply it everywhere.")
+	_action("Cataclysm · %s · tap to %s" % ["ON" if Game.cataclysm_mode else "OFF", "disable" if Game.cataclysm_mode else "enable"], _toggle_cataclysm)
 	_line("AUDIO", 23, UI.ACCENT)
 	for bus in ["Master", "Ambience", "SFX"]:
 		var index := AudioServer.get_bus_index(bus)
@@ -528,6 +531,12 @@ func _settings() -> void:
 	for action in Game.REBIND_ACTIONS:
 		_action("%s   ·   %s" % [action.replace("_", " ").capitalize(), OS.get_keycode_string(Game.key_for_action(action))], _begin_binding.bind(action))
 	_action("Restore default keys", _reset_bindings)
+
+
+func _toggle_cataclysm() -> void:
+	Game.set_cataclysm_mode(not Game.cataclysm_mode)
+	_status = "Difficulty saved. It applies to newly spawned enemies and trials."
+	_refresh()
 
 
 func _slider(title: String, value: float, minimum: float, maximum: float, callback: Callable) -> void:

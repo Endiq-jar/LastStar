@@ -12,6 +12,7 @@ var is_dragon := false
 var is_keeper := false
 var custom_name := ""
 var difficulty_scale := 1.0
+var _power_multiplier := 1.0
 # Story guardians can favour one readable technique; default keeps old fights.
 var attack_profile := ""
 var _radius := 2.6
@@ -38,6 +39,7 @@ var _dead := false
 
 
 func _ready() -> void:
+	_power_multiplier = Game.enemy_power_multiplier()
 	add_to_group("enemy")
 	collision_layer = 8
 	collision_mask = 1
@@ -48,7 +50,7 @@ func _ready() -> void:
 		max_hp = 1800.0
 	elif is_vault:
 		max_hp = 1550.0
-	max_hp *= clampf(difficulty_scale, 1.0, 1.5)
+	max_hp *= clampf(difficulty_scale, 1.0, 1.5) * _power_multiplier
 	hp = max_hp
 	var collider := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
@@ -164,7 +166,7 @@ func _physics_process(delta: float) -> void:
 			var across := absf(offset.x * _line_direction.z - offset.z * _line_direction.x)
 			hit = along >= 0.0 and along <= LINE_LENGTH and across < LINE_HALF_WIDTH
 		if hit and absf(_player.global_position.y - _target.y) < 2.5:
-			_player.call("take_damage", Game.max_hp() * (0.22 if phase == 1 else 0.28), global_position)
+			_player.call("take_damage", Game.max_hp() * (0.22 if phase == 1 else 0.28) * _power_multiplier, global_position)
 		_state = "rest"
 		_timer = 2.4 if phase == 1 else (1.45 if is_keeper and phase >= 4 else 1.8)
 

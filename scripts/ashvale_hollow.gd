@@ -1,6 +1,7 @@
 extends Node3D
 ## Two compact optional Hollows, each streamed only while inside.
 const TRAP := preload("res://scripts/story_hollow_trap.gd")
+const OPTIONAL_DESIGNS := preload("res://scripts/optional_hollow_designs.gd")
 const DESIGNS := preload("res://scripts/story_hollow_designs.gd")
 const OPTIONAL := preload("res://scripts/optional_dungeons.gd")
 const COLUMN := preload("res://assets/dungeon/column.gltf.glb")
@@ -34,6 +35,7 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2, which: String
 	_story_entry = STORY_DUNGEONS.by_id(which)
 	_design = DESIGNS.get_design(which)
 	_optional_entry = OPTIONAL.by_id(which)
+	if _design.is_empty(): _design = OPTIONAL_DESIGNS.get_design(which)
 	player = actor
 	var p := center + Vector2(0, -22)
 	entrance = Vector3(p.x, float(world.call("_height", p.x, p.y)), p.y)
@@ -260,12 +262,13 @@ func _build_inner_story_room(side: int) -> void:
 	inner_torch.position = Vector3(side * (18 + depth - 2), 1.2, -5)
 	chamber.add_child(inner_torch)
 	if not _is_cleared():
-		var trap := TRAP.new()
-		trap.name = "StoryTrial"
-		trap.trial_name = str(_design["hazard"])
-		trap.position = Vector3(side * (18.0 + depth * 0.5), 0.05, 0)
-		trap.player = player
-		chamber.add_child(trap)
+		for index in range(2):
+			var trap := TRAP.new()
+			trap.name = "StoryTrial" if index == 0 else "StoryTrial2"
+			trap.trial_name = str(_design["hazard"])
+			trap.position = Vector3(side * (18.0 + depth * (0.3 if index == 0 else 0.7)), 0.05, -2.0 if index == 0 else 2.0)
+			trap.player = player
+			chamber.add_child(trap)
 	var sign := Label3D.new()
 	sign.text = "%s\n%s" % [_design["theme"], "Recall the first echo before the second" if _design["rule"] == "ordered" else "Defeat the guards before recalling the second echo"]
 	sign.position = Vector3(side * 15, 2.3, -4.8)
@@ -352,8 +355,9 @@ func _spawn_warden() -> void:
 
 func _on_defeated() -> void:
 	if is_instance_valid(chamber):
-		var trap := chamber.get_node_or_null("StoryTrial")
-		if trap != null: trap.queue_free()
+		for trial_name in ["StoryTrial", "StoryTrial2"]:
+			var trap := chamber.get_node_or_null(trial_name)
+			if trap != null: trap.queue_free()
 	if not _is_cleared():
 		if not _optional_entry.is_empty():
 			var rank := int(_optional_entry["rank"])

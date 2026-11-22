@@ -3,6 +3,7 @@ extends Node3D
 ## trial avoidable; no collision shapes or unbounded timers are spawned.
 var trial_name := "Hollow pulse"
 var player: CharacterBody3D
+var _power_multiplier := 1.0
 var _state := "rest"
 var _timer := 2.5
 var _warning: MeshInstance3D
@@ -10,6 +11,7 @@ const RADIUS := 1.7
 
 
 func _ready() -> void:
+	_power_multiplier = Game.enemy_power_multiplier()
 	_warning = MeshInstance3D.new()
 	var disc := CylinderMesh.new()
 	disc.top_radius = RADIUS
@@ -50,6 +52,6 @@ func _physics_process(delta: float) -> void:
 		var height := absf(difference.y)
 		difference.y = 0.0
 		if difference.length() < RADIUS and height < 2.5:
-			player.take_damage(Game.max_hp() * 0.08, global_position)
+			player.take_damage(Game.max_hp() * 0.08 * _power_multiplier, global_position)
 		_state = "rest"
 		_timer = 3.5

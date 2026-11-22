@@ -229,6 +229,8 @@ const COSMETIC_NAMES := {"star_pin": "Star hairpin", "moon_pin": "Moon hairpin"}
 const BLUEPRINT_ID := "research_0_1_0_0_0"
 const OUTFIT_NAMES := ["Original", "Moonlit blue", "Rose dusk", "Forest traveller", "Sunrise traveller"]
 var camera_sensitivity := 1.0
+# Extreme challenge is optional; new enemies snapshot this at spawn.
+var cataclysm_mode := false
 const REBIND_ACTIONS := ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "skill", "burst", "party_next", "dodge", "heavy_attack"]
 var _default_keys: Dictionary = {}
 var dropped_items: Dictionary = {}
@@ -1031,6 +1033,7 @@ func _setup_settings() -> void:
 	for bus in ["Master", "Ambience", "SFX"]:
 		set_bus_level(bus, float(cfg.get_value("audio", bus, 1.0)), false)
 	camera_sensitivity = clampf(float(cfg.get_value("controls", "sensitivity", 1.0)), 0.25, 2.0)
+	cataclysm_mode = bool(cfg.get_value("gameplay", "cataclysm", false))
 	for action in REBIND_ACTIONS:
 		var key := int(cfg.get_value("keys", action, 0))
 		if key > 0:
@@ -1047,6 +1050,15 @@ func set_bus_level(bus: String, value: float, persist: bool = true) -> void:
 	AudioServer.set_bus_mute(index, value <= 0.001)
 	if persist:
 		save_settings()
+
+
+func set_cataclysm_mode(enabled: bool) -> void:
+	cataclysm_mode = enabled
+	save_settings()
+
+
+func enemy_power_multiplier() -> float:
+	return 20.0 if cataclysm_mode else 1.0
 
 
 func set_sensitivity(value: float) -> void:
@@ -1095,6 +1107,7 @@ func save_settings() -> void:
 		if index >= 0:
 			cfg.set_value("audio", bus, 0.0 if AudioServer.is_bus_mute(index) else db_to_linear(AudioServer.get_bus_volume_db(index)))
 	cfg.set_value("controls", "sensitivity", camera_sensitivity)
+	cfg.set_value("gameplay", "cataclysm", cataclysm_mode)
 	for action in REBIND_ACTIONS:
 		cfg.set_value("keys", action, key_for_action(action))
 	if cfg.save("user://settings.cfg") != OK:

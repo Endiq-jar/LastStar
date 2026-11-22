@@ -5,6 +5,7 @@ const CREATURE := preload("res://assets/creatures/Ghost_Skull.gltf")
 const ORC := preload("res://assets/creatures/Orc.gltf")
 var is_orc := false
 var hp := 260.0
+var _power_multiplier := 1.0
 var _player: Node3D
 var _visual: Node3D
 var _animation: AnimationPlayer
@@ -18,6 +19,8 @@ var _dead := false
 
 
 func _ready() -> void:
+	_power_multiplier = Game.enemy_power_multiplier()
+	hp *= _power_multiplier
 	add_to_group("enemy")
 	collision_layer = 8
 	collision_mask = 1
@@ -35,7 +38,7 @@ func _ready() -> void:
 	_animation = _visual.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	_play("Idle" if is_orc else "Flying_Idle")
 	_label = Label3D.new()
-	_label.text = "Vault raider · 260" if is_orc else "Hollow scout · 260"
+	_label.text = "%s · %d" % ["Vault raider" if is_orc else "Hollow scout", int(hp)]
 	_label.position.y = 1.9
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.font_size = 36
@@ -89,7 +92,7 @@ func _physics_process(delta: float) -> void:
 		var diff := _player.global_position - _target
 		diff.y = 0
 		if diff.length() < 1.65 and absf(_player.global_position.y - _target.y) < 2.5:
-			_player.call("take_damage", Game.max_hp() * 0.10, global_position)
+			_player.call("take_damage", Game.max_hp() * 0.10 * _power_multiplier, global_position)
 		_state = "rest"
 		_timer = 3.0
 		_play("Idle" if is_orc else "Flying_Idle")

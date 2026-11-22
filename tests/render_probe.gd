@@ -940,6 +940,38 @@ func _run() -> void:
 	Game.collection_changed.emit()
 	_log("INFO" if rewards_ok else "FAIL", "quest reward persistence, equipment and blueprint=%s" % str(rewards_ok))
 
+	# Cataclysm snapshots 20x health and damage for new actors, persists as an
+	# explicit setting, and does not mutate existing encounters on a toggle.
+	var old_cataclysm: bool = Game.cataclysm_mode
+	Game.set_cataclysm_mode(true)
+	Game.cataclysm_mode = false
+	Game._setup_settings()
+	var cataclysm_ok: bool = Game.cataclysm_mode and is_equal_approx(Game.enemy_power_multiplier(), 20.0)
+	var challenge_fixture := Node3D.new()
+	world.add_child(challenge_fixture)
+	challenge_fixture.global_position = Vector3(0, 800, 0)
+	var challenge_scout = load("res://scripts/hollow_sentry.gd").new()
+	var challenge_boss = load("res://scripts/hollow_warden.gd").new()
+	var challenge_slime = load("res://scripts/slime.gd").new()
+	var challenge_trap = load("res://scripts/story_hollow_trap.gd").new()
+	var damage_receiver = load("res://tests/damage_receiver.gd").new()
+	challenge_fixture.add_child(damage_receiver)
+	challenge_trap.player = damage_receiver
+	challenge_fixture.add_child(challenge_scout)
+	challenge_fixture.add_child(challenge_boss)
+	challenge_fixture.add_child(challenge_slime)
+	challenge_fixture.add_child(challenge_trap)
+	cataclysm_ok = cataclysm_ok and is_equal_approx(challenge_scout.hp, 5200.0) and is_equal_approx(challenge_boss.max_hp, 22000.0) and is_equal_approx(challenge_slime.max_hp, 3000.0)
+	cataclysm_ok = cataclysm_ok and is_equal_approx(challenge_scout._power_multiplier, 20.0) and is_equal_approx(challenge_slime._power_multiplier, 20.0)
+	challenge_trap._state = "warning"
+	challenge_trap._timer = 0.0
+	challenge_trap._physics_process(0.01)
+	cataclysm_ok = cataclysm_ok and is_equal_approx(damage_receiver.last_damage, Game.max_hp() * 0.08 * 20.0)
+	Game.set_cataclysm_mode(false)
+	cataclysm_ok = cataclysm_ok and is_equal_approx(challenge_boss._power_multiplier, 20.0) and is_equal_approx(Game.enemy_power_multiplier(), 1.0)
+	challenge_fixture.queue_free()
+	_log("INFO" if cataclysm_ok else "FAIL", "Cataclysm setting, 20x enemy and trial scaling, snapshots and persistence=%s" % str(cataclysm_ok))
+
 	# Progression requires Ilyra's memory quest and the local leader's guide.
 	var progression_story := Game.guard_story.duplicate(true)
 	var progression_quests := Game.settlement_quests.duplicate(true)
@@ -1395,6 +1427,14 @@ func _run() -> void:
 		var optional_locations: Array = stream.get("_extra_locations")
 		var optional_ids := {}
 		optional_ok = optional_locations.size() == 75 and Game.OPTIONAL_DUNGEONS.COUNT == 75
+		var extra_designs = load("res://scripts/optional_hollow_designs.gd")
+		var extra_names := {}
+		optional_ok = optional_ok and extra_designs.ENTRIES.size() == 20
+		for extra_index in range(20):
+			var extra_id := "optional_%03d" % extra_index
+			var extra_design: Dictionary = extra_designs.get_design(extra_id)
+			optional_ok = optional_ok and not extra_design.is_empty() and not extra_names.has(extra_design["name"]) and Game.OPTIONAL_DUNGEONS.by_id(extra_id)["name"] == extra_design["name"]
+			extra_names[extra_design["name"]] = true
 		for optional_location in optional_locations:
 			var optional_id := str(optional_location["id"])
 			var optional_point: Vector2 = optional_location["pos"]
@@ -1433,7 +1473,29 @@ func _run() -> void:
 			for optional_enemy in get_tree().get_nodes_in_group("enemy"):
 				if optional_enemy.get_parent() == optional_dungeon.get("chamber") and not optional_enemy.is_queued_for_deletion(): optional_guards.append(optional_enemy)
 			optional_ok = optional_ok and optional_guards.size() >= 2 and optional_guards.size() <= 4
+			var extra_design: Dictionary = optional_dungeon.get("_design")
+			if not extra_design.is_empty():
+				var extra_echoes: Array = optional_dungeon.get("_rune_nodes")
+				optional_ok = optional_ok and extra_echoes.size() == 2
+				if extra_echoes.size() == 2:
+					hollow_player.global_position = extra_echoes[1].global_position + Vector3(0, 0.2, 0)
+					optional_ok = optional_dungeon.call("try_interact", hollow_player) and optional_ok and not bool((optional_dungeon.get("_runes_found") as Array)[1])
 			for optional_guard in optional_guards: optional_guard.call("take_hit", 9999.0, 0, Vector3.ZERO)
+			if not extra_design.is_empty():
+				var extra_room: Node3D = optional_dungeon.get("chamber")
+				var extra_echoes: Array = optional_dungeon.get("_rune_nodes")
+				optional_ok = optional_ok and optional_dungeon.get("boss") == null and extra_room.has_node("StoryTrial") and extra_room.has_node("StoryTrial2")
+				await get_tree().physics_frame
+				var extra_side: int = int(extra_design["side"])
+				var extra_space := extra_room.get_world_3d().direct_space_state
+				var extra_door := PhysicsRayQueryParameters3D.create(extra_room.to_global(Vector3(extra_side * 16, 1, 0)), extra_room.to_global(Vector3(extra_side * 22, 1, 0)), 1)
+				var extra_inner_x: float = extra_side * (18.0 + float(extra_design["depth"]) - 3.0)
+				var extra_floor := PhysicsRayQueryParameters3D.create(extra_room.to_global(Vector3(extra_inner_x, 2, 0)), extra_room.to_global(Vector3(extra_inner_x, -2, 0)), 1)
+				optional_ok = optional_ok and extra_space.intersect_ray(extra_door).is_empty() and not extra_space.intersect_ray(extra_floor).is_empty()
+				if extra_echoes.size() == 2:
+					for echo in extra_echoes:
+						hollow_player.global_position = echo.global_position + Vector3(0, 0.2, 0)
+						optional_ok = optional_dungeon.call("try_interact", hollow_player) and optional_ok
 			var optional_boss := optional_dungeon.get("boss") as Node3D
 			if optional_boss != null:
 				var optional_before_coins: int = Game.coins
@@ -1552,6 +1614,7 @@ func _run() -> void:
 	Game.guard_story = progression_story
 	Game.settlement_quests = progression_quests
 	Game.save_collection()
+	Game.set_cataclysm_mode(old_cataclysm)
 
 	# The compact HUD list opens from its button and shows independent NPC quests.
 	var quest_box_ok := false

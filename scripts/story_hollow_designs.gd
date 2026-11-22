@@ -175,4 +175,6 @@ static func get_design(id: String) -> Dictionary:
 	if not DESIGNS.has(id): return {}
 	var design: Dictionary = DESIGNS[id].duplicate(true)
 	design.merge(ENCOUNTERS.get(id, {}))
+	# The existing twenty routes now extend farther into the Hollow.
+	design["depth"] = int(design["depth"]) * 2
 	return design
