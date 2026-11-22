@@ -214,15 +214,25 @@ func second_tier_clear_count() -> int:
 	return count
 
 
+func third_tier_clear_count() -> int:
+	var count := 0
+	for number in range(20, 40):
+		if bool(dungeon_clears.get("optional_%03d" % number, false)): count += 1
+	return count
+
+
 func hollow_tier(id: String) -> int:
 	if OPTIONAL_DUNGEONS.DESIGNS.get_design(id).is_empty(): return 1
-	return 2 if int(id.substr(9)) < 20 else 3
+	var number := int(id.substr(9))
+	if number < 20: return 2
+	return 3 if number < 40 else 4
 
 
 func hollow_power_multiplier(id: String) -> float:
 	match hollow_tier(id):
 		2: return 20.0
 		3: return 500.0
+		4: return 7500.0
 	return 1.0
 
 
@@ -233,6 +243,7 @@ func can_enter_hollow(id: String, site_id: String, cleared: bool) -> bool:
 	var tier := hollow_tier(id)
 	if tier >= 2 and first_tier_clear_count() < 20: return false
 	if tier >= 3 and second_tier_clear_count() < 20: return false
+	if tier >= 4 and third_tier_clear_count() < 20: return false
 	return bool(guard_story.get("memory_done", false)) and region_chart_unlocked(site_id)
 
 

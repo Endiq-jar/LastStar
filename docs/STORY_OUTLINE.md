@@ -123,10 +123,10 @@ the existing story and regional-guide requirements). Their enemies have 20×
 health and deal 20× damage, and their floor trials deal 20× damage. No difficulty
 setting is required. Previously cleared regional Hollows remain revisitable on
 older saves. After those twenty victories, the next twenty regional expeditions unlock at
-25× the second tier (500× the first tier). The Last Seal's defenders and Keeper
-also use 500× strength so the Keeper remains the strongest current boss. The
-other, not-yet-expanded regional Hollows retain their old tuning; later tiers are
-not implemented.
+25× the second tier (500× the first tier). The next twenty regional expeditions
+unlock after those, at 15× the third tier (7,500× the first tier). The Last Seal's
+defenders and Keeper also use 7,500× strength so the Keeper remains the strongest
+current boss. The remaining 15 regional Hollows retain their old tuning.
 This strength can cause one-hit defeats and has not been balanced in a full
 manual playthrough.
 
@@ -141,3 +141,15 @@ unchanged. The journal displays both tier prerequisites and their strength.
 These encounters still share assets, rooms, enemies and puzzle systems; they
 are not fully bespoke. Existing player progression was not redesigned around
 these extreme health pools, so practical completion and balance remain untested.
+
+
+### Fourth tier: regional Hollows 41–60
+
+The existing `optional_040` through `optional_059` now have named guardians,
+story fragments, longer modular inner rooms and four telegraphed trials. Enemy
+health and damage and trial damage are 15× the preceding tier. They require the
+first three tiers' 20 clears each plus the existing story and regional guide.
+Existing clears stay revisitable; save IDs and one-time payouts remain intact.
+These use shared modular assets and mechanics, not bespoke dungeons. Player
+progression is not scaled to these extreme values, so viable completion and
+fairness require manual playtesting and balancing.

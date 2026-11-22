@@ -87,6 +87,8 @@ func try_interact(actor: Node3D) -> bool:
 				Game.toast.emit("First clear the 20 named memory Hollows (%d / 20)." % Game.first_tier_clear_count())
 			elif Game.hollow_tier(dungeon_id) >= 3 and Game.second_tier_clear_count() < 20:
 				Game.toast.emit("Tier 3: first clear the 20 stronger regional Hollows (%d / 20)." % Game.second_tier_clear_count())
+			elif Game.hollow_tier(dungeon_id) >= 4 and Game.third_tier_clear_count() < 20:
+				Game.toast.emit("Tier 4: first clear the previous 20 regional Hollows (%d / 20)." % Game.third_tier_clear_count())
 			else:
 				Game.toast.emit("Complete %s's main quest in %s to receive the regional dungeon guide." % [site["npc"], site["name"]])
 			return true
@@ -269,7 +271,7 @@ func _build_inner_story_room(side: int) -> void:
 	inner_torch.position = Vector3(side * (18 + depth - 2), 1.2, -5)
 	chamber.add_child(inner_torch)
 	if not _is_cleared():
-		var trial_count := 3 if Game.hollow_tier(dungeon_id) >= 3 else 2
+		var trial_count := 4 if Game.hollow_tier(dungeon_id) >= 4 else (3 if Game.hollow_tier(dungeon_id) >= 3 else 2)
 		for index in range(trial_count):
 			var trap := TRAP.new()
 			trap.set("_power_multiplier", Game.hollow_power_multiplier(dungeon_id))
@@ -366,7 +368,7 @@ func _spawn_warden() -> void:
 
 func _on_defeated() -> void:
 	if is_instance_valid(chamber):
-		for trial_name in ["StoryTrial", "StoryTrial2", "StoryTrial3"]:
+		for trial_name in ["StoryTrial", "StoryTrial2", "StoryTrial3", "StoryTrial4"]:
 			var trap := chamber.get_node_or_null(trial_name)
 			if trap != null: trap.queue_free()
 	if not _is_cleared():
