@@ -1220,6 +1220,13 @@ func _run() -> void:
 		var story_probe_locations: Array = stream.get("_locations")
 		var story_probe_ids := {}
 		memories_ok = story_probe_locations.size() == 22 and Game.all_story_memories().size() == 25
+		var authored_designs = load("res://scripts/story_hollow_designs.gd")
+		var authored_names := {}
+		memories_ok = memories_ok and authored_designs.DESIGNS.size() == 20 and authored_designs.ENCOUNTERS.size() == 20
+		for authored_id in authored_designs.DESIGNS:
+			var authored: Dictionary = authored_designs.get_design(authored_id)
+			memories_ok = memories_ok and authored.has("depth") and authored.has("rule") and authored.has("attack") and authored.has("hazard") and not authored_names.has(authored["boss"])
+			authored_names[authored["boss"]] = true
 		for story_probe_entry in story_probe_locations:
 			story_probe_ids[str(story_probe_entry["id"])] = true
 			var story_probe_point: Vector2 = story_probe_entry["pos"]
@@ -1330,6 +1337,20 @@ func _run() -> void:
 				memories_ok = false
 			hollow_player.global_position = memory_dungeon.get("_exit_point")
 			memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
+			if memory_probe_chosen == "memory_19":
+				# A previously cleared Hollow can be revisited and its lore read again,
+				# without respawning the trial, boss or one-time reward.
+				var revisit_coins: int = Game.coins
+				hollow_player.global_position = memory_dungeon.get("entrance") + Vector3(0, 0.2, 0)
+				memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
+				var revisit_room: Node3D = memory_dungeon.get("chamber")
+				var revisit_echoes: Array = memory_dungeon.get("_rune_nodes")
+				memories_ok = memories_ok and revisit_room != null and revisit_room.get_node_or_null("StoryTrial") == null and memory_dungeon.get("boss") == null and revisit_echoes.size() == 2
+				if revisit_echoes.size() == 2:
+					hollow_player.global_position = revisit_echoes[1].global_position + Vector3(0, 0.2, 0)
+					memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok and Game.coins == revisit_coins
+				hollow_player.global_position = memory_dungeon.get("_exit_point")
+				memories_ok = memory_dungeon.call("try_interact", hollow_player) and memories_ok
 			# Release completed arenas regularly rather than retaining all 22 at once.
 			if int(memory_probe_chosen.trim_prefix("memory_")) % 4 == 0:
 				await get_tree().process_frame

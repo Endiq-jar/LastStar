@@ -97,3 +97,12 @@ be reread after a victory. Save IDs, existing rewards and the Last Seal gate are
 unchanged. These improvements still reuse modular rooms, enemy models, and shared
 combat and puzzle mechanics; they do not yet constitute fifteen fully bespoke,
 individually playtested dungeons.
+
+
+### Fourth batch of memory Hollows
+
+The Seed of Light, The Fortress Wall, The Shield's Cost, The Twilight Witness,
+and The Missing Voices now have authored story echoes, deeper chambers, named
+trials and tuned guardians. The same modular environment, enemies and puzzle
+rules are reused; none has received a full manual playtest. Twenty named memory
+Hollows have been expanded in this way, not twenty fully bespoke dungeons.

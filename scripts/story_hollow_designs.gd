@@ -1,5 +1,5 @@
 extends RefCounted
-## Hand-authored first batch. IDs are existing memory IDs and never change.
+## Authored memory designs. IDs are existing memory IDs and never change.
 ## Rune positions are deliberately clear of the entrance, exit and guardians.
 const DESIGNS := {
 	"memory_04": {
@@ -106,11 +106,46 @@ const DESIGNS := {
 		"second": "Their roots protected the children while creatures searched above.",
 		"runes": [Vector3(6, 0, -5), Vector3(-14, 0, 2)],
 		"columns": [Vector3(-6, 0, -6), Vector3(6, 0, 3), Vector3(-14, 0, -3)]
+	},
+	"memory_19": {
+		"side": 1, "color": Color(0.60, 0.94, 0.64), "boss": "The Blighted Arbor",
+		"theme": "THE SEED OF LIGHT", "first": "Orchard keepers hid sparks of the fading light among the roots.",
+		"second": "The trees grew around those sparks, preserving hope for the next generation.",
+		"runes": [Vector3(-6, 0, -5), Vector3(14, 0, 2)],
+		"columns": [Vector3(-6, 0, 3), Vector3(6, 0, -6), Vector3(14, 0, -3)]
+	},
+	"memory_20": {
+		"side": -1, "color": Color(0.72, 0.74, 0.84), "boss": "The Breachbound Colossus",
+		"theme": "THE FORTRESS WALL", "first": "Ravenhold's defenders stood at a wall split by the Silence.",
+		"second": "They held the breach until the final refugees reached the road.",
+		"runes": [Vector3(6, 0, -6), Vector3(-14, 0, -2)],
+		"columns": [Vector3(-6, 0, -6), Vector3(6, 0, -6), Vector3(-14, 0, 3)]
+	},
+	"memory_21": {
+		"side": 1, "color": Color(0.81, 0.66, 0.56), "boss": "The Shattered Shield",
+		"theme": "THE SHIELD'S COST", "first": "The Keeper watched friends fall while defending Ravenhold.",
+		"second": "Their grief became a fear that freedom would invite another Silence.",
+		"runes": [Vector3(-6, 0, -6), Vector3(14, 0, -2)],
+		"columns": [Vector3(-6, 0, 3), Vector3(6, 0, 3), Vector3(14, 0, 3)]
+	},
+	"memory_22": {
+		"side": -1, "color": Color(0.72, 0.48, 0.89), "boss": "The Twilight Witness",
+		"theme": "THE TWILIGHT RECORD", "first": "Duskhaven's witness saw memories being sealed away with the Hollows.",
+		"second": "The Keeper called it protection; the witness remembered the voices it silenced.",
+		"runes": [Vector3(5, 0, -6), Vector3(-14, 0, 2)],
+		"columns": [Vector3(-6, 0, -6), Vector3(6, 0, 3), Vector3(-14, 0, -3)]
+	},
+	"memory_23": {
+		"side": 1, "color": Color(0.52, 0.47, 0.79), "boss": "The Voice-Eater",
+		"theme": "THE MISSING VOICES", "first": "The absent memories left a silence in every retelling.",
+		"second": "Without those voices, the people mistook control for their only protection.",
+		"runes": [Vector3(-6, 0, -5), Vector3(14, 0, 2)],
+		"columns": [Vector3(-5, 0, 3), Vector3(6, 0, -6), Vector3(14, 0, -3)]
 	}
 }
 
 
-## Individual encounter tuning for the first fifteen memories. The depth is
+## Individual encounter tuning for the first twenty named memories. The depth is
 ## measured beyond the first annex; rule and attack patterns are persisted by ID.
 const ENCOUNTERS := {
 	"memory_04": {"depth": 12, "rule": "ordered", "attack": "slash", "hazard": "Falling starlight"},
@@ -128,6 +163,11 @@ const ENCOUNTERS := {
 	"memory_16": {"depth": 12, "rule": "ordered", "attack": "ring", "hazard": "Sun flare"},
 	"memory_17": {"depth": 16, "rule": "guarded", "attack": "slash", "hazard": "Keeper's mark"},
 	"memory_18": {"depth": 20, "rule": "ordered", "attack": "circle", "hazard": "Root tremor"},
+	"memory_19": {"depth": 16, "rule": "guarded", "attack": "ring", "hazard": "Seedburst"},
+	"memory_20": {"depth": 20, "rule": "ordered", "attack": "slash", "hazard": "Fortress collapse"},
+	"memory_21": {"depth": 12, "rule": "guarded", "attack": "circle", "hazard": "Shield's recoil"},
+	"memory_22": {"depth": 20, "rule": "ordered", "attack": "slash", "hazard": "Twilight strike"},
+	"memory_23": {"depth": 16, "rule": "guarded", "attack": "ring", "hazard": "Silenced echo"},
 }
 
 
