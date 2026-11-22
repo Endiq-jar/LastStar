@@ -49,6 +49,8 @@ const Nature := preload("res://scripts/nature_pack.gd")
 ## Which model of the nature pack to instance, by NaturePack kind - "grass_2",
 ## "bush_1", "rock_4" and so on.
 @export var model_kind: String = ""
+## An empty list means a regular meadow species, not a special biome layer.
+@export var allowed_biomes: Array[String] = []
 ## Whether this species casts shadows. Off by default: these are small props
 ## instanced in the thousands, and each one that casts is geometry the shadow
 ## pass has to draw again. The trees and boulders that shape the light are the
@@ -150,6 +152,11 @@ func _build_chunk(key: Vector2i) -> void:
 		return
 	var origin_x := float(key.x) * chunk_size
 	var origin_z := float(key.y) * chunk_size
+	if _terrain.has_method("biome_at"):
+		var biome: String = _terrain.biome_at(origin_x + chunk_size * 0.5, origin_z + chunk_size * 0.5)
+		if not allowed_biomes.is_empty() and not allowed_biomes.has(biome): return
+		# Meadow-only undergrowth is out of place on ice or tidal flats; rocks remain.
+		if allowed_biomes.is_empty() and (biome == "snow" or biome == "tidal") and not model_kind.begins_with("rock"): return
 
 	var area := chunk_size * chunk_size
 	var wanted := int(area * density)

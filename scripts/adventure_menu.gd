@@ -401,6 +401,8 @@ func _quests() -> void:
 				_line("%s · %s · %s · %s: %s" % [site["name"], resident["name"], kind.capitalize(), resident[kind], detail])
 	if not any_quest:
 		_line("Speak with residents in settlements to discover local quests.")
+	_line("REGION NOTES", 18, UI.ACCENT)
+	_line("Frostmere's snowy ground · Suncrest's savanna · the taiga west of Frostmere · Tidefall's tidal flats · Glassheaven's crystal-touched fantasy region. The written guides show nearby Hollows; the world has no graphical map.")
 	_line("TRAVEL NOTES", 18, UI.ACCENT)
 	_line("Approximate straight-line directions from your position. Explore on foot; there is no map or fast travel.")
 	var player := get_tree().get_first_node_in_group("player") as Node3D

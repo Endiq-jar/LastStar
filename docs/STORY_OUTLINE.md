@@ -71,3 +71,18 @@ quest rewards now include a potion and weapon, plus existing cosmetics or spell
 blueprints; the mason-style side quest grants equippable stat-only armor. These
 quests still use a shared retrieval template, and the full narrative remains
 unfinished.
+
+
+### Third batch of memory Hollows
+
+The Frozen Passage, The Winter Promise, The Caravan's Map, The Keeper's Name,
+and The Orchard's Roots now have story echoes, side chambers and named bosses.
+They still share the central arena and enemy systems; these are expansions, not
+finished bespoke dungeons. Fifteen named memory encounters have these additions.
+
+Snow near Frostmere, savanna near Suncrest, taiga west of Frostmere, tidal flats
+near Tidefall's existing pond and a crystal-touched region near Glassheaven use
+blended terrain palettes. Sparse pines and fantasy crystals stream by chunk;
+height, water, save positions and the hand-painted static grass remain unchanged.
+The tidal region does not yet have a dynamic tide. These are initial visual
+regions, not complete biome-specific ecosystems or questlines.

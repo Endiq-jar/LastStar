@@ -309,7 +309,18 @@ func _build_chunk(key: Vector2i) -> void:
 	# cards a chunk, and stretching those by a fifth was the last version's way
 	# of hiding it, which turns the outer ring into reeds.
 	var height_scale := 1.0 + clampf(float(dist) * 0.030, 0.0, 0.14)
-	count = maxi(1, int(round(float(count) * _density)))
+	# Keep the original static tuft in meadows; thin it on snow, tidal flats
+	# and dry savanna instead of painting a new or animated grass asset.
+	var biome_density := 1.0
+	if _terrain.has_method("biome_at"):
+		var biome: String = _terrain.biome_at(origin_x + CHUNK_SIZE * 0.5, origin_z + CHUNK_SIZE * 0.5)
+		match biome:
+			"snow": biome_density = 0.03
+			"tidal": biome_density = 0.15
+			"savanna": biome_density = 0.20
+			"taiga": biome_density = 0.40
+			"fantasy": biome_density = 0.45
+	count = maxi(1, int(round(float(count) * _density * biome_density)))
 	# Placement is a jittered grid, not random points and not tufts.
 	#
 	# Two earlier versions of this loop, and why both were wrong at carpet density:

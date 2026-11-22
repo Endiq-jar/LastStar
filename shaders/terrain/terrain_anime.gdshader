@@ -38,6 +38,19 @@ uniform float band_softness : hint_range(0.0, 0.3) = 0.055;
 uniform float haze_begin : hint_range(0.0, 600.0) = 120.0;
 uniform float haze_end : hint_range(0.0, 900.0) = 700.0;
 
+// x/z centre and radius, supplied from biome_regions.gd. No extra texture fetches.
+uniform vec3 region_snow = vec3(-800.0, -930.0, 360.0);
+uniform vec3 region_savanna = vec3(1020.0, -740.0, 410.0);
+uniform vec3 region_taiga = vec3(-1450.0, -650.0, 360.0);
+uniform vec3 region_tidal = vec3(760.0, 480.0, 300.0);
+uniform vec3 region_fantasy = vec3(-720.0, 280.0, 340.0);
+
+float region_weight(vec2 p, vec3 region) {
+	vec2 delta = p - region.xy;
+	float radius2 = region.z * region.z;
+	return 1.0 - smoothstep(radius2 * 0.49, radius2, dot(delta, delta));
+}
+
 varying vec3 v_world;
 varying vec3 v_world_normal;
 
@@ -148,6 +161,20 @@ void fragment() {
 	float snow = smoothstep(snow_height - 14.0, snow_height + 20.0, h);
 	snow *= 1.0 - smoothstep(0.42, 0.62, slope);
 	col = mix(col, vec3(0.615, 0.645, 0.715), snow * 0.74);
+
+	// Broad regional palettes, mixed over the existing terrain without changing
+	// any elevation, collision or saved locations. They are absent at spawn.
+	float level_ground = 1.0 - smoothstep(0.35, 0.60, slope);
+	float snow_region = region_weight(v_world.xz, region_snow);
+	float savanna_region = region_weight(v_world.xz, region_savanna);
+	float taiga_region = region_weight(v_world.xz, region_taiga);
+	float tidal_region = region_weight(v_world.xz, region_tidal);
+	float fantasy_region = region_weight(v_world.xz, region_fantasy);
+	col = mix(col, vec3(0.68, 0.74, 0.80) * mix(0.85, 1.0, patch), snow_region * level_ground * 0.92);
+	col = mix(col, vec3(0.48, 0.38, 0.19) * mix(0.80, 1.08, patch), savanna_region * level_ground * 0.84);
+	col = mix(col, vec3(0.20, 0.31, 0.25) * mix(0.78, 1.08, patch), taiga_region * level_ground * 0.75);
+	col = mix(col, vec3(0.52, 0.48, 0.35) * mix(0.80, 1.06, patch), tidal_region * level_ground * 0.82);
+	col = mix(col, vec3(0.34, 0.29, 0.48) * mix(0.82, 1.12, patch), fantasy_region * level_ground * 0.75);
 
 	// Wet band near the shore: darker + glossier.
 	float wet = 1.0 - smoothstep(water_level, water_level + wet_band, h);

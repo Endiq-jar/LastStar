@@ -71,6 +71,41 @@ const DESIGNS := {
 		"second": "When freely shared, those fragments could renew what was failing.",
 		"runes": [Vector3(-6, 0, -5), Vector3(14, 0, 2)],
 		"columns": [Vector3(-5, 0, 3), Vector3(6, 0, -6), Vector3(14, 0, -3)]
+	},
+	"memory_14": {
+		"side": -1, "color": Color(0.67, 0.86, 1.0), "boss": "The White Pass Sentinel",
+		"theme": "THE FROZEN PASSAGE", "first": "Frostmere's guides marked a path through the storm.",
+		"second": "They held the pass open until the last caravan escaped.",
+		"runes": [Vector3(6, 0, -6), Vector3(-14, 0, 2)],
+		"columns": [Vector3(-6, 0, -6), Vector3(6, 0, -6), Vector3(-14, 0, -3)]
+	},
+	"memory_15": {
+		"side": 1, "color": Color(0.70, 0.93, 0.98), "boss": "The Winter Oathkeeper",
+		"theme": "THE WINTER PROMISE", "first": "In the cold, the survivors gathered around one last fire.",
+		"second": "They promised no settlement would face the Silence alone again.",
+		"runes": [Vector3(-6, 0, -5), Vector3(14, 0, -2)],
+		"columns": [Vector3(-5, 0, 3), Vector3(6, 0, -6), Vector3(14, 0, 3)]
+	},
+	"memory_16": {
+		"side": -1, "color": Color(1.0, 0.76, 0.38), "boss": "The Caravan's Bane",
+		"theme": "THE CARAVAN ROAD", "first": "Suncrest's traders hid the locations of the Seals among their wares.",
+		"second": "Each caravan carried a fragment beyond the desert's reach.",
+		"runes": [Vector3(5, 0, -6), Vector3(-14, 0, -2)],
+		"columns": [Vector3(-6, 0, 3), Vector3(6, 0, -6), Vector3(-14, 0, 3)]
+	},
+	"memory_17": {
+		"side": 1, "color": Color(0.96, 0.56, 0.34), "boss": "The Keeper's Shadow",
+		"theme": "THE KEEPER'S NAME", "first": "The Keeper once fought beside the guards of the last caravan.",
+		"second": "The losses they suffered would later harden their fear into control.",
+		"runes": [Vector3(-6, 0, -6), Vector3(14, 0, 2)],
+		"columns": [Vector3(-6, 0, 3), Vector3(6, 0, 3), Vector3(14, 0, -3)]
+	},
+	"memory_18": {
+		"side": -1, "color": Color(0.51, 0.85, 0.56), "boss": "The Rootbound Guardian",
+		"theme": "THE ORCHARD'S ROOTS", "first": "The Orchard's ancient trees bent over a hidden shelter.",
+		"second": "Their roots protected the children while creatures searched above.",
+		"runes": [Vector3(6, 0, -5), Vector3(-14, 0, 2)],
+		"columns": [Vector3(-6, 0, -6), Vector3(6, 0, 3), Vector3(-14, 0, -3)]
 	}
 }
 

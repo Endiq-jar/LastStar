@@ -27,6 +27,7 @@ extends Node3D
 ## never disagree about where the ground is.
 
 ## The whole map, metres across. The playable core is the middle half of it.
+const BIOMES := preload("res://scripts/biome_regions.gd")
 const WORLD_SIZE := 10000.0
 const SEA_LEVEL := 1.2
 
@@ -274,6 +275,10 @@ func surface_height_at(x: float, z: float) -> float:
 	if h < SEA_LEVEL + 1.0:
 		return h
 	return h + surface_noise.get_noise_2d(x, z) * SURFACE_DETAIL
+
+
+func biome_at(x: float, z: float) -> String:
+	return BIOMES.biome_at(Vector2(x, z))
 
 
 ## Matches terrain_anime.gdshader: a winding path runs north/south near spawn.
@@ -644,6 +649,8 @@ func _terrain_material() -> ShaderMaterial:
 	m.set_shader_parameter("sand_tex", _load_tex("res://textures/terrain/sand.webp"))
 	m.set_shader_parameter("macro_tex", _load_tex("res://textures/terrain/macro.webp"))
 	m.set_shader_parameter("water_level", SEA_LEVEL)
+	for region_name in BIOMES.REGIONS:
+		m.set_shader_parameter("region_" + str(region_name), BIOMES.REGIONS[region_name])
 	# The mountains reach ~210 m now, not the old rim's ~130, so the rock and snow
 	# bands move up with them or every peak would come out entirely white.
 	m.set_shader_parameter("rock_height", 90.0)

@@ -52,6 +52,10 @@ static func model_of(spec: Dictionary) -> ArrayMesh:
 ## can resolve them.
 static func species() -> Array:
 	return [
+		# Low-density batched conifers are streamed only in snow and taiga.
+		{"name": "northern_pines", "model": "tree_pine_1", "density": 0.006,
+			"hmin": 1.5, "hmax": 2.8, "wind": 0.04, "tint": Color(0.83, 0.90, 0.88),
+			"slope": 0.55, "radius": 4, "biomes": ["snow", "taiga"]},
 		# Border grass is a detail layer now, not ground cover.
 		#
 		# At 0.55/m2 across a 104 m radius that is ~18 000 instances of a 64

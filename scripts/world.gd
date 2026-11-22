@@ -16,6 +16,7 @@ const VegPresets := preload("res://scripts/performance/vegetation_presets.gd")
 const VegMeshes := preload("res://scripts/performance/vegetation_meshes.gd")
 const EntityCullerScript := preload("res://scripts/performance/entity_culler.gd")
 const BoneCloth := preload("res://scripts/bone_cloth.gd")
+const BiomeCrystals := preload("res://scripts/biome_crystals.gd")
 
 const ENEMY_COUNT := 14
 
@@ -1331,6 +1332,10 @@ func _build_grass_field() -> void:
 	field.call("setup", t, player)
 	_grass_field = field
 	_build_environment_vegetation(t, player)
+	var crystals := BiomeCrystals.new()
+	crystals.name = "FantasyCrystals"
+	add_child(crystals)
+	crystals.setup(t, player)
 
 
 func _build_environment_vegetation(t: Node, player: Node3D) -> void:
@@ -1376,6 +1381,10 @@ func _build_environment_vegetation(t: Node, player: Node3D) -> void:
 		layer.set("max_height", spec["hmax"])
 		layer.set("max_slope", spec["slope"])
 		layer.set("model_kind", spec["model"])
+		if spec.has("biomes"):
+			var allowed: Array[String] = []
+			for biome in spec["biomes"]: allowed.append(str(biome))
+			layer.set("allowed_biomes", allowed)
 		# Per-species streaming radius. Small detail does not need to exist at
 		# 130 m; see the note on the species table.
 		layer.set("casts_shadow", bool(spec.get("casts_shadow", false)))

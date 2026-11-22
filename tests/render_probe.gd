@@ -2423,6 +2423,30 @@ func _check_world_scale(world: Node) -> void:
 	if terrain.has_method("census"):
 		_log("INFO", "TERRAIN %s" % str(terrain.call("census")))
 
+	# Biomes are anchored away from the starting meadow and share the shader's
+	# parameters. They do not alter collision heights or saved world positions.
+	var biome_data = load("res://scripts/biome_regions.gd")
+	var biome_ok: bool = terrain.call("biome_at", 0.0, 0.0) == "meadow"
+	for biome_name in biome_data.REGIONS:
+		var region: Vector3 = biome_data.REGIONS[biome_name]
+		biome_ok = biome_ok and terrain.call("biome_at", region.x, region.y) == biome_name
+		var terrain_material: ShaderMaterial = terrain.get("_material")
+		biome_ok = biome_ok and terrain_material != null and terrain_material.get_shader_parameter("region_" + str(biome_name)) == region
+	biome_ok = biome_ok and bool(terrain.call("is_underwater", biome_data.TIDAL.x, biome_data.TIDAL.y))
+	var pine_layer := world.get_node_or_null("Veg_northern_pines")
+	var crystal_layer := world.get_node_or_null("FantasyCrystals")
+	if pine_layer != null and crystal_layer != null:
+		var taiga_key := Vector2i(floori(biome_data.TAIGA.x / 26.0), floori(biome_data.TAIGA.y / 26.0))
+		var fantasy_key := Vector2i(floori(biome_data.FANTASY.x / 48.0), floori(biome_data.FANTASY.y / 48.0))
+		for dz in range(-1, 2):
+			for dx in range(-1, 2):
+				pine_layer.call("_build_chunk", taiga_key + Vector2i(dx, dz))
+				crystal_layer.call("_build", fantasy_key + Vector2i(dx, dz))
+		biome_ok = biome_ok and not (pine_layer.get("_chunks") as Dictionary).is_empty() and not (crystal_layer.get("_chunks") as Dictionary).is_empty()
+	else:
+		biome_ok = false
+	_log("INFO" if biome_ok else "FAIL", "snow, savanna, taiga, tidal and fantasy regions, meadow, water and streamed scenery=%s" % str(biome_ok))
+
 	# Playable interior: flat-or-hilly, not a wall, a kilometre out in four
 	# directions.
 	var wall := 0.0
@@ -2573,7 +2597,10 @@ func _check_nature_pack(world: Node) -> void:
 				continue
 			var batch := _first_multimesh(layer)
 			if batch == null:
-				_log("FAIL", "NATURE_MAT %s has no MultiMesh batch" % spec["name"])
+				if spec.has("biomes"):
+					_log("INFO", "NATURE_MAT %s is restricted to its regional biomes" % spec["name"])
+				else:
+					_log("FAIL", "NATURE_MAT %s has no MultiMesh batch" % spec["name"])
 				continue
 			var shader_mat := batch.material_override as ShaderMaterial
 			var vcol := Color.BLACK
