@@ -124,9 +124,10 @@ health and deal 20× damage, and their floor trials deal 20× damage. No difficu
 setting is required. Previously cleared regional Hollows remain revisitable on
 older saves. After those twenty victories, the next twenty regional expeditions unlock at
 25× the second tier (500× the first tier). The next twenty regional expeditions
-unlock after those, at 15× the third tier (7,500× the first tier). The Last Seal's
-defenders and Keeper also use 7,500× strength so the Keeper remains the strongest
-current boss. The remaining 15 regional Hollows retain their old tuning.
+unlock after those, at 15× the third tier (7,500× the first tier).
+The next twenty regional expeditions are 2× the fourth tier (15,000× the first).
+The Last Seal's defenders and Keeper also use 15,000× strength. The original
+100 Hollows remain the finale requirement; five newly added Hollows are optional.
 This strength can cause one-hit defeats and has not been balanced in a full
 manual playthrough.
 
@@ -153,3 +154,16 @@ Existing clears stay revisitable; save IDs and one-time payouts remain intact.
 These use shared modular assets and mechanics, not bespoke dungeons. Player
 progression is not scaled to these extreme values, so viable completion and
 fairness require manual playtesting and balancing.
+
+
+### Fifth tier: regional Hollows 61–80
+
+The remaining fifteen original regional Hollows (`optional_060`–`optional_074`)
+and five new Hollows (`optional_075`–`optional_079`) now form a fifth tier.
+They have named guardians and echoes, longer modular rooms and five telegraphed
+floor trials. Enemy health and damage and trial damage are 2× the previous tier.
+They require the preceding four groups of twenty, plus story and guide access.
+Old clears stay revisitable and original IDs and payouts are unchanged. Only the
+original 100 Hollows count towards the finale; the five new ones cannot replace
+missing originals. There are 105 Hollows in total. Assets and mechanics are shared,
+and balance and practical completion at these extreme numbers are untested.

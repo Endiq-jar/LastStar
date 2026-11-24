@@ -221,11 +221,26 @@ func third_tier_clear_count() -> int:
 	return count
 
 
+func fourth_tier_clear_count() -> int:
+	var count := 0
+	for number in range(40, 60):
+		if bool(dungeon_clears.get("optional_%03d" % number, false)): count += 1
+	return count
+
+
+func original_hollow_clear_count() -> int:
+	var count := story_memory_count()
+	for number in range(OPTIONAL_DUNGEONS.ORIGINAL_COUNT):
+		if bool(dungeon_clears.get("optional_%03d" % number, false)): count += 1
+	return count
+
+
 func hollow_tier(id: String) -> int:
 	if OPTIONAL_DUNGEONS.DESIGNS.get_design(id).is_empty(): return 1
 	var number := int(id.substr(9))
 	if number < 20: return 2
-	return 3 if number < 40 else 4
+	if number < 40: return 3
+	return 4 if number < 60 else 5
 
 
 func hollow_power_multiplier(id: String) -> float:
@@ -233,6 +248,7 @@ func hollow_power_multiplier(id: String) -> float:
 		2: return 20.0
 		3: return 500.0
 		4: return 7500.0
+		5: return 15000.0
 	return 1.0
 
 
@@ -244,12 +260,13 @@ func can_enter_hollow(id: String, site_id: String, cleared: bool) -> bool:
 	if tier >= 2 and first_tier_clear_count() < 20: return false
 	if tier >= 3 and second_tier_clear_count() < 20: return false
 	if tier >= 4 and third_tier_clear_count() < 20: return false
+	if tier >= 5 and fourth_tier_clear_count() < 20: return false
 	return bool(guard_story.get("memory_done", false)) and region_chart_unlocked(site_id)
 
 
 func can_enter_finale() -> bool:
 	# A completed ending remains revisit-able after updating an old save.
-	return bool(guard_story.get("keeper_defeated", false)) or (bool(guard_story.get("memory_done", false)) and dungeon_count() == STORY_MEMORY_GOAL + OPTIONAL_DUNGEONS.COUNT)
+	return bool(guard_story.get("keeper_defeated", false)) or (bool(guard_story.get("memory_done", false)) and original_hollow_clear_count() == STORY_MEMORY_GOAL + OPTIONAL_DUNGEONS.ORIGINAL_COUNT)
 
 const SETTLEMENT_DATA := preload("res://scripts/settlement_data.gd")
 var wander_levels: Dictionary = {}

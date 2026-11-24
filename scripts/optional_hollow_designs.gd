@@ -1,5 +1,5 @@
 extends RefCounted
-## Sixty additional region-specific expeditions. IDs are the original save IDs.
+## Eighty additional region-specific expeditions. IDs are the original save IDs.
 ## The chambers and enemies are modular; names and story fragments are authored.
 const ENTRIES := [
 	["Ashvale Lamp Catacombs", "The Lamp-Eater", "Ashen pulse", "A keeper carried the last lamp beneath Ashvale.", "Its flame guided families through the night."],
@@ -62,6 +62,26 @@ const ENTRIES := [
 	["Capital Last Watch Descent", "The Last Commander", "Breach storm", "The watch held a passage beneath the walls.", "Their warning gave the people time to escape."],
 	["Lunareth Hidden Chronicle", "The Chronicle Wraith", "Arcane storm", "A scholar hid the last uncensored chronicle.", "Its pages reveal the Keeper was once afraid."],
 	["Tidefall Deepwater Beacon", "The Drowned Beacon", "Rising tide", "A beacon keeper lit a path in the storm.", "The fleet returned for those left behind."],
+	["Glassheaven Prism Heart", "The Prism Revenant", "Crystal burst", "A witness carried a memory beneath Glassheaven.", "The people shared their light when the Silence came."],
+	["Frostmere Icebound Threshold", "The Icebound Herald", "Frost rupture", "A witness carried a memory beneath Frostmere.", "The people shared their light when the Silence came."],
+	["Suncrest Sunken Dawn", "The Dawn Tyrant", "Solar blast", "A witness carried a memory beneath Suncrest.", "The people shared their light when the Silence came."],
+	["Orchard Old Root Sanctuary", "The Root Harrower", "Root shock", "A witness carried a memory beneath Orchard.", "The people shared their light when the Silence came."],
+	["Ravenhold Broken Oath Hall", "The Iron Oathkeeper", "Ironfall", "A witness carried a memory beneath Ravenhold.", "The people shared their light when the Silence came."],
+	["Duskhaven Veil of Memory", "The Veiled Watcher", "Twilight burst", "A witness carried a memory beneath Duskhaven.", "The people shared their light when the Silence came."],
+	["The Deep Deepstone Hall", "The Deepstone Herald", "Stone storm", "A witness carried a memory beneath The Deep.", "The people shared their light when the Silence came."],
+	["Starfall Fallen Lantern", "The Fallen Sentinel", "Starfall", "A witness carried a memory beneath Starfall.", "The people shared their light when the Silence came."],
+	["Evergloom Silent Choir Crypt", "The Silent Harbinger", "Gloom storm", "A witness carried a memory beneath Evergloom.", "The people shared their light when the Silence came."],
+	["Aetheris Ancient Seal Vault", "The Sealbound Judge", "Seal storm", "A witness carried a memory beneath Aetheris.", "The people shared their light when the Silence came."],
+	["Ashvale Common Flame Depths", "The Ashen Herald", "Ashen wave", "A witness carried a memory beneath Ashvale.", "The people shared their light when the Silence came."],
+	["Capital Watchers Last Stand", "The Watch Captain", "Rampart strike", "A witness carried a memory beneath Capital.", "The people shared their light when the Silence came."],
+	["Lunareth Hall of Voices", "The Echo Keeper", "Arcane wave", "A witness carried a memory beneath Lunareth.", "The people shared their light when the Silence came."],
+	["Tidefall Deepwater Bell", "The Drowned Keeper", "Tidal wave", "A witness carried a memory beneath Tidefall.", "The people shared their light when the Silence came."],
+	["Glassheaven Broken Prism Chamber", "The Prism Wraith", "Prism storm", "A witness carried a memory beneath Glassheaven.", "The people shared their light when the Silence came."],
+	["Frostmere Winter Lantern", "The Winter Harrower", "Frost wave", "A witness carried a memory beneath Frostmere.", "The people shared their light when the Silence came."],
+	["Suncrest Caravan of Light", "The Dune Revenant", "Sandstorm", "A witness carried a memory beneath Suncrest.", "The people shared their light when the Silence came."],
+	["Orchard Sheltering Roots", "The Thorn Sentinel", "Thorn wave", "A witness carried a memory beneath Orchard.", "The people shared their light when the Silence came."],
+	["Ravenhold Fortress Below", "The Bastion Wraith", "Iron rupture", "A witness carried a memory beneath Ravenhold.", "The people shared their light when the Silence came."],
+	["Duskhaven Last Witness", "The Moonless Witness", "Night storm", "A witness carried a memory beneath Duskhaven.", "The people shared their light when the Silence came."],
 ]
 const COLORS := [Color(0.98, 0.65, 0.34), Color(0.74, 0.70, 0.88), Color(0.60, 0.79, 1.0), Color(0.40, 0.84, 0.84), Color(0.86, 0.67, 1.0)]
 
@@ -77,7 +97,7 @@ static func get_design(id: String) -> Dictionary:
 	return {"name": row[0], "theme": row[0].to_upper(), "boss": row[1],
 		"hazard": row[2], "first": row[3], "second": row[4],
 		"side": side, "color": COLORS[index % COLORS.size()],
-		"depth": (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (48 if index >= 20 else 24))))))))))))))))))))) + (index % 4) * 4, "rule": "ordered" if index % 2 == 0 else "guarded",
+		"depth": (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (72 if index >= 40 else (96 if index >= 60 else (72 if index >= 40 else (48 if index >= 20 else 24)))))))))))))))))))))) + (index % 4) * 4, "rule": "ordered" if index % 2 == 0 else "guarded",
 		"attack": ["slash", "ring", "circle"][index % 3],
 		"runes": [Vector3(-side * 6, 0, -6), Vector3(side * 14, 0, 2 if index % 3 == 0 else -2)],
 		"columns": [Vector3(side * -6, 0, 3), Vector3(side * 6, 0, -6), Vector3(side * 14, 0, 3)]}

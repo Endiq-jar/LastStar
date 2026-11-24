@@ -3,7 +3,8 @@ extends RefCounted
 ## These encounters reuse the existing arena, bosses and enemy families.
 const DESIGNS := preload("res://scripts/optional_hollow_designs.gd")
 const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
-const COUNT := 75
+const COUNT := 80
+const ORIGINAL_COUNT := 75
 const TITLES := ["Forgotten Passage", "Ember Crypt", "Lantern Keep", "Echo Chamber", "Shattered Refuge", "Starless Sanctuary"]
 
 

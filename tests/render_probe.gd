@@ -940,9 +940,8 @@ func _run() -> void:
 	Game.collection_changed.emit()
 	_log("INFO" if rewards_ok else "FAIL", "quest reward persistence, equipment and blueprint=%s" % str(rewards_ok))
 
-	# Fixed tiers: the first twenty named memories use normal tuning; the next
-	# twenty regional Hollows and final Keeper use 20x tuning without a setting.
-	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_039"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_040"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_059"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_060"), 1.0)
+	# Fixed tiers scale regional encounters and the Keeper without a setting.
+	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_039"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_040"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_059"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_060"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_079"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_080"), 1.0)
 	var challenge_fixture := Node3D.new()
 	world.add_child(challenge_fixture)
 	challenge_fixture.global_position = Vector3(0, 800, 0)
@@ -952,21 +951,21 @@ func _run() -> void:
 	var challenge_trap = load("res://scripts/story_hollow_trap.gd").new()
 	var damage_receiver = load("res://tests/damage_receiver.gd").new()
 	challenge_fixture.add_child(damage_receiver)
-	challenge_scout._power_multiplier = 7500.0
-	challenge_boss._power_multiplier = 7500.0
-	challenge_trap._power_multiplier = 7500.0
+	challenge_scout._power_multiplier = 15000.0
+	challenge_boss._power_multiplier = 15000.0
+	challenge_trap._power_multiplier = 15000.0
 	challenge_trap.player = damage_receiver
 	challenge_fixture.add_child(challenge_scout)
 	challenge_fixture.add_child(challenge_boss)
 	challenge_fixture.add_child(challenge_slime)
 	challenge_fixture.add_child(challenge_trap)
-	tier_ok = tier_ok and is_equal_approx(challenge_scout.hp, 1950000.0) and is_equal_approx(challenge_boss.max_hp, 8250000.0) and is_equal_approx(challenge_slime.max_hp, 150.0)
+	tier_ok = tier_ok and is_equal_approx(challenge_scout.hp, 3900000.0) and is_equal_approx(challenge_boss.max_hp, 16500000.0) and is_equal_approx(challenge_slime.max_hp, 150.0)
 	challenge_trap._state = "warning"
 	challenge_trap._timer = 0.0
 	challenge_trap._physics_process(0.01)
-	tier_ok = tier_ok and is_equal_approx(damage_receiver.last_damage, Game.max_hp() * 0.08 * 7500.0)
+	tier_ok = tier_ok and is_equal_approx(damage_receiver.last_damage, Game.max_hp() * 0.08 * 15000.0)
 	challenge_fixture.queue_free()
-	_log("INFO" if tier_ok else "FAIL", "Fixed dungeon tiers: normal, 20x, 500x and 7500x enemy and trial damage=%s" % str(tier_ok))
+	_log("INFO" if tier_ok else "FAIL", "Fixed dungeon tiers: normal, 20x, 500x, 7500x and 15000x enemy and trial damage=%s" % str(tier_ok))
 
 	# Progression requires Ilyra's memory quest and the local leader's guide.
 	var progression_story := Game.guard_story.duplicate(true)
@@ -1012,6 +1011,11 @@ func _run() -> void:
 	progression_ok = progression_ok and Game.third_tier_clear_count() == 19 and not Game.can_enter_hollow("optional_040", "ashvale", false)
 	Game.dungeon_clears["optional_039"] = true
 	progression_ok = progression_ok and Game.third_tier_clear_count() == 20 and Game.can_enter_hollow("optional_040", "ashvale", false) and Game.can_enter_hollow("optional_040", "ashvale", true)
+	progression_ok = progression_ok and not Game.can_enter_hollow("optional_060", "ashvale", false)
+	for number in range(40, 59): Game.dungeon_clears["optional_%03d" % number] = true
+	progression_ok = progression_ok and Game.fourth_tier_clear_count() == 19 and not Game.can_enter_hollow("optional_060", "ashvale", false)
+	Game.dungeon_clears["optional_059"] = true
+	progression_ok = progression_ok and Game.fourth_tier_clear_count() == 20 and Game.can_enter_hollow("optional_060", "ashvale", false) and Game.can_enter_hollow("optional_060", "ashvale", true)
 	Game.dungeon_clears = progression_old_clears
 	Game.settlement_quests["ashvale:3:side"] = "found"
 	var potion_before: int = Game.potions
@@ -1443,11 +1447,11 @@ func _run() -> void:
 		var optional_memory_count: int = Game.story_memory_count()
 		var optional_locations: Array = stream.get("_extra_locations")
 		var optional_ids := {}
-		optional_ok = optional_locations.size() == 75 and Game.OPTIONAL_DUNGEONS.COUNT == 75
+		optional_ok = optional_locations.size() == 80 and Game.OPTIONAL_DUNGEONS.COUNT == 80
 		var extra_designs = load("res://scripts/optional_hollow_designs.gd")
 		var extra_names := {}
-		optional_ok = optional_ok and extra_designs.ENTRIES.size() == 60
-		for extra_index in range(60):
+		optional_ok = optional_ok and extra_designs.ENTRIES.size() == 80
+		for extra_index in range(80):
 			var extra_id := "optional_%03d" % extra_index
 			var extra_design: Dictionary = extra_designs.get_design(extra_id)
 			optional_ok = optional_ok and not extra_design.is_empty() and not extra_names.has(extra_design["name"]) and Game.OPTIONAL_DUNGEONS.by_id(extra_id)["name"] == extra_design["name"]
@@ -1463,11 +1467,11 @@ func _run() -> void:
 				if str(prior["id"]) != optional_id and optional_point.distance_to(prior["pos"]) < 10.0:
 					_log("FAIL", "Optional entrances overlap: %s and %s" % [optional_id, prior["id"]])
 					optional_ok = false
-		optional_ok = optional_ok and optional_ids.size() == 75
-		var optional_to_check: Array[String] = ["optional_000", "optional_015", "optional_037", "optional_054", "optional_074"]
+		optional_ok = optional_ok and optional_ids.size() == 80
+		var optional_to_check: Array[String] = ["optional_000", "optional_015", "optional_037", "optional_054", "optional_074", "optional_079"]
 		if DisplayServer.get_name() != "headless":
 			# Framebuffer runs representative encounters; grant prerequisite flags.
-			for prerequisite in range(40): Game.dungeon_clears["optional_%03d" % prerequisite] = true
+			for prerequisite in range(60): Game.dungeon_clears["optional_%03d" % prerequisite] = true
 		if DisplayServer.get_name() == "headless":
 			optional_to_check.clear()
 			for optional_definition in optional_locations:
@@ -1509,7 +1513,8 @@ func _run() -> void:
 				var extra_echoes: Array = optional_dungeon.get("_rune_nodes")
 				optional_ok = optional_ok and optional_dungeon.get("boss") == null and extra_room.has_node("StoryTrial") and extra_room.has_node("StoryTrial2")
 				if expected_multiplier >= 500.0: optional_ok = optional_ok and extra_room.has_node("StoryTrial3")
-				if expected_multiplier == 7500.0: optional_ok = optional_ok and extra_room.has_node("StoryTrial4")
+				if expected_multiplier >= 7500.0: optional_ok = optional_ok and extra_room.has_node("StoryTrial4")
+				if expected_multiplier == 15000.0: optional_ok = optional_ok and extra_room.has_node("StoryTrial5")
 				await get_tree().physics_frame
 				var extra_side: int = int(extra_design["side"])
 				var extra_space := extra_room.get_world_3d().direct_space_state
@@ -1546,7 +1551,7 @@ func _run() -> void:
 		hollow_player.global_position = optional_pos
 		stream.call("_update_stream")
 		Game.save_collection()
-	_log("INFO" if optional_ok else "FAIL", "75 optional Hollows, placement, rewards and save=%s" % str(optional_ok))
+	_log("INFO" if optional_ok else "FAIL", "80 optional Hollows, placement, rewards and save=%s" % str(optional_ok))
 
 	# Exercise both the locked gate and the live 25-memory unlock path.
 	var finale_ok := false
@@ -1577,9 +1582,12 @@ func _run() -> void:
 			if DisplayServer.get_name() == "headless": finale_ok = finale_ok and bool(verified_optional_clears.get(finale_optional_id, false))
 			Game.dungeon_clears[finale_optional_id] = true
 		Game.dungeon_clears.erase("optional_074")
-		finale_ok = finale_ok and Game.dungeon_count() == 99 and finale.call("try_interact", hollow_player) and not bool(finale.get("inside"))
+		finale_ok = finale_ok and Game.original_hollow_clear_count() == 99 and Game.dungeon_count() == 104 and finale.call("try_interact", hollow_player) and not bool(finale.get("inside"))
 		Game.dungeon_clears["optional_074"] = true
-		finale_ok = finale_ok and Game.dungeon_count() == 100 and finale.call("try_interact", hollow_player)
+		for new_index in range(75, 80): Game.dungeon_clears.erase("optional_%03d" % new_index)
+		finale_ok = finale_ok and Game.original_hollow_clear_count() == 100 and Game.dungeon_count() == 100 and Game.can_enter_finale()
+		for new_index in range(75, 80): Game.dungeon_clears["optional_%03d" % new_index] = true
+		finale_ok = finale_ok and Game.original_hollow_clear_count() == 100 and Game.dungeon_count() == 105 and finale.call("try_interact", hollow_player)
 		var depths := finale.get("chamber") as Node3D
 		finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and depths != null and depths.global_position.y < 0 and (finale.get("_gates") as Array).size() == 10
 		if depths != null:
@@ -1610,12 +1618,12 @@ func _run() -> void:
 					finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and hollow_player.global_position.distance_to(checkpoint_pos) < 0.1 and int(finale.get("sector")) == 1
 			var keeper := finale.get("boss") as Node3D
 			if keeper != null:
-				finale_ok = finale_ok and bool(keeper.get("is_keeper")) and is_equal_approx(float(keeper.get("max_hp")), 33750000.0)
-				keeper.call("take_hit", 9000000.0, 0, Vector3.ZERO)
+				finale_ok = finale_ok and bool(keeper.get("is_keeper")) and is_equal_approx(float(keeper.get("max_hp")), 67500000.0)
+				keeper.call("take_hit", 18000000.0, 0, Vector3.ZERO)
 				finale_ok = finale_ok and int(keeper.get("phase")) == 2
-				keeper.call("take_hit", 9000000.0, 0, Vector3.ZERO)
+				keeper.call("take_hit", 18000000.0, 0, Vector3.ZERO)
 				finale_ok = finale_ok and int(keeper.get("phase")) == 3
-				keeper.call("take_hit", 9000000.0, 0, Vector3.ZERO)
+				keeper.call("take_hit", 18000000.0, 0, Vector3.ZERO)
 				finale_ok = finale_ok and int(keeper.get("phase")) == 4
 				keeper.call("take_hit", 1000000000.0, 0, Vector3.ZERO)
 				finale_ok = finale_ok and bool(Game.guard_story.get("keeper_defeated", false)) and Game.coins == finale_coins + 1000 and Game.starlight == finale_light + 200

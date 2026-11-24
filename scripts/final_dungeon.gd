@@ -30,7 +30,7 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
 	position = entrance
 	add_child(DOOR.instantiate())
 	var label := Label3D.new()
-	label.text = "THE LAST SEAL\nF / Talk · 100 Hollow victories required"
+	label.text = "THE LAST SEAL\nF / Talk · Original 100 Hollows required"
 	label.position.y = 4.5
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.font_size = 48
@@ -47,7 +47,7 @@ func try_interact(actor: Node3D) -> bool:
 			return true
 	elif actor.global_position.distance_to(entrance) < 5.0:
 		if not Game.can_enter_finale():
-			Game.toast.emit("Resolve Ilyra's memory quest and clear all 100 Hollows (%d / 100)." % Game.dungeon_count())
+			Game.toast.emit("Resolve Ilyra's memory quest and clear the original 100 Hollows (%d / 100)." % Game.original_hollow_clear_count())
 		else:
 			_enter()
 		return true
@@ -110,7 +110,7 @@ func _spawn_guardians() -> void:
 	_remaining = 2
 	for x in [-2.5, 2.5]:
 		var scout := SENTRY.new()
-		scout.set("_power_multiplier", 7500.0)
+		scout.set("_power_multiplier", 15000.0)
 		scout.is_orc = sector % 2 == 1
 		scout.position = Vector3(x, -DESCENT_PER_SECTOR * (float(sector) + 0.65) + 0.2, -SECTOR_LENGTH * (float(sector) + 0.65))
 		chamber.add_child(scout)
@@ -135,7 +135,7 @@ func _guardian_defeated() -> void:
 
 func _spawn_keeper() -> void:
 	boss = BOSS.new()
-	boss.set("_power_multiplier", 7500.0)
+	boss.set("_power_multiplier", 15000.0)
 	boss.set("is_keeper", true)
 	boss.position = Vector3(0, -79.8, -1013)
 	chamber.add_child(boss)

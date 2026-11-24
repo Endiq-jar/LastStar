@@ -342,11 +342,12 @@ func _quests() -> void:
 		var memory_status := "Completed · choice: %s" % str(story.get("memory_choice", "")) if bool(story.get("memory_done", false)) else ("Return the fragment to Ilyra" if bool(story.get("memory_found", false)) else "Defeat the Warden, then recover the fragment from the chest")
 		_line("Main · A Memory in the Hollow: %s" % memory_status)
 	_line("STORY PATH", 18, UI.ACCENT)
-	_line("1. Complete Ilyra's A Light Remembered; accept and resolve A Memory in the Hollow. 2. In each settlement, complete the named leader's main quest for a written dungeon guide. 3. Clear all 100 Hollows, then enter the Last Seal in Aetheris.")
+	_line("1. Complete Ilyra's A Light Remembered; accept and resolve A Memory in the Hollow. 2. In each settlement, complete the named leader's main quest for a written dungeon guide. 3. Clear the original 100 Hollows, then enter the Last Seal in Aetheris.")
 	_line("First tier: %d / 20 named memory Hollows cleared. The next 20 regional expeditions unlock afterwards; their enemies have 20× health and damage, and trials deal 20× damage. Many attacks are lethal in one hit." % Game.first_tier_clear_count())
 	_line("Second tier: %d / 20 cleared. The following 20 are 25× stronger again (500× the first tier). These values have not been balanced for a normal playthrough." % Game.second_tier_clear_count())
 	_line("Third tier: %d / 20 cleared. The next 20 are 15× stronger again (7,500× the first tier)." % Game.third_tier_clear_count())
-	_line("Total Hollows cleared: %d / 100. Side quests grant potions, weapons and other equipment or spell blueprints." % Game.dungeon_count())
+	_line("Fourth tier: %d / 20 cleared. The next 20 are 2× stronger again (15,000× the first tier)." % Game.fourth_tier_clear_count())
+	_line("Total Hollows cleared: %d / 105. Original Hollows cleared for the finale: %d / 100. Side quests grant equipment and spell blueprints." % [Game.dungeon_count(), Game.original_hollow_clear_count()])
 	_line("ASHVALE HOLLOW", 18, UI.ACCENT)
 	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Accept Ilyra's A Memory in the Hollow, then find the entrance near Ashvale. Dodge the Warden's warning circles.")
 	_line("MEMORY VAULT", 18, UI.ACCENT)
@@ -392,7 +393,7 @@ func _quests() -> void:
 	if bool(Game.guard_story.get("keeper_defeated", false)):
 		_line("The Keeper is defeated. The Seals hold because the people of Elaris chose to share their light. The world remembers again.")
 	else:
-		_line("Aetheris · The underground gate requires Ilyra's memory quest and all 100 Hollow victories.")
+		_line("Aetheris · The underground gate requires Ilyra's memory quest and the original 100 Hollow victories (the five new Hollows are optional).")
 	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
 	var any_quest := false
 	for site in SETTLEMENTS.SITES:
