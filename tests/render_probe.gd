@@ -870,6 +870,22 @@ func _run() -> void:
 				elif child.is_in_group("village_house"):
 					houses.append(child)
 			resident_ok = residents.size() == 20 and houses.size() == 3
+			# Each resident shares four actual meshes with strictly descending
+			# triangle counts, and disappears beyond the final distance band.
+			if not residents.is_empty():
+				var prior_triangles := 1501
+				for lod_index in range(4):
+				var resident_visual := residents[0].get_node_or_null("ResidentLOD%d" % lod_index) as MeshInstance3D
+					if resident_visual == null or resident_visual.mesh == null:
+						resident_ok = false
+						continue
+					var triangles: int = resident_visual.mesh.get_faces().size() / 3
+					resident_ok = resident_ok and triangles > 0 and triangles < prior_triangles
+					resident_ok = resident_ok and is_equal_approx(resident_visual.visibility_range_begin, [0.0, 10.0, 25.0, 50.0][lod_index]) and is_equal_approx(resident_visual.visibility_range_end, [10.0, 25.0, 50.0, 100.0][lod_index])
+					if residents.size() > 1:
+						var shared_visual := residents[1].get_node_or_null("ResidentLOD%d" % lod_index) as MeshInstance3D
+						resident_ok = resident_ok and shared_visual != null and shared_visual.mesh == resident_visual.mesh
+					prior_triangles = triangles
 			var indices := {}
 			for person in residents:
 				indices[int(person.get("resident_index"))] = true
