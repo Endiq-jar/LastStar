@@ -875,7 +875,7 @@ func _run() -> void:
 			if not residents.is_empty():
 				var prior_triangles := 1501
 				for lod_index in range(4):
-				var resident_visual := residents[0].get_node_or_null("ResidentLOD%d" % lod_index) as MeshInstance3D
+					var resident_visual := residents[0].get_node_or_null("ResidentLOD%d" % lod_index) as MeshInstance3D
 					if resident_visual == null or resident_visual.mesh == null:
 						resident_ok = false
 						continue
