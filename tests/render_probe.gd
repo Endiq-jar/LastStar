@@ -163,6 +163,10 @@ func _run() -> void:
 	Game.quality_tier = quality_before
 	world.call("apply_quality")
 	_log("INFO" if quality_ok else "FAIL", "five quality profiles, legacy migration and resolution control=%s" % str(quality_ok))
+	# Quality changes invalidate streamed vegetation; let the restored profile
+	# repopulate before the independent vegetation and grass assertions.
+	for quality_frame in range(90):
+		await get_tree().process_frame
 	var monitor := world.get_node_or_null("HUD/PerformanceMonitor")
 	if monitor == null:
 		_log("FAIL", "performance monitor missing")
