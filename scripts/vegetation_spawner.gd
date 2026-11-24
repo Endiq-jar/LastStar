@@ -97,10 +97,14 @@ func _ready() -> void:
 func _rebuild() -> void:
 	for root in _scatter_roots:
 		if is_instance_valid(root):
+			# Release the name before rebuilding, even if presets change multiple
+			# times within one frame. Deferred frees otherwise rename new batches.
+			if root.get_parent() == self: remove_child(root)
 			root.queue_free()
 	_scatter_roots.clear()
 	for body in _collision_bodies:
 		if is_instance_valid(body):
+			if body.get_parent() == self: remove_child(body)
 			body.queue_free()
 	_collision_bodies.clear()
 	var terrain := get_node_or_null(terrain_path)
