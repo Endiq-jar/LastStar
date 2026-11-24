@@ -31,15 +31,12 @@ func _ready() -> void:
 	body.add_child(_door_shape)
 
 
-# Furniture anchors match the furnishings placed by SettlementStream. The
-# actor must be indoors, preventing interactions through the house walls.
-const FURNITURE := [
-	{"id": "bed", "name": "Rest at bed", "position": Vector3(1.0, 0.0, 0.35)},
-	{"id": "table", "name": "Inspect table", "position": Vector3(-1.0, 0.0, 0.65)},
-	{"id": "chair", "name": "Inspect chair", "position": Vector3(-1.0, 0.0, 1.5)},
-	{"id": "shelf", "name": "Read shelf", "position": Vector3(0.0, 0.0, 1.85)},
-	{"id": "rug", "name": "Inspect rug", "position": Vector3(0.05, 0.0, 0.0)},
-]
+# Registered together with each actual model by the settlement builder.
+var furniture: Array[Dictionary] = []
+
+
+func register_furniture(id: String, label: String, at: Vector3) -> void:
+	furniture.append({"id": id, "name": label, "position": at})
 
 
 func interaction_for(actor: Node3D) -> Dictionary:
@@ -50,7 +47,7 @@ func interaction_for(actor: Node3D) -> Dictionary:
 		return {}
 	var best := 2.0
 	var selected: Dictionary = {}
-	for item in FURNITURE:
+	for item in furniture:
 		var anchor: Vector3 = item["position"]
 		var distance := Vector2(local.x - anchor.x, local.z - anchor.z).length()
 		if distance < best:
@@ -70,7 +67,8 @@ func try_interact(actor: Node3D) -> bool:
 				Game.heal(Game.max_hp() * 0.25)
 				Game.toast.emit("You rest for a moment and recover health.")
 			"table": Game.toast.emit("A well-used table, ready for a shared meal.")
-			"chair": Game.toast.emit("A wooden chair stands beside the table.")
+			"chair": Game.toast.emit("A wooden chair stands in the room.")
+			"couch": Game.toast.emit("A comfortable couch offers a place to rest.")
 			"shelf": Game.toast.emit("The shelf holds books and keepsakes from the settlement.")
 			"rug": Game.toast.emit("A woven rug makes the room feel welcoming.")
 		return true

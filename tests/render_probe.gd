@@ -807,6 +807,23 @@ func _run() -> void:
 	var resident_ok := false
 	var quest_ui_ok := false
 	var house_ok := false
+	var interior_variants_ok := true
+	var interior_variants := {}
+	if settlement_manager != null:
+		for settlement_index in range(14):
+			for house_index in range(3):
+				var sample_house: Node3D = settlement_manager.call("_house", settlement_index, house_index)
+				var furnishing_list: Array = sample_house.get("furniture")
+				interior_variants[int(sample_house.get_meta("interior_variant"))] = true
+				interior_variants_ok = interior_variants_ok and furnishing_list.size() >= 2 and furnishing_list.size() < 6
+				for furnishing in furnishing_list:
+					interior_variants_ok = interior_variants_ok and sample_house.has_node("Furniture_" + str(furnishing["id"]))
+				interior_variants_ok = interior_variants_ok and not (sample_house.has_node("Furniture_bed") and sample_house.has_node("Furniture_couch"))
+				sample_house.free()
+	else:
+		interior_variants_ok = false
+	interior_variants_ok = interior_variants_ok and interior_variants.size() == 42
+	_log("INFO" if interior_variants_ok else "FAIL", "42 house variants have registered furnishings without all models=%s" % str(interior_variants_ok))
 	if settlement_manager != null and menu != null:
 		var loaded: Dictionary = settlement_manager.get("_loaded")
 		if loaded.has("ashvale"):
