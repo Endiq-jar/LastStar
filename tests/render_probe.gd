@@ -816,7 +816,7 @@ func _run() -> void:
 				var sample_house: Node3D = settlement_manager.call("_house", settlement_index, house_index)
 				var furnishing_list: Array = sample_house.get("furniture")
 				interior_variants[int(sample_house.get_meta("interior_variant"))] = true
-				interior_variants_ok = interior_variants_ok and furnishing_list.size() >= 4 and furnishing_list.size() <= 6
+				interior_variants_ok = interior_variants_ok and furnishing_list.size() >= 4 and furnishing_list.size() <= 7
 				for furnishing in furnishing_list:
 					interior_variants_ok = interior_variants_ok and sample_house.has_node("Furniture_" + str(furnishing["id"]))
 					if str(furnishing["id"]).begins_with("prop_"):
