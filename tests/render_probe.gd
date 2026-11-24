@@ -873,18 +873,18 @@ func _run() -> void:
 				var roof := house.get_node("RoofParts") as Node3D
 				var roof_hidden := not roof.visible
 				# The proximity button and keyboard action share the same live target.
-				var hud := world.get_node("HUD")
+				var furniture_hud := world.get_node("HUD")
 				var old_health: float = Game.current_hp()
 				Game.set_hp(Game.max_hp() * 0.5)
 				player.global_position = house.to_global(Vector3(1.0, 0.1, 0.35))
-				hud.call("_update_nearby_object_button")
-				var nearby_button := hud.get("_context_button") as Button
+				furniture_hud.call("_update_nearby_object_button")
+				var nearby_button := furniture_hud.get("_context_button") as Button
 				var furniture_ok := nearby_button != null and nearby_button.visible and nearby_button.text == "Rest at bed"
-				hud.call("_use_nearby_house_object")
+				furniture_hud.call("_use_nearby_house_object")
 				furniture_ok = furniture_ok and Game.current_hp() > Game.max_hp() * 0.5
 				Game.set_hp(old_health)
 				player.global_position = house.to_global(Vector3(10, 0.1, 10))
-				hud.call("_update_nearby_object_button")
+				furniture_hud.call("_update_nearby_object_button")
 				furniture_ok = furniture_ok and not nearby_button.visible
 				house_ok = furniture_ok
 				player.global_position = old_pos
