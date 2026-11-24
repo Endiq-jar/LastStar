@@ -128,7 +128,7 @@ func _autotune_performance() -> void:
 	var avg_ms := (_perf_accum / float(measured)) * 1000.0
 	print("LastStar: average frame time %.1f ms over %d frames" % [avg_ms, measured])
 	# Worse than ~24 fps: shed effects instead of stuttering.
-	if avg_ms > 42.0 and Game.quality_tier != 1:
+	if avg_ms > 42.0 and Game.quality_tier > 1:
 		Game.set_quality_tier(1)
 		apply_quality()
 		Game.toast.emit("Performance mode enabled for smooth play")
@@ -243,41 +243,28 @@ func _is_compatibility() -> bool:
 
 
 func apply_quality() -> void:
-	## 0 Balanced · 1 Performance · 2 High. Lets the same APK scale from a
-	## budget phone to a flagship. Every tier restores what it changes, so
-	## cycling through them is lossless, and tiers never enable a feature the
-	## active renderer does not implement (SSAO does not exist on OpenGL).
+	## Five presets. These control effects and density, not hard FPS/triangle
+	## limits; actual performance depends on the device and scene.
 	var tier := Game.quality_tier
 	var compat := _is_compatibility()
 	var env := environment.environment as Environment
 	var veg := get_node_or_null("Vegetation")
 
-	# --- shadows -----------------------------------------------------------
-	#
-	# Performance used to switch the sun's shadow map off completely. That single
-	# line is the whole "the character is floating on nothing" problem: with no
-	# shadow map there is no contact shadow under her, no cast shadow from the
-	# hills, and no self-shadowing anywhere. The world flattens into pure ambient
-	# and every object looks pasted on. A short-radius shadow map is one of the
-	# cheapest things on the GPU and it is the single most important depth cue in
-	# the frame, so no tier turns it off now - the tiers only shorten its reach.
+	# Ultra Low disables realtime shadows; all other tiers restore them.
+	sun.shadow_enabled = tier != 0
 	if tier == 1:
-		sun.shadow_enabled = true
 		sun.directional_shadow_max_distance = 70.0
-	elif compat:
-		# Compatibility shadows are cheap but not free; keep the radius short.
-		sun.shadow_enabled = true
-		sun.directional_shadow_max_distance = 110.0 if tier == 0 else 150.0
-	else:
-		sun.shadow_enabled = true
-		sun.directional_shadow_max_distance = 260.0 if tier == 2 else 190.0
+	elif tier == 2:
+		sun.directional_shadow_max_distance = 110.0 if compat else 150.0
+	elif tier >= 3:
+		sun.directional_shadow_max_distance = (150.0 if tier == 3 else 190.0) if compat else (190.0 if tier == 3 else 260.0)
 
 	# --- grass -------------------------------------------------------------
 	# Grass is the single biggest draw on a mobile GPU, so the tier controls its
 	# density rather than switching it off: an empty valley looks broken, a
 	# thinner meadow still looks like a meadow.
 	if _grass_field != null and _grass_field.has_method("set_density_scale"):
-		_grass_field.call("set_density_scale", 1.0 if tier >= 2 else (0.65 if tier == 0 else 0.35))
+		_grass_field.call("set_density_scale", [0.22, 0.35, 0.65, 0.85, 1.0][tier])
 
 	# --- vegetation ---------------------------------------------------------
 	#
@@ -290,7 +277,7 @@ func apply_quality() -> void:
 	if veg:
 		veg.visible = true
 		if veg.has_method("set_detail_scale"):
-			veg.call("set_detail_scale", 1.0 if tier >= 2 else (0.8 if tier == 0 else 0.55))
+			veg.call("set_detail_scale", [0.35, 0.55, 0.8, 0.9, 1.0][tier])
 
 	# --- resolution scale ----------------------------------------------------
 	#
@@ -308,13 +295,7 @@ func apply_quality() -> void:
 	# driver that refuses it.
 	_dynamic_time = 0.0
 	_dynamic_frames = 0
-	match tier:
-		1:
-			_dynamic_scale = 0.75
-		0:
-			_dynamic_scale = 0.9
-		_:
-			_dynamic_scale = 1.0
+	_dynamic_scale = [0.60, 0.70, 0.85, 1.0, 1.0][tier]
 	_set_3d_scale(_dynamic_scale)
 
 	if env == null:
@@ -331,26 +312,25 @@ func apply_quality() -> void:
 	# back. Saturation at that level is what pushed every already-saturated green
 	# the last few percent into a clipped, channel-starved neon. The grade lives
 	# in exactly one place now - _grade_env(), called from the day pass.
-	match tier:
-		1:
-			env.glow_enabled = false
-			env.ssao_enabled = false
-			_env_msaa(RenderingServer.VIEWPORT_MSAA_DISABLED)
-		2:
-			env.glow_enabled = true
-			env.glow_intensity = 0.30
-			env.glow_hdr_threshold = 1.25
-			env.ssao_enabled = not compat
-			if not compat:
-				env.ssao_radius = 1.4
-				env.ssao_intensity = 1.6
-			_env_msaa(RenderingServer.VIEWPORT_MSAA_4X if not compat else RenderingServer.VIEWPORT_MSAA_DISABLED)
-		_:
-			env.glow_enabled = true
-			env.glow_intensity = 0.26 if not compat else 0.22
-			env.glow_hdr_threshold = 1.35
-			env.ssao_enabled = false
-			_env_msaa(RenderingServer.VIEWPORT_MSAA_2X if not compat else RenderingServer.VIEWPORT_MSAA_DISABLED)
+	if tier <= 1:
+		env.glow_enabled = false
+		env.ssao_enabled = false
+		_env_msaa(RenderingServer.VIEWPORT_MSAA_DISABLED)
+	elif tier == 2:
+		env.glow_enabled = true
+		env.glow_intensity = 0.26 if not compat else 0.22
+		env.glow_hdr_threshold = 1.35
+		env.ssao_enabled = false
+		_env_msaa(RenderingServer.VIEWPORT_MSAA_2X if not compat else RenderingServer.VIEWPORT_MSAA_DISABLED)
+	else:
+		env.glow_enabled = true
+		env.glow_intensity = 0.30
+		env.glow_hdr_threshold = 1.25
+		env.ssao_enabled = not compat
+		if not compat:
+			env.ssao_radius = 1.4
+			env.ssao_intensity = 1.6
+		_env_msaa(RenderingServer.VIEWPORT_MSAA_4X if not compat else RenderingServer.VIEWPORT_MSAA_DISABLED)
 	# Re-apply the grade so a tier change never leaves the frame at whatever
 	# saturation it happened to be using.
 	_grade_env(env)
@@ -521,10 +501,9 @@ func _process(delta: float) -> void:
 
 
 func _update_dynamic_resolution(delta: float) -> void:
-	## Balanced/Performance aim for 30 fps. Evaluate two seconds at a time;
-	## use separate thresholds so the scale does not flicker back and forth.
-	## High stays fixed at full resolution. This cannot cure CPU-bound stalls.
-	if Game.quality_tier == 2 or not _perf_done or delta <= 0.0:
+	## Ultra Low, Low and Medium adjust toward 30 fps using hysteresis.
+	## High and Ultra stay at full resolution. CPU-bound stalls remain possible.
+	if Game.quality_tier >= 3 or not _perf_done or delta <= 0.0:
 		return
 	_dynamic_time += minf(delta, 0.25)
 	_dynamic_frames += 1
@@ -540,10 +519,10 @@ func _update_dynamic_resolution(delta: float) -> void:
 
 
 func _next_dynamic_scale(tier: int, current: float, avg: float) -> float:
-	if tier == 2:
+	if tier >= 3:
 		return current
-	var ceiling := 0.75 if tier == 1 else 0.9
-	var floor_scale := 0.60 if tier == 1 else 0.65
+	var ceiling: float = [0.60, 0.70, 0.85][clampi(tier, 0, 2)]
+	var floor_scale: float = [0.50, 0.60, 0.65][clampi(tier, 0, 2)]
 	if avg > 0.040:
 		return maxf(floor_scale, current - 0.05)
 	if avg < 0.028:
@@ -594,7 +573,7 @@ func _update_time_of_day() -> void:
 	var noon_col := Color(1.0, 0.96, 0.89)
 	var dawn_col := Color(1.0, 0.72, 0.46)
 	sun.light_color = noon_col.lerp(dawn_col, warmth)
-	sun.shadow_enabled = true
+	sun.shadow_enabled = Game.quality_tier != 0
 
 	var env := environment.environment as Environment
 	if env == null:
@@ -1328,7 +1307,7 @@ func _build_grass_field() -> void:
 	field.set_script(GrassFieldScript)
 	add_child(field)
 	# Set the chosen density before setup queues any grass.
-	field.call("set_density_scale", 1.0 if Game.quality_tier >= 2 else (0.65 if Game.quality_tier == 0 else 0.35))
+	field.call("set_density_scale", [0.22, 0.35, 0.65, 0.85, 1.0][Game.quality_tier])
 	field.call("setup", t, player)
 	_grass_field = field
 	_build_environment_vegetation(t, player)

@@ -196,7 +196,7 @@ func _exit_tree() -> void:
 
 
 func _interval() -> float:
-	if Game.quality_tier >= 1:
+	if Game.quality_tier <= 1:
 		return PROBE_INTERVAL_LOW
 	return PROBE_INTERVAL
 

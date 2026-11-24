@@ -129,14 +129,40 @@ func _run() -> void:
 	for i in range(15):
 		await get_tree().process_frame
 
-	# Resolution controller must reduce load when slow, recover when fast, and
-	# leave High alone. This tests its hysteresis without depending on CI FPS.
-	var slow: float = world.call("_next_dynamic_scale", 0, 0.9, 0.05)
-	var fast: float = world.call("_next_dynamic_scale", 0, 0.8, 0.02)
-	var stable: float = world.call("_next_dynamic_scale", 0, 0.8, 0.033)
-	var high: float = world.call("_next_dynamic_scale", 2, 1.0, 0.05)
-	_log("INFO" if is_equal_approx(slow, 0.85) and is_equal_approx(fast, 0.85) and is_equal_approx(stable, 0.8) and is_equal_approx(high, 1.0) else "FAIL",
-		"dynamic resolution slow=%.2f fast=%.2f stable=%.2f high=%.2f" % [slow, fast, stable, high])
+	# Presets preserve legacy choices, change effects, and restore them on switch.
+	var quality_before: int = Game.quality_tier
+	var legacy_quality := ConfigFile.new()
+	legacy_quality.set_value("video", "quality_tier", 0)
+	var quality_ok: bool = int(Game.call("_quality_from_config", legacy_quality)) == 2
+	legacy_quality.set_value("video", "quality_tier", 1)
+	quality_ok = quality_ok and int(Game.call("_quality_from_config", legacy_quality)) == 1
+	legacy_quality.set_value("video", "quality_tier", 2)
+	quality_ok = quality_ok and int(Game.call("_quality_from_config", legacy_quality)) == 3
+	legacy_quality.set_value("video", "quality_version", 2)
+	legacy_quality.set_value("video", "quality_tier", 4)
+	quality_ok = quality_ok and int(Game.call("_quality_from_config", legacy_quality)) == 4 and Game.QUALITY_NAMES.size() == 5
+	var quality_sun := world.get_node("Sun") as DirectionalLight3D
+	Game.quality_tier = 0
+	world.call("apply_quality")
+	world.call("_update_time_of_day")
+	quality_ok = quality_ok and not quality_sun.shadow_enabled and is_equal_approx(float(world.get("_dynamic_scale")), 0.60)
+	Game.quality_tier = 1
+	world.call("apply_quality")
+	quality_ok = quality_ok and quality_sun.shadow_enabled and is_equal_approx(float(world.get("_dynamic_scale")), 0.70)
+	Game.quality_tier = 2
+	world.call("apply_quality")
+	quality_ok = quality_ok and is_equal_approx(float(world.get("_dynamic_scale")), 0.85)
+	Game.quality_tier = 4
+	world.call("apply_quality")
+	quality_ok = quality_ok and quality_sun.shadow_enabled and is_equal_approx(float(world.get("_dynamic_scale")), 1.0)
+	var slow: float = world.call("_next_dynamic_scale", 2, 0.85, 0.05)
+	var fast: float = world.call("_next_dynamic_scale", 2, 0.75, 0.02)
+	var stable: float = world.call("_next_dynamic_scale", 2, 0.75, 0.033)
+	var high: float = world.call("_next_dynamic_scale", 4, 1.0, 0.05)
+	quality_ok = quality_ok and is_equal_approx(slow, 0.80) and is_equal_approx(fast, 0.80) and is_equal_approx(stable, 0.75) and is_equal_approx(high, 1.0)
+	Game.quality_tier = quality_before
+	world.call("apply_quality")
+	_log("INFO" if quality_ok else "FAIL", "five quality profiles, legacy migration and resolution control=%s" % str(quality_ok))
 	var monitor := world.get_node_or_null("HUD/PerformanceMonitor")
 	if monitor == null:
 		_log("FAIL", "performance monitor missing")
@@ -2079,7 +2105,7 @@ func _run() -> void:
 	# Performance on any slow or software renderer - which is exactly what CI
 	# runs - and that tier disables glow, SSAO and MSAA, so the published
 	# screenshot was showing the worst settings the game can produce.
-	Game.set_quality_tier(2)
+	Game.set_quality_tier(4)
 	if world.has_method("apply_quality"):
 		world.call("apply_quality")
 	if world.has_method("_set_beauty_time"):

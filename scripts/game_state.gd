@@ -116,13 +116,13 @@ var has_won: bool = false
 var quest_text: String = ""
 
 ## 0 = Balanced, 1 = Performance, 2 = High. Applied by the world when it loads.
-var quality_tier: int = 0
+var quality_tier: int = 2
 ## Set by Game.start_game(); the world consumes it and unpauses the tree on
 ## its first frame (queued scene changes can otherwise keep the menu pause).
 var pending_unpause: bool = false
 ## False until the world has booted at least once this session.
 var booted: bool = false
-const QUALITY_NAMES := ["Balanced", "Performance", "High"]
+const QUALITY_NAMES := ["Ultra Low", "Low", "Medium", "High", "Ultra"]
 
 ## Shared world facts used by water, enemies and weather systems.
 var water_level: float = 1.2
@@ -1181,13 +1181,22 @@ func _save_quality() -> void:
 	## silently go back to the heaviest preset on the next launch.
 	var cfg := ConfigFile.new()
 	cfg.set_value("video", "quality_tier", quality_tier)
+	cfg.set_value("video", "quality_version", 2)
 	cfg.save("user://video.cfg")
+
+
+func _quality_from_config(cfg: ConfigFile) -> int:
+	var value := int(cfg.get_value("video", "quality_tier", 0))
+	if int(cfg.get_value("video", "quality_version", 1)) < 2:
+		# Preserve old Balanced / Performance / High choices on upgrade.
+		return [2, 1, 3][clampi(value, 0, 2)]
+	return clampi(value, 0, QUALITY_NAMES.size() - 1)
 
 
 func load_quality() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load("user://video.cfg") == OK:
-		quality_tier = clampi(int(cfg.get_value("video", "quality_tier", 0)), 0, QUALITY_NAMES.size() - 1)
+		quality_tier = _quality_from_config(cfg)
 
 
 func boot_direct() -> void:
