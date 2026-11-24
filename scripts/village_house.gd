@@ -35,8 +35,8 @@ func _ready() -> void:
 var furniture: Array[Dictionary] = []
 
 
-func register_furniture(id: String, label: String, at: Vector3) -> void:
-	furniture.append({"id": id, "name": label, "position": at})
+func register_furniture(id: String, label: String, at: Vector3, message: String = "") -> void:
+	furniture.append({"id": id, "name": label, "position": at, "message": message})
 
 
 func interaction_for(actor: Node3D) -> Dictionary:
@@ -62,6 +62,9 @@ func try_interact(actor: Node3D) -> bool:
 	if choice.is_empty(): return false
 	var id := str(choice["id"])
 	if id != "door":
+		if id.begins_with("prop_"):
+			Game.toast.emit(str(choice.get("message", "You examine the object.")))
+			return true
 		match id:
 			"bed":
 				Game.heal(Game.max_hp() * 0.25)

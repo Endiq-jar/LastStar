@@ -17,6 +17,7 @@ const RUG := preload("res://assets/furniture/rug_rectangle_A.gltf")
 const NPC := preload("res://scripts/settler.gd")
 const ITEM := preload("res://scripts/settlement_item.gd")
 const HOUSE := preload("res://scripts/village_house.gd")
+const PROPS := preload("res://scripts/interior_props.gd")
 const LOAD_DISTANCE := 230.0
 const UNLOAD_DISTANCE := 290.0
 
@@ -261,6 +262,16 @@ func _house(site_index: int, house_slot: int) -> Node3D:
 		_furnish(house, SHELF, "shelf", "Read shelf", Vector3(0.0, 0.18, 1.85), PI)
 	if (site_index + house_slot) % 4 != 3:
 		_furnish(house, RUG, "rug", "Inspect rug", Vector3(0.05, 0.08, 0.0))
+	# Two small props per house, selected deterministically, never all 20 at once.
+	for prop_slot in range(2):
+		var prop_index := (site_index * 6 + house_slot * 2 + prop_slot) % PROPS.ITEMS.size()
+		var definition: Array = PROPS.ITEMS[prop_index]
+		var prop := PROPS.make(prop_index)
+		var id := "prop_" + str(definition[0])
+		prop.name = "Furniture_" + id
+		prop.position = Vector3(1.55 if prop_slot == 0 else -1.55, 0.08, -0.55 if prop_slot == 0 else -0.35)
+		house.add_child(prop)
+		house.register_furniture(id, "Inspect " + str(definition[0]).replace("_", " "), prop.position, "You examine " + str(definition[1]) + ".")
 	return house
 
 

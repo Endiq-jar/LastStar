@@ -809,21 +809,25 @@ func _run() -> void:
 	var house_ok := false
 	var interior_variants_ok := true
 	var interior_variants := {}
+	var prop_census := {}
 	if settlement_manager != null:
 		for settlement_index in range(14):
 			for house_index in range(3):
 				var sample_house: Node3D = settlement_manager.call("_house", settlement_index, house_index)
 				var furnishing_list: Array = sample_house.get("furniture")
 				interior_variants[int(sample_house.get_meta("interior_variant"))] = true
-				interior_variants_ok = interior_variants_ok and furnishing_list.size() >= 2 and furnishing_list.size() < 6
+				interior_variants_ok = interior_variants_ok and furnishing_list.size() >= 4 and furnishing_list.size() <= 6
 				for furnishing in furnishing_list:
 					interior_variants_ok = interior_variants_ok and sample_house.has_node("Furniture_" + str(furnishing["id"]))
+					if str(furnishing["id"]).begins_with("prop_"):
+						prop_census[str(furnishing["id"])] = true
+						interior_variants_ok = interior_variants_ok and not str(furnishing["message"]).is_empty()
 				interior_variants_ok = interior_variants_ok and not (sample_house.has_node("Furniture_bed") and sample_house.has_node("Furniture_couch"))
 				sample_house.free()
 	else:
 		interior_variants_ok = false
-	interior_variants_ok = interior_variants_ok and interior_variants.size() == 42
-	_log("INFO" if interior_variants_ok else "FAIL", "42 house variants have registered furnishings without all models=%s" % str(interior_variants_ok))
+	interior_variants_ok = interior_variants_ok and interior_variants.size() == 42 and prop_census.size() == 20
+	_log("INFO" if interior_variants_ok else "FAIL", "42 house variants contain 20 registered props without all models=%s" % str(interior_variants_ok))
 	if settlement_manager != null and menu != null:
 		var loaded: Dictionary = settlement_manager.get("_loaded")
 		if loaded.has("ashvale"):
@@ -899,6 +903,11 @@ func _run() -> void:
 				var furniture_ok := nearby_button != null and nearby_button.visible and nearby_button.text == "Rest at bed"
 				furniture_hud.call("_use_nearby_house_object")
 				furniture_ok = furniture_ok and Game.current_hp() > Game.max_hp() * 0.5
+				player.global_position = house.to_global(Vector3(1.55, 0.1, -0.55))
+				furniture_hud.call("_update_nearby_object_button")
+				var prop_choice: Dictionary = house.call("interaction_for", player)
+				furniture_ok = furniture_ok and str(prop_choice.get("id", "")).begins_with("prop_") and nearby_button.visible and nearby_button.text.begins_with("Inspect")
+				furniture_ok = furniture_ok and bool(house.call("try_interact", player))
 				Game.set_hp(old_health)
 				player.global_position = house.to_global(Vector3(10, 0.1, 10))
 				furniture_hud.call("_update_nearby_object_button")
