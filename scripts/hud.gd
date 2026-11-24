@@ -33,6 +33,8 @@ var _quality_btn: Button
 var _perf_monitor: Control
 var _adventure_menu: Control
 var _toast_tween: Tween
+var _context_button: Button
+var _context_clock := 0.0
 
 
 func _ready() -> void:
@@ -228,6 +230,13 @@ func _build() -> void:
 	UI.button(talk)
 	talk.pressed.connect(_talk_to_guard)
 	navigation.add_child(talk)
+	_context_button = Button.new()
+	_context_button.name = "NearbyObjectButton"
+	_context_button.custom_minimum_size = Vector2(110, 42)
+	_context_button.visible = false
+	UI.button(_context_button)
+	_context_button.pressed.connect(_use_nearby_house_object)
+	bottom_center.add_child(_context_button)
 	var dodge := Button.new()
 	dodge.name = "DodgeButton"
 	dodge.text = "Dodge"
@@ -584,6 +593,37 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+func _nearest_house_interaction(actor: Node3D) -> Dictionary:
+	var best := INF
+	var result: Dictionary = {}
+	for house in get_tree().get_nodes_in_group("village_house"):
+		if not is_instance_valid(house) or house.is_queued_for_deletion(): continue
+		var choice: Dictionary = house.call("interaction_for", actor)
+		if not choice.is_empty() and float(choice["distance"]) < best:
+			best = float(choice["distance"])
+			result = {"house": house, "name": choice["name"]}
+	return result
+
+
+func _use_nearby_house_object() -> void:
+	if Game.is_paused or Game.has_won: return
+	var actor := get_tree().get_first_node_in_group("player") as Node3D
+	if actor == null: return
+	# Re-evaluate at click time so a stale button cannot act at a distance.
+	var target := _nearest_house_interaction(actor)
+	if not target.is_empty(): target["house"].call("try_interact", actor)
+
+
+func _update_nearby_object_button() -> void:
+	if _context_button == null: return
+	var actor := get_tree().get_first_node_in_group("player") as Node3D
+	var target: Dictionary = {}
+	if actor != null and not Game.is_paused and not Game.has_won:
+		target = _nearest_house_interaction(actor)
+	_context_button.visible = not target.is_empty()
+	if not target.is_empty(): _context_button.text = str(target["name"])
+
+
 func _talk_to_guard() -> void:
 	if Game.is_paused or Game.has_won:
 		return
@@ -593,9 +633,10 @@ func _talk_to_guard() -> void:
 	for hollow in get_tree().get_nodes_in_group("hollow_entrance"):
 		if hollow.call("try_interact", player):
 			return
-	for house in get_tree().get_nodes_in_group("village_house"):
-		if house.call("try_interact", player):
-			return
+	var house_target := _nearest_house_interaction(player)
+	if not house_target.is_empty():
+		house_target["house"].call("try_interact", player)
+		return
 	var nearest: Node3D = null
 	var distance := 8.0
 	for npc in get_tree().get_nodes_in_group("story_npc"):
@@ -652,6 +693,10 @@ func _update_quality_label() -> void:
 
 
 func _process(_delta: float) -> void:
+	_context_clock -= _delta
+	if _context_clock <= 0.0:
+		_context_clock = 0.15
+		_update_nearby_object_button()
 	_update_compass()
 	# Guard the bars: if _build() ever bails early these are null, and assigning
 	# to a null property spams a script error every frame.

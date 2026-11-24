@@ -872,9 +872,24 @@ func _run() -> void:
 				house.call("_process", 0.2)
 				var roof := house.get_node("RoofParts") as Node3D
 				var roof_hidden := not roof.visible
+				# The proximity button and keyboard action share the same live target.
+				var hud := world.get_node("HUD")
+				var old_health: float = Game.current_hp()
+				Game.set_hp(Game.max_hp() * 0.5)
+				player.global_position = house.to_global(Vector3(1.0, 0.1, 0.35))
+				hud.call("_update_nearby_object_button")
+				var nearby_button := hud.get("_context_button") as Button
+				var furniture_ok := nearby_button != null and nearby_button.visible and nearby_button.text == "Rest at bed"
+				hud.call("_use_nearby_house_object")
+				furniture_ok = furniture_ok and Game.current_hp() > Game.max_hp() * 0.5
+				Game.set_hp(old_health)
+				player.global_position = house.to_global(Vector3(10, 0.1, 10))
+				hud.call("_update_nearby_object_button")
+				furniture_ok = furniture_ok and not nearby_button.visible
+				house_ok = furniture_ok
 				player.global_position = old_pos
 				house.call("_process", 0.2)
-				house_ok = door_closed and door_opened and door_hit.is_empty() and door_closed_again and house.scale.x > 1.0 and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
+				house_ok = house_ok and door_closed and door_opened and door_hit.is_empty() and door_closed_again and house.scale.x > 1.0 and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
 				_log("INFO", "House checks closed=%s opened=%s clear=%s reclosed=%s scale=%s wall=%s roof_hidden=%s roof_visible=%s ramp=%s" % [door_closed, door_opened, door_hit.is_empty(), door_closed_again, house.scale, not wall_hit.is_empty(), roof_hidden, roof.visible, house.has_node("EntranceRamp")])
 	_log("INFO" if resident_ok and quest_ui_ok and house_ok else "FAIL", "20 residents=%s independent quest=%s enterable house=%s" % [str(resident_ok), str(quest_ui_ok), str(house_ok)])
 

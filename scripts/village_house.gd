@@ -31,10 +31,50 @@ func _ready() -> void:
 	body.add_child(_door_shape)
 
 
-func try_interact(actor: Node3D) -> bool:
+# Furniture anchors match the furnishings placed by SettlementStream. The
+# actor must be indoors, preventing interactions through the house walls.
+const FURNITURE := [
+	{"id": "bed", "name": "Rest at bed", "position": Vector3(1.0, 0.0, 0.35)},
+	{"id": "table", "name": "Inspect table", "position": Vector3(-1.0, 0.0, 0.65)},
+	{"id": "chair", "name": "Inspect chair", "position": Vector3(-1.0, 0.0, 1.5)},
+	{"id": "shelf", "name": "Read shelf", "position": Vector3(0.0, 0.0, 1.85)},
+	{"id": "rug", "name": "Inspect rug", "position": Vector3(0.05, 0.0, 0.0)},
+]
+
+
+func interaction_for(actor: Node3D) -> Dictionary:
 	var local := to_local(actor.global_position)
-	if absf(local.x + 1.0) > 1.3 or absf(local.z + 2.0) > 1.5 or absf(local.y) > 2.0:
-		return false
+	if absf(local.x + 1.0) <= 1.3 and absf(local.z + 2.0) <= 1.5 and absf(local.y) <= 2.0:
+		return {"id": "door", "name": "Close door" if _open else "Open door", "distance": actor.global_position.distance_to(to_global(Vector3(-1, 0, -2)))}
+	if absf(local.x) >= 1.95 or absf(local.z) >= 1.95 or local.y < -0.7 or local.y > 3.2:
+		return {}
+	var best := 2.0
+	var selected: Dictionary = {}
+	for item in FURNITURE:
+		var anchor: Vector3 = item["position"]
+		var distance := Vector2(local.x - anchor.x, local.z - anchor.z).length()
+		if distance < best:
+			best = distance
+			selected = item.duplicate()
+			selected["distance"] = distance * scale.x
+	return selected
+
+
+func try_interact(actor: Node3D) -> bool:
+	var choice := interaction_for(actor)
+	if choice.is_empty(): return false
+	var id := str(choice["id"])
+	if id != "door":
+		match id:
+			"bed":
+				Game.heal(Game.max_hp() * 0.25)
+				Game.toast.emit("You rest for a moment and recover health.")
+			"table": Game.toast.emit("A well-used table, ready for a shared meal.")
+			"chair": Game.toast.emit("A wooden chair stands beside the table.")
+			"shelf": Game.toast.emit("The shelf holds books and keepsakes from the settlement.")
+			"rug": Game.toast.emit("A woven rug makes the room feel welcoming.")
+		return true
+	var local := to_local(actor.global_position)
 	# Do not close onto the player in the doorway.
 	if _open and absf(local.z + 2.0) < 0.5 and absf(local.x + 1.0) < 0.8:
 		Game.toast.emit("Step clear of the doorway to close it.")
