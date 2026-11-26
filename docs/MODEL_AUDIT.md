@@ -79,3 +79,11 @@ all attached MeshInstance3D triangles, including outlines and hidden wings,
 against 8,000. This is an optimization of the current primitive art, not a new
 hand-painted anime model or animation. Vertex counts and character textures have
 not yet been brought to the requested targets.
+
+
+The ghost and orc Hollow sentries now use simplified derivatives of their
+original CC0 models. The source glTF mesh definitions have 1,510 / 1,835
+triangles and 1,313 / 1,317 vertices respectively. Skins and all animation
+tracks were retained; CI also checks imported mesh counts and animation setup.
+The original models remain available. Manual visual and deformation testing is
+still needed; this does not implement the requested LODs for all enemies.

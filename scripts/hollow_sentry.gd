@@ -1,8 +1,8 @@
 extends CharacterBody3D
 ## A light but dangerous Hollow scout with an evadable targeted strike.
 signal defeated
-const CREATURE := preload("res://assets/creatures/Ghost_Skull.gltf")
-const ORC := preload("res://assets/creatures/Orc.gltf")
+const CREATURE := preload("res://assets/creatures/Ghost_Skull_Scout.glb")
+const ORC := preload("res://assets/creatures/Orc_Scout.glb")
 var is_orc := false
 var hp := 260.0
 var _power_multiplier := 1.0

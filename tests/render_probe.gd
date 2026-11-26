@@ -1075,10 +1075,23 @@ func _run() -> void:
 	challenge_trap._power_multiplier = 15000.0
 	challenge_trap.player = damage_receiver
 	challenge_fixture.add_child(challenge_scout)
+	var scout_orc = load("res://scripts/hollow_sentry.gd").new()
+	scout_orc.is_orc = true
+	challenge_fixture.add_child(scout_orc)
 	challenge_fixture.add_child(challenge_boss)
 	challenge_fixture.add_child(challenge_slime)
 	challenge_fixture.add_child(challenge_trap)
 	tier_ok = tier_ok and is_equal_approx(challenge_scout.hp, 3900000.0) and is_equal_approx(challenge_boss.max_hp, 16500000.0) and is_equal_approx(challenge_slime.max_hp, 150.0)
+	# Both imported scout variants must keep a live skinned animation and fit
+	# the small-enemy geometry budget after Godot's import.
+	for scout in [challenge_scout, scout_orc]:
+		var scout_visual: Node3D = scout.get("_visual")
+		var scout_anim: AnimationPlayer = scout.get("_animation")
+		var scout_triangles := _recursive_mesh_triangles(scout_visual)
+		var scout_vertices := _recursive_mesh_vertices(scout_visual)
+		tier_ok = tier_ok and scout_triangles > 0 and scout_triangles <= 2000 and scout_vertices <= 1500
+		tier_ok = tier_ok and not scout_visual.find_children("*", "Skeleton3D", true, false).is_empty() and scout_anim != null and not scout_anim.current_animation.is_empty()
+		_log("INFO", "Scout %s: %d triangles, %d vertices" % ["orc" if scout.is_orc else "ghost", scout_triangles, scout_vertices])
 	challenge_trap._state = "warning"
 	challenge_trap._timer = 0.0
 	challenge_trap._physics_process(0.01)
@@ -3498,6 +3511,19 @@ func _report_avatar_meshes(root: Node) -> void:
 		if avatar_mesh != null and avatar_mesh.get_faces().size() / 3 > 200:
 			_log("INFO", "Avatar component %s %s triangles=%d" % [root.name, avatar_mesh.get_class(), avatar_mesh.get_faces().size() / 3])
 	for child in root.get_children(): _report_avatar_meshes(child)
+
+func _recursive_mesh_vertices(root: Node) -> int:
+	var total := 0
+	if root is MeshInstance3D:
+		var mesh: Mesh = (root as MeshInstance3D).mesh
+		if mesh != null:
+			for surface in range(mesh.get_surface_count()):
+				var arrays: Array = mesh.surface_get_arrays(surface)
+				if arrays.size() > Mesh.ARRAY_VERTEX and arrays[Mesh.ARRAY_VERTEX] != null:
+					total += arrays[Mesh.ARRAY_VERTEX].size()
+	for child in root.get_children(): total += _recursive_mesh_vertices(child)
+	return total
+
 
 func _recursive_mesh_triangles(root: Node) -> int:
 	var total := 0
