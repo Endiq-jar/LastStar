@@ -1034,6 +1034,7 @@ func _run() -> void:
 		var avatar_host := Node3D.new()
 		var avatar_rig: Dictionary = builder.build(avatar_host, avatar_data)
 		var avatar_triangles: int = _recursive_mesh_triangles(avatar_host)
+		if str(avatar_data["name"]) == "Sora": _report_avatar_meshes(avatar_host)
 		avatar_budget_ok = avatar_budget_ok and not avatar_rig.is_empty() and avatar_triangles > 0 and avatar_triangles <= 8000
 		_log("INFO", "Playable %s: %d triangles including outlines and equipment" % [avatar_data["name"], avatar_triangles])
 		avatar_host.free()
@@ -3489,6 +3490,14 @@ func _orbit_player(world: Node, yaw_delta: float, pitch: float) -> bool:
 ## and a genuine orbit score alike. The share of clearly-changed pixels separates
 ## them - wind moves a few percent of the frame, a camera turn moves most of it.
 
+
+
+func _report_avatar_meshes(root: Node) -> void:
+	if root is MeshInstance3D:
+		var avatar_mesh: Mesh = (root as MeshInstance3D).mesh
+		if avatar_mesh != null and avatar_mesh.get_faces().size() / 3 > 200:
+			_log("INFO", "Avatar component %s %s triangles=%d" % [root.name, avatar_mesh.get_class(), avatar_mesh.get_faces().size() / 3])
+	for child in root.get_children(): _report_avatar_meshes(child)
 
 func _recursive_mesh_triangles(root: Node) -> int:
 	var total := 0
