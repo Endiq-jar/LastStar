@@ -26,32 +26,60 @@ const ITEMS := [
 ]
 const COLORS := [Color(0.38, 0.23, 0.16), Color(0.57, 0.34, 0.22), Color(0.40, 0.52, 0.67), Color(0.70, 0.53, 0.25), Color(0.91, 0.84, 0.69), Color(1.0, 0.70, 0.26), Color(0.27, 0.47, 0.48), Color(0.29, 0.51, 0.30)]
 static var _meshes: Dictionary = {}
-static var _materials: Dictionary = {}
+static var _material: StandardMaterial3D
+
+
+static func _build_mesh(definition: Array) -> ArrayMesh:
+	# Merge all cuboids into one indexed surface, with vertex colours preserving
+	# the original palette and per-face normals. This avoids a draw call per part.
+	var positions := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var indices := PackedInt32Array()
+	for piece in definition[2]:
+		var box := BoxMesh.new()
+		box.size = Vector3(piece[0], piece[1], piece[2])
+		var arrays := box.surface_get_arrays(0)
+		var source_positions: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var source_normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		var source_indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		var base := positions.size()
+		var offset := Vector3(piece[3], piece[4], piece[5])
+		for position in source_positions:
+			positions.append(position + offset)
+			colors.append(COLORS[int(piece[6])])
+		normals.append_array(source_normals)
+		if source_indices.is_empty():
+			for index in range(source_positions.size()): indices.append(base + index)
+		else:
+			for index in source_indices: indices.append(base + index)
+	var combined := []
+	combined.resize(Mesh.ARRAY_MAX)
+	combined[Mesh.ARRAY_VERTEX] = positions
+	combined[Mesh.ARRAY_NORMAL] = normals
+	combined[Mesh.ARRAY_COLOR] = colors
+	combined[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, combined)
+	return mesh
 
 
 static func make(index: int) -> Node3D:
 	var number := posmod(index, ITEMS.size())
 	var definition: Array = ITEMS[number]
+	if not _meshes.has(number): _meshes[number] = _build_mesh(definition)
+	if _material == null:
+		_material = StandardMaterial3D.new()
+		_material.vertex_color_use_as_albedo = true
+		_material.roughness = 0.9
 	var root := Node3D.new()
 	root.name = "Prop_" + str(definition[0])
-	for piece in definition[2]:
-		var size := Vector3(piece[0], piece[1], piece[2])
-		if not _meshes.has(size):
-			var box := BoxMesh.new()
-			box.size = size
-			_meshes[size] = box
-		var color_index := int(piece[6])
-		if not _materials.has(color_index):
-			var material := StandardMaterial3D.new()
-			material.albedo_color = COLORS[color_index]
-			material.roughness = 0.9
-			_materials[color_index] = material
-		var visual := MeshInstance3D.new()
-		visual.mesh = _meshes[size]
-		visual.material_override = _materials[color_index]
-		visual.position = Vector3(piece[3], piece[4], piece[5])
-		visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		visual.visibility_range_end = 35.0
-		visual.visibility_range_end_margin = 5.0
-		root.add_child(visual)
+	var visual := MeshInstance3D.new()
+	visual.name = "Model"
+	visual.mesh = _meshes[number]
+	visual.material_override = _material
+	visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	visual.visibility_range_end = 35.0
+	visual.visibility_range_end_margin = 5.0
+	root.add_child(visual)
 	return root

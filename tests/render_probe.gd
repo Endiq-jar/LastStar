@@ -840,6 +840,24 @@ func _run() -> void:
 	var interior_variants_ok := true
 	var interior_variants := {}
 	var prop_census := {}
+	# All prop types use one cached mesh surface, per-face normals and palette
+	# colours. Three-box props have 72 split-normal vertices (near the 70 target).
+	var prop_factory = load("res://scripts/interior_props.gd")
+	var prop_budget_ok := prop_factory.ITEMS.size() == 20
+	for prop_type in range(prop_factory.ITEMS.size()):
+		var prop_sample: Node3D = prop_factory.make(prop_type)
+		var prop_repeat: Node3D = prop_factory.make(prop_type)
+		var prop_mesh := prop_sample.get_node_or_null("Model") as MeshInstance3D
+		var prop_mesh_repeat := prop_repeat.get_node_or_null("Model") as MeshInstance3D
+		if prop_mesh == null or prop_mesh_repeat == null:
+			prop_budget_ok = false
+		else:
+			var prop_counts := _weapon_mesh_budget(prop_sample)
+			prop_budget_ok = prop_budget_ok and prop_sample.get_child_count() == 1 and prop_mesh.mesh.get_surface_count() == 1 and prop_mesh.mesh == prop_mesh_repeat.mesh
+			prop_budget_ok = prop_budget_ok and prop_counts.x > 0 and prop_counts.x <= 200 and prop_counts.y <= 72
+		prop_sample.free()
+		prop_repeat.free()
+	_log("INFO" if prop_budget_ok else "FAIL", "20 props: shared single-surface meshes within 200 triangles and 72 vertices=%s" % str(prop_budget_ok))
 	if settlement_manager != null:
 		for settlement_index in range(14):
 			for house_index in range(3):
@@ -966,9 +984,17 @@ func _run() -> void:
 				furniture_ok = furniture_ok and str(prop_choice.get("id", "")).begins_with("prop_") and nearby_button.visible and nearby_button.text.begins_with("Inspect")
 				furniture_ok = furniture_ok and bool(house.call("try_interact", player))
 				Game.set_hp(old_health)
-				player.global_position = house.to_global(Vector3(10, 0.1, 10))
+				player.global_position = house.to_global(Vector3(100, 0.1, 100))
 				furniture_hud.call("_update_nearby_object_button")
 				furniture_ok = furniture_ok and not nearby_button.visible
+				if residents.size() == 20:
+					var interaction_person := residents[19] as Node3D
+					player.global_position = interaction_person.global_position
+					furniture_hud.call("_update_nearby_object_button")
+					furniture_ok = furniture_ok and nearby_button.visible and nearby_button.text.begins_with("Talk to ")
+					furniture_hud.call("_use_nearby_house_object")
+					furniture_ok = furniture_ok and menu.visible and str(menu.get("dialogue_site_id")) == "ashvale" and int(menu.get("dialogue_resident_index")) == 19
+					menu.call("close_menu")
 				house_ok = furniture_ok
 				player.global_position = old_pos
 				house.call("_process", 0.2)

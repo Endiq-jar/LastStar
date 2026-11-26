@@ -605,13 +605,47 @@ func _nearest_house_interaction(actor: Node3D) -> Dictionary:
 	return result
 
 
+func _nearest_story_npc(actor: Node3D) -> Node3D:
+	var nearest: Node3D = null
+	var distance := 8.0
+	for npc in get_tree().get_nodes_in_group("story_npc"):
+		if not is_instance_valid(npc) or npc.is_queued_for_deletion() or not npc is Node3D: continue
+		var d: float = actor.global_position.distance_to(npc.global_position)
+		if d < distance:
+			distance = d
+			nearest = npc
+	return nearest
+
+
+func _npc_name(npc: Node3D) -> String:
+	if npc.get_script() != null and npc.get_script().resource_path == "res://scripts/settler.gd":
+		var resident: Dictionary = SETTLEMENTS.resident(str(npc.get("site_id")), int(npc.get("resident_index")))
+		return str(resident.get("name", "resident"))
+	return "Ilyra"
+
+
+func _open_npc_dialogue(npc: Node3D) -> void:
+	if npc == null or not is_instance_valid(npc) or npc.is_queued_for_deletion(): return
+	var id := ""
+	var index := 0
+	if npc.get_script() != null and npc.get_script().resource_path == "res://scripts/settler.gd":
+		id = str(npc.get("site_id"))
+		index = int(npc.get("resident_index"))
+	_adventure_menu.set("dialogue_site_id", id)
+	_adventure_menu.set("dialogue_resident_index", index)
+	_open_adventure("Dialogue")
+
+
 func _use_nearby_house_object() -> void:
 	if Game.is_paused or Game.has_won: return
 	var actor := get_tree().get_first_node_in_group("player") as Node3D
 	if actor == null: return
 	# Re-evaluate at click time so a stale button cannot act at a distance.
 	var target := _nearest_house_interaction(actor)
-	if not target.is_empty(): target["house"].call("try_interact", actor)
+	if not target.is_empty():
+		target["house"].call("try_interact", actor)
+	else:
+		_open_npc_dialogue(_nearest_story_npc(actor))
 
 
 func _update_nearby_object_button() -> void:
@@ -620,6 +654,9 @@ func _update_nearby_object_button() -> void:
 	var target: Dictionary = {}
 	if actor != null and not Game.is_paused and not Game.has_won:
 		target = _nearest_house_interaction(actor)
+		if target.is_empty():
+			var npc := _nearest_story_npc(actor)
+			if npc != null: target = {"name": "Talk to " + _npc_name(npc)}
 	_context_button.visible = not target.is_empty()
 	if not target.is_empty(): _context_button.text = str(target["name"])
 
@@ -637,26 +674,11 @@ func _talk_to_guard() -> void:
 	if not house_target.is_empty():
 		house_target["house"].call("try_interact", player)
 		return
-	var nearest: Node3D = null
-	var distance := 8.0
-	for npc in get_tree().get_nodes_in_group("story_npc"):
-		if npc is Node3D:
-			var d: float = player.global_position.distance_to(npc.global_position)
-			if d < distance:
-				distance = d
-				nearest = npc
+	var nearest := _nearest_story_npc(player)
 	if nearest == null:
 		Game.toast.emit("Move closer to a resident to talk.")
 		return
-	var id := ""
-	var index := 0
-	if nearest.get_script() != null and nearest.get_script().resource_path == "res://scripts/settler.gd":
-		id = str(nearest.get("site_id"))
-		index = int(nearest.get("resident_index"))
-	_adventure_menu.set("dialogue_site_id", id)
-	_adventure_menu.set("dialogue_resident_index", index)
-	_open_adventure("Dialogue")
-
+	_open_npc_dialogue(nearest)
 
 func _open_adventure(tab: String = "Character") -> void:
 	if _adventure_menu != null and not Game.is_paused and not Game.has_won:
