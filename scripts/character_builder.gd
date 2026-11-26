@@ -153,7 +153,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	skirt.radial_segments = 16
 	_body(_outlined(torso, skirt, accent, Vector3(0, 0.82, 0), 0.010))
 
-	var chest := CapsuleMesh.new()
+	var chest := SphereMesh.new()
 	chest.radius = 0.19
 	chest.height = 0.56
 	chest.radial_segments = 12
@@ -308,7 +308,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		b.rotation_degrees = Vector3(6, 0, -14.0 + i * 7.0)
 
 	for side in [-1.0, 1.0]:
-		var lock := CapsuleMesh.new()
+		var lock := SphereMesh.new()
 		lock.radius = 0.045
 		lock.height = 0.42
 		lock.radial_segments = 12
@@ -316,7 +316,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		var l := _add(head, lock, hair_tip, Vector3(0.15 * side, -0.16, 0.0))
 		l.rotation_degrees = Vector3(0, 0, 6.0 * side)
 
-	var back_hair := CapsuleMesh.new()
+	var back_hair := SphereMesh.new()
 	back_hair.radius = 0.13
 	back_hair.height = 0.60
 	back_hair.radial_segments = 16
@@ -343,7 +343,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		arm.name = "ArmL" if side < 0 else "ArmR"
 		arm.position = Vector3(0.225 * side, 1.38, 0)
 		torso.add_child(arm)
-		var upper := CapsuleMesh.new()
+		var upper := SphereMesh.new()
 		upper.radius = 0.055
 		upper.height = 0.34
 		upper.radial_segments = 12
@@ -370,13 +370,13 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		leg.name = "LegL" if side < 0 else "LegR"
 		leg.position = Vector3(0.095 * side, 0.80, 0)
 		visual.add_child(leg)
-		var thigh := CapsuleMesh.new()
+		var thigh := SphereMesh.new()
 		thigh.radius = 0.068
 		thigh.height = 0.46
 		thigh.radial_segments = 12
 		thigh.rings = 6
 		_body(_outlined(leg, thigh, skin, Vector3(0, -0.23, 0), 0.007))
-		var boot := CapsuleMesh.new()
+		var boot := SphereMesh.new()
 		boot.radius = 0.082
 		boot.height = 0.40
 		boot.radial_segments = 12
