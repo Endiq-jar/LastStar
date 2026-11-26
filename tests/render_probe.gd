@@ -72,7 +72,10 @@ func _ready() -> void:
 
 func _watchdog() -> void:
 	await get_tree().create_timer(120.0).timeout
-	print("PROBE_FAIL: probe timed out after 120s (no frames were drawn)")
+	_log("FAIL", "probe timed out after 120s (no frames were drawn)")
+	_transcript.append("PROBE_RESULT: FAIL (watchdog)")
+	_transcript.append("PROBE_END")
+	if _out_dir != "": _dump_transcript(_out_dir)
 	print("PROBE_RESULT: FAIL (watchdog)")
 	print("PROBE_END")
 	get_tree().quit(1)
@@ -3438,13 +3441,13 @@ func _measure_ground_ratio(img: Image) -> Dictionary:
 	}
 
 func _finish(fails: int) -> void:
-	# Always leave the transcript behind, whichever path reached here.
+	# Include the final verdict in the published transcript as well as stdout.
+	var verdict := "PROBE_RESULT: PASS" if fails == 0 else "PROBE_RESULT: FAIL (%d problems)" % fails
+	_transcript.append(verdict)
+	_transcript.append("PROBE_END")
 	if _out_dir != "":
 		_dump_transcript(_out_dir)
-	if fails == 0:
-		print("PROBE_RESULT: PASS")
-	else:
-		print("PROBE_RESULT: FAIL (%d problems)" % fails)
+	print(verdict)
 	print("PROBE_END")
 	await get_tree().process_frame
 	get_tree().quit(0 if fails == 0 else 1)
