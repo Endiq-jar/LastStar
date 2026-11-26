@@ -302,6 +302,9 @@ func _furnish(house: Node3D, model: PackedScene, id: String, label: String, at: 
 	furnishing.name = "Furniture_" + id
 	furnishing.position = at
 	furnishing.rotation.y = yaw
+	# Interior details do not need to be drawn across the settlement. Keep the
+	# interaction registration and model intact; only distance-cull the visuals.
+	_set_mesh_range(furnishing, 0.0, 50.0)
 	house.add_child(furnishing)
 	house.call("register_furniture", id, label, at)
 

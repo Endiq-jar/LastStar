@@ -292,8 +292,8 @@ jobs:
               sleep $((attempt * 5))
             done
             if [ "$OK" -ne 1 ]; then
-              echo "::warning::no GL stack for the pixel probe - no frame this run"
-              exit 0
+              echo "::warning::no GL stack for the pixel probe - visual verification did not run"
+              exit 1
             fi
           fi
           mkdir -p /tmp/probe
@@ -310,8 +310,8 @@ jobs:
           CODE=$?
           set -e
           if [ "$CODE" -eq 124 ]; then
-            # A timeout is an infrastructure limit on a software-GL runner, so
-            # the VISUAL assertion is skipped - but only that.
+            # A timeout leaves visual verification incomplete. The step reports
+            # failure without blocking APK export (continue-on-error above).
             #
             # This used to `exit 0` unconditionally, which threw away everything
             # the probe had already established before it stalled. On run
@@ -326,7 +326,7 @@ jobs:
               echo "::error::probe reported failures before timing out"
               exit 1
             fi
-            exit 0
+            exit 1
           fi
 
           grep -E "^PROBE_" /tmp/probe.log | while IFS= read -r line; do
@@ -352,7 +352,7 @@ jobs:
             # an infrastructure limit, not a game bug - warn, do not fail.
             echo "::warning::render probe could not start on this runner"
             tail -20 /tmp/probe.log
-            exit 0
+            exit 1
           fi
           if grep -q "PROBE_RESULT: FAIL" /tmp/probe.log; then
             # The game's own errors during the probe run are the useful part:
@@ -366,6 +366,11 @@ jobs:
             done
             tail -25 /tmp/probe.log
             echo "::error::Render probe FAILED - see the individual PROBE_FAIL messages and render-probe artifact"
+            exit 1
+          fi
+          if [ "$CODE" -ne 0 ] || ! grep -qE '^PROBE_RESULT: PASS' /tmp/probe.log; then
+            echo "::error::Render probe did not complete successfully (exit $CODE); visual verification is incomplete."
+            tail -25 /tmp/probe.log
             exit 1
           fi
           echo "Render probe passed."

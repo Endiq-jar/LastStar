@@ -866,7 +866,10 @@ func _run() -> void:
 				interior_variants[int(sample_house.get_meta("interior_variant"))] = true
 				interior_variants_ok = interior_variants_ok and furnishing_list.size() >= 4 and furnishing_list.size() <= 7
 				for furnishing in furnishing_list:
-					interior_variants_ok = interior_variants_ok and sample_house.has_node("Furniture_" + str(furnishing["id"]))
+					var furnishing_node := sample_house.get_node_or_null("Furniture_" + str(furnishing["id"]))
+					interior_variants_ok = interior_variants_ok and furnishing_node != null
+					if furnishing_node != null and not str(furnishing["id"]).begins_with("prop_"):
+						interior_variants_ok = interior_variants_ok and _mesh_ranges_match(furnishing_node, 0.0, 50.0)
 					if str(furnishing["id"]).begins_with("prop_"):
 						prop_census[str(furnishing["id"])] = true
 						interior_variants_ok = interior_variants_ok and not str(furnishing["message"]).is_empty()
