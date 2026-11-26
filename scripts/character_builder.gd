@@ -239,7 +239,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	var skull := SphereMesh.new()
 	skull.radius = 0.155
 	skull.height = 0.30
-	skull.radial_segments = 20
+	skull.radial_segments = 18
 	skull.rings = 12
 	# A thin outline on the head: at 0.012 the black hull around pale skin read as a
 	# dark helmet rather than as a drawn contour.
