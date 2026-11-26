@@ -843,7 +843,7 @@ func _run() -> void:
 	# All prop types use one cached mesh surface, per-face normals and palette
 	# colours. Three-box props have 72 split-normal vertices (near the 70 target).
 	var prop_factory = load("res://scripts/interior_props.gd")
-	var prop_budget_ok := prop_factory.ITEMS.size() == 20
+	var prop_budget_ok: bool = prop_factory.ITEMS.size() == 20
 	for prop_type in range(prop_factory.ITEMS.size()):
 		var prop_sample: Node3D = prop_factory.make(prop_type)
 		var prop_repeat: Node3D = prop_factory.make(prop_type)
