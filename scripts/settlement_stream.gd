@@ -6,6 +6,8 @@ const WALL := preload("res://assets/village/Wall_Plaster_Straight.gltf")
 const DOOR_WALL := preload("res://assets/village/Wall_Plaster_Door_Round.gltf")
 const WINDOW_WALL := preload("res://assets/village/Wall_Plaster_Window_Wide_Flat.gltf")
 const ROOF := preload("res://assets/village/Roof_RoundTiles_4x4.gltf")
+const ROOF_MID := preload("res://assets/village/Roof_RoundTiles_4x4_Mid.glb")
+const ROOF_FAR := preload("res://assets/village/Roof_RoundTiles_4x4_Far.glb")
 const GABLE := preload("res://assets/village/Roof_Front_Brick4.gltf")
 const WINDOW := preload("res://assets/village/Window_Wide_Flat1.gltf")
 const BED := preload("res://assets/furniture/bed_single_A.gltf")
@@ -207,6 +209,22 @@ func _part(parent: Node3D, scene: PackedScene, position: Vector3, yaw: float = 0
 	parent.add_child(part)
 
 
+func _roof_lod(parent: Node3D, model: PackedScene, start: float, end: float, node_name: String) -> void:
+	var variant := model.instantiate() as Node3D
+	variant.name = node_name
+	variant.position = Vector3(0, 3.1, 0)
+	parent.add_child(variant)
+	_set_mesh_range(variant, start, end)
+
+
+func _set_mesh_range(root: Node, start: float, end: float) -> void:
+	if root is GeometryInstance3D:
+		var visual := root as GeometryInstance3D
+		visual.visibility_range_begin = start
+		visual.visibility_range_end = end
+	for child in root.get_children(): _set_mesh_range(child, start, end)
+
+
 func _house(site_index: int, house_slot: int) -> Node3D:
 	var house := HOUSE.new()
 	house.set_meta("interior_variant", site_index * 3 + house_slot)
@@ -223,7 +241,11 @@ func _house(site_index: int, house_slot: int) -> Node3D:
 	var roof := Node3D.new()
 	roof.name = "RoofParts"
 	house.add_child(roof)
-	_part(roof, ROOF, Vector3(0, 3.1, 0))
+	# Roof is the heaviest house component. Preserve the source close-up and
+	# switch to independently simplified versions as its screen coverage falls.
+	_roof_lod(roof, ROOF, 0.0, 25.0, "RoofNear")
+	_roof_lod(roof, ROOF_MID, 25.0, 50.0, "RoofMid")
+	_roof_lod(roof, ROOF_FAR, 50.0, 100.0, "RoofFar")
 	_part(roof, GABLE, Vector3(0, 3.05, 2))
 	_part(roof, GABLE, Vector3(0, 3.05, -2), PI)
 	var collider := StaticBody3D.new()

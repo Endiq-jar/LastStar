@@ -939,6 +939,17 @@ func _run() -> void:
 				house.call("_process", 0.2)
 				var roof := house.get_node("RoofParts") as Node3D
 				var roof_hidden := not roof.visible
+				var roof_near := roof.get_node_or_null("RoofNear") as Node3D
+				var roof_mid := roof.get_node_or_null("RoofMid") as Node3D
+				var roof_far := roof.get_node_or_null("RoofFar") as Node3D
+				var roof_lod_ok := roof_near != null and roof_mid != null and roof_far != null
+				if roof_lod_ok:
+					var near_triangles := _recursive_mesh_triangles(roof_near)
+					var mid_triangles := _recursive_mesh_triangles(roof_mid)
+					var far_triangles := _recursive_mesh_triangles(roof_far)
+					roof_lod_ok = near_triangles > mid_triangles and mid_triangles > far_triangles and far_triangles > 0
+					roof_lod_ok = roof_lod_ok and _mesh_ranges_match(roof_near, 0.0, 25.0) and _mesh_ranges_match(roof_mid, 25.0, 50.0) and _mesh_ranges_match(roof_far, 50.0, 100.0)
+				_log("INFO" if roof_lod_ok else "FAIL", "House roof distance meshes=%s" % str(roof_lod_ok))
 				# The proximity button and keyboard action share the same live target.
 				var furniture_hud := world.get_node("HUD")
 				var old_health: float = Game.current_hp()
@@ -961,7 +972,7 @@ func _run() -> void:
 				house_ok = furniture_ok
 				player.global_position = old_pos
 				house.call("_process", 0.2)
-				house_ok = house_ok and door_closed and door_opened and door_hit.is_empty() and door_closed_again and house.scale.x > 1.0 and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
+				house_ok = house_ok and roof_lod_ok and door_closed and door_opened and door_hit.is_empty() and door_closed_again and house.scale.x > 1.0 and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
 				_log("INFO", "House checks closed=%s opened=%s clear=%s reclosed=%s scale=%s wall=%s roof_hidden=%s roof_visible=%s ramp=%s" % [door_closed, door_opened, door_hit.is_empty(), door_closed_again, house.scale, not wall_hit.is_empty(), roof_hidden, roof.visible, house.has_node("EntranceRamp")])
 	_log("INFO" if resident_ok and quest_ui_ok and house_ok else "FAIL", "20 residents=%s independent quest=%s enterable house=%s" % [str(resident_ok), str(quest_ui_ok), str(house_ok)])
 	var guard_lod_ok := false
@@ -3525,6 +3536,15 @@ func _report_avatar_meshes(root: Node) -> void:
 		if avatar_mesh != null and avatar_mesh.get_faces().size() / 3 > 200:
 			_log("INFO", "Avatar component %s %s triangles=%d" % [root.name, avatar_mesh.get_class(), avatar_mesh.get_faces().size() / 3])
 	for child in root.get_children(): _report_avatar_meshes(child)
+
+
+func _mesh_ranges_match(root: Node, begin: float, end: float) -> bool:
+	var result := true
+	if root is GeometryInstance3D:
+		var geometry := root as GeometryInstance3D
+		result = is_equal_approx(geometry.visibility_range_begin, begin) and is_equal_approx(geometry.visibility_range_end, end)
+	for child in root.get_children(): result = _mesh_ranges_match(child, begin, end) and result
+	return result
 
 func _recursive_mesh_vertices(root: Node) -> int:
 	var total := 0

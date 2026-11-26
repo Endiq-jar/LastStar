@@ -95,3 +95,10 @@ Ilyra now uses the same four low-poly distance bands as residents, plus a
 near-distance badge; her dialogue and companion support remain on the unchanged
 controller. This is an optimization of the existing simple art, not a bespoke
 important-character model or a new animation set.
+
+
+Settlement roofs now retain the original mesh within 25 m and use two lighter
+simplified versions at 25–50 m and 50–100 m, hiding the roof mesh past 100 m.
+The roof-hide-indoors and house collision logic are unchanged. These are roof
+LODs, not complete house LODs; other house parts still need optimization and the
+small-building budget is not yet guaranteed. Transitions need manual review.

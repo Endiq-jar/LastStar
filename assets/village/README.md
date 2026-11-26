@@ -12,3 +12,11 @@ removed for performance), and base-color textures were resized to 512 px and
 converted to JPEG. Geometry/buffer data is unchanged. This is only a small
 subset of the free Standard pack, not the paid Pro or Source pack.
 CC0: https://creativecommons.org/publicdomain/zero/1.0/
+
+
+`Roof_RoundTiles_4x4_Mid.glb` and `Roof_RoundTiles_4x4_Far.glb` are CC0
+simplifications of the included original roof. Generated with glTF Transform
+4.2.1 `weld`, then `simplify` using ratio 0.4/error 0.012 and ratio 0.2/error
+0.05 respectively. They preserve the material texture and node placement; the
+full original remains in use nearby. Visual transitions and distant silhouettes
+still need manual review.
