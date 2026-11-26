@@ -70,3 +70,12 @@ counts mesh triangles and stored vertices and checks each silhouette against the
 500-triangle / 350-vertex target. This does not add new textures or handcrafted
 models; the existing weapon palette texture is 3×3 pixels. Weapon ownership,
 attack behaviour and weapon IDs are unchanged.
+
+
+Playable party: existing primitive rigs retain their animation pivots, face,
+hair, outfit, equipment and outline shells; rounded details use fewer segments.
+The runtime probe builds each party member in a fully equipped outfit and counts
+all attached MeshInstance3D triangles, including outlines and hidden wings,
+against 8,000. This is an optimization of the current primitive art, not a new
+hand-painted anime model or animation. Vertex counts and character textures have
+not yet been brought to the requested targets.

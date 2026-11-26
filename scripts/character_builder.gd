@@ -156,6 +156,8 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	var chest := CapsuleMesh.new()
 	chest.radius = 0.19
 	chest.height = 0.56
+	chest.radial_segments = 12
+	chest.rings = 6
 	_body(_outlined(torso, chest, outfit, Vector3(0, 1.18, 0), 0.009))
 
 	# Was a 0.22 outer-radius hoop on a chest of radius 0.19 - a hula hoop floating
@@ -188,6 +190,8 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	var crest := SphereMesh.new()
 	crest.radius = 0.045
 	crest.height = 0.09
+	crest.radial_segments = 8
+	crest.rings = 4
 	_no_shadow(_add(torso, crest, element_glow, Vector3(0, 1.30, -0.19)))
 
 	# Belt + hanging cloth panels (a tiny bit of Genshin-ish silhouette).
@@ -195,6 +199,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	belt.top_radius = 0.21
 	belt.bottom_radius = 0.21
 	belt.height = 0.06
+	belt.radial_segments = 12
 	_no_shadow(_add(torso, belt, _toon(Color(0.09, 0.08, 0.10)), Vector3(0, 0.99, 0)))
 	var cloth_panels: Array[Node3D] = []
 	for side in [-1.0, 1.0]:
@@ -227,6 +232,8 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		var jewel := SphereMesh.new()
 		jewel.radius = 0.025
 		jewel.height = 0.05
+		jewel.radial_segments = 8
+		jewel.rings = 4
 		_no_shadow(_add(head, jewel, pin_mat, Vector3(0.13, 0.08, -0.16)))
 
 	var skull := SphereMesh.new()
@@ -281,6 +288,8 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	cap.radius = 0.168
 	cap.height = 0.28
 	cap.is_hemisphere = true
+	cap.radial_segments = 16
+	cap.rings = 8
 	var cap_mi := _add(head, cap, hair, Vector3(0, 0.02, 0.01))
 	cap_mi.scale = Vector3(1.06, 1.0, 1.08)
 	cap_mi.rotation_degrees = Vector3(-8, 0, 0)
@@ -302,12 +311,16 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		var lock := CapsuleMesh.new()
 		lock.radius = 0.045
 		lock.height = 0.42
+		lock.radial_segments = 12
+		lock.rings = 6
 		var l := _add(head, lock, hair_tip, Vector3(0.15 * side, -0.16, 0.0))
 		l.rotation_degrees = Vector3(0, 0, 6.0 * side)
 
 	var back_hair := CapsuleMesh.new()
 	back_hair.radius = 0.13
 	back_hair.height = 0.60
+	back_hair.radial_segments = 16
+	back_hair.rings = 8
 	_add(head, back_hair, hair, Vector3(0, -0.24, 0.09)).scale = Vector3(1.05, 1.0, 0.62)
 
 	# A small hair ornament, not a halo.
@@ -319,6 +332,8 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 	var ornament := SphereMesh.new()
 	ornament.radius = 0.030
 	ornament.height = 0.060
+	ornament.radial_segments = 8
+	ornament.rings = 4
 	_no_shadow(_add(head, ornament, element_glow, Vector3(0.115, 0.088, -0.055)))
 
 	# --- arms -------------------------------------------------------------
@@ -331,9 +346,13 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		var upper := CapsuleMesh.new()
 		upper.radius = 0.055
 		upper.height = 0.34
+		upper.radial_segments = 12
+		upper.rings = 6
 		_outlined(arm, upper, outfit, Vector3(0, -0.17, 0), 0.006)
 		var glove := SphereMesh.new()
 		glove.radius = 0.052
+		glove.radial_segments = 8
+		glove.rings = 4
 		_add(arm, glove, skin, Vector3(0, -0.36, 0))
 		var cuff := TorusMesh.new()
 		cuff.inner_radius = 0.05
@@ -354,10 +373,14 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		var thigh := CapsuleMesh.new()
 		thigh.radius = 0.068
 		thigh.height = 0.46
+		thigh.radial_segments = 12
+		thigh.rings = 6
 		_body(_outlined(leg, thigh, skin, Vector3(0, -0.23, 0), 0.007))
 		var boot := CapsuleMesh.new()
 		boot.radius = 0.082
 		boot.height = 0.40
+		boot.radial_segments = 12
+		boot.rings = 6
 		_body(_add(leg, boot, accent, Vector3(0, -0.55, 0)))
 
 		var toe := BoxMesh.new()

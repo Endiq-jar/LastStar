@@ -1021,6 +1021,26 @@ func _run() -> void:
 		weapon_catalog_ok = weapon_catalog_ok and base_budget.x <= 500 and base_budget.y <= 350
 		base_anchor.free()
 	_log("INFO" if weapon_catalog_ok else "FAIL", "100 weapons, equipment, saves and 500 triangle / 350 vertex budgets=%s" % str(weapon_catalog_ok))
+	# Count every mesh in the playable rigs, including outline shells, gear and
+	# normally hidden wings; preserve save state and do not replace the live rig.
+	var avatar_outfit_before: int = Game.outfit_style
+	var avatar_backpack_before: int = Game.equipped_backpack
+	var avatar_cosmetic_before: String = Game.equipped_cosmetic
+	Game.outfit_style = 4
+	Game.equipped_backpack = 1
+	Game.equipped_cosmetic = "star_pin"
+	var avatar_budget_ok := true
+	for avatar_data in Game.PARTY:
+		var avatar_host := Node3D.new()
+		var avatar_rig: Dictionary = builder.build(avatar_host, avatar_data)
+		var avatar_triangles: int = _recursive_mesh_triangles(avatar_host)
+		avatar_budget_ok = avatar_budget_ok and not avatar_rig.is_empty() and avatar_triangles > 0 and avatar_triangles <= 8000
+		_log("INFO", "Playable %s: %d triangles including outlines and equipment" % [avatar_data["name"], avatar_triangles])
+		avatar_host.free()
+	Game.outfit_style = avatar_outfit_before
+	Game.equipped_backpack = avatar_backpack_before
+	Game.equipped_cosmetic = avatar_cosmetic_before
+	_log("INFO" if avatar_budget_ok else "FAIL", "Playable rigs within 8000 triangle budget=%s" % str(avatar_budget_ok))
 	Game.settlement_quests = old_rewards["quests"]
 	Game.coins = old_rewards["coins"]
 	Game.starlight = old_rewards["starlight"]
@@ -3468,6 +3488,16 @@ func _orbit_player(world: Node, yaw_delta: float, pitch: float) -> bool:
 ## view with the grass swaying have a respectable mean difference, so a duplicate
 ## and a genuine orbit score alike. The share of clearly-changed pixels separates
 ## them - wind moves a few percent of the frame, a camera turn moves most of it.
+
+
+func _recursive_mesh_triangles(root: Node) -> int:
+	var total := 0
+	if root is MeshInstance3D:
+		var mesh: Mesh = (root as MeshInstance3D).mesh
+		if mesh != null: total += mesh.get_faces().size() / 3
+	for child in root.get_children():
+		total += _recursive_mesh_triangles(child)
+	return total
 
 func _weapon_mesh_budget(root: Node) -> Vector2i:
 	var triangles := 0
