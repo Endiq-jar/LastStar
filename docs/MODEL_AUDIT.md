@@ -89,3 +89,9 @@ Godot's imported meshes expand vertex seams: CI measured 2,005 and 3,761
 vertices, respectively, so the 1,500-vertex goal is not met. The original models
 remain available. Manual visual and deformation testing is
 still needed; this does not implement the requested LODs for all enemies.
+
+
+Ilyra now uses the same four low-poly distance bands as residents, plus a
+near-distance badge; her dialogue and companion support remain on the unchanged
+controller. This is an optimization of the existing simple art, not a bespoke
+important-character model or a new animation set.

@@ -964,6 +964,20 @@ func _run() -> void:
 				house_ok = house_ok and door_closed and door_opened and door_hit.is_empty() and door_closed_again and house.scale.x > 1.0 and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
 				_log("INFO", "House checks closed=%s opened=%s clear=%s reclosed=%s scale=%s wall=%s roof_hidden=%s roof_visible=%s ramp=%s" % [door_closed, door_opened, door_hit.is_empty(), door_closed_again, house.scale, not wall_hit.is_empty(), roof_hidden, roof.visible, house.has_node("EntranceRamp")])
 	_log("INFO" if resident_ok and quest_ui_ok and house_ok else "FAIL", "20 residents=%s independent quest=%s enterable house=%s" % [str(resident_ok), str(quest_ui_ok), str(house_ok)])
+	var guard_lod_ok := false
+	var ilyra_lod := world.get_node_or_null("StarGuardIlyra") as Node3D
+	if ilyra_lod != null:
+		guard_lod_ok = ilyra_lod.is_in_group("story_npc")
+		var guard_prior := 4001
+		for guard_lod_index in range(4):
+			var guard_visual := ilyra_lod.get_node_or_null("GuardLOD%d" % guard_lod_index) as MeshInstance3D
+			if guard_visual == null or guard_visual.mesh == null:
+				guard_lod_ok = false
+				continue
+			var guard_triangles: int = guard_visual.mesh.get_faces().size() / 3
+			guard_lod_ok = guard_lod_ok and guard_triangles > 0 and guard_triangles < guard_prior and guard_visual.visibility_range_end == [10.0, 25.0, 50.0, 100.0][guard_lod_index]
+			guard_prior = guard_triangles
+	_log("INFO" if guard_lod_ok else "FAIL", "Ilyra uses four shared low-poly LODs and remains talkable=%s" % str(guard_lod_ok))
 
 	# Quest rewards survive saves, can be used, and cannot be claimed twice.
 	var old_rewards := {"quests": Game.settlement_quests.duplicate(true), "coins": Game.coins, "starlight": Game.starlight, "weapons": Game.owned_weapons.duplicate(), "weapon": Game.equipped_weapon, "outfits": Game.owned_outfits.duplicate(), "outfit": Game.outfit_style, "cosmetics": Game.owned_cosmetics.duplicate(), "cosmetic": Game.equipped_cosmetic, "blueprints": Game.owned_blueprints.duplicate(), "levels": Game.wander.levels.duplicate(true), "slots": Game.wander.slots.duplicate()}

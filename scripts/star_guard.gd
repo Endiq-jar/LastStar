@@ -4,6 +4,8 @@ extends Node3D
 var _home := Vector3.ZERO
 var _support_cooldown := 8.0
 var _label: Label3D
+const RESIDENT := preload("res://scripts/settler.gd")
+static var _lod_meshes: Array[ArrayMesh] = []
 
 
 func _ready() -> void:
@@ -16,25 +18,28 @@ func _ready() -> void:
 	skin.albedo_color = Color(0.76, 0.59, 0.49)
 	var gold := StandardMaterial3D.new()
 	gold.albedo_color = Color(0.80, 0.62, 0.28)
-	var body := CapsuleMesh.new()
-	body.radius = 0.26
-	body.height = 0.95
-	_piece(body, coat, Vector3(0, 1.04, 0))
-	var head := SphereMesh.new()
-	head.radius = 0.19
-	head.height = 0.38
-	_piece(head, skin, Vector3(0, 1.75, 0))
-	var leg := BoxMesh.new()
-	leg.size = Vector3(0.18, 0.55, 0.21)
-	for side in [-1.0, 1.0]:
-		_piece(leg, coat, Vector3(side * 0.13, 0.27, 0))
-		var arm := BoxMesh.new()
-		arm.size = Vector3(0.16, 0.70, 0.16)
-		_piece(arm, coat, Vector3(side * 0.35, 1.05, 0))
+	# Share one prebuilt silhouette per distance band between Ilyra instances.
+	# Follow, dialogue and support logic stay on this node, independent of LOD.
+	if _lod_meshes.is_empty():
+		for level in range(4): _lod_meshes.append(RESIDENT._make_lod(level))
+	for level in range(4):
+		var visual := MeshInstance3D.new()
+		visual.name = "GuardLOD%d" % level
+		visual.mesh = _lod_meshes[level]
+		visual.set_surface_override_material(0, coat)
+		visual.set_surface_override_material(1, skin)
+		visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		visual.visibility_range_begin = RESIDENT.LOD_START[level]
+		visual.visibility_range_end = RESIDENT.LOD_END[level]
+		add_child(visual)
 	var badge := SphereMesh.new()
 	badge.radius = 0.065
 	badge.height = 0.13
-	_piece(badge, gold, Vector3(0, 1.27, -0.24))
+	badge.radial_segments = 8
+	badge.rings = 4
+	var badge_visual := _piece(badge, gold, Vector3(0, 1.27, -0.24))
+	badge_visual.visibility_range_end = 25.0
+
 	var label := Label3D.new()
 	_label = label
 	label.text = "Star Guard Ilyra\nTalk: F or Talk button"
@@ -82,10 +87,11 @@ func _process(delta: float) -> void:
 				break
 
 
-func _piece(mesh: Mesh, material: Material, at: Vector3) -> void:
+func _piece(mesh: Mesh, material: Material, at: Vector3) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
 	part.mesh = mesh
 	part.material_override = material
 	part.position = at
 	part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(part)
+	return part
