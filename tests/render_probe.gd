@@ -1008,8 +1008,19 @@ func _run() -> void:
 		var anchor := Node3D.new()
 		builder._build_reward_sword(anchor, Game.WEAPONS.id_for_index(shape))
 		weapon_catalog_ok = weapon_catalog_ok and anchor.get_node_or_null("RewardBlade") != null
+		var reward_budget: Vector2i = _weapon_mesh_budget(anchor)
+		weapon_catalog_ok = weapon_catalog_ok and reward_budget.x <= 500 and reward_budget.y <= 350
 		anchor.free()
-	_log("INFO" if weapon_catalog_ok else "FAIL", "100 weapon catalogue, quest coverage, equipment and saves=%s" % str(weapon_catalog_ok))
+	# Default sword, bow and focus use their own builders and must meet the same budget.
+	for base_kind in ["sword", "bow", "focus"]:
+		var base_anchor := Node3D.new()
+		var base_glow: StandardMaterial3D = builder._glow(Color.WHITE)
+		var base_accent: ShaderMaterial = builder._toon(Color.WHITE)
+		builder._build_weapon(base_anchor, base_kind, base_glow, base_accent)
+		var base_budget: Vector2i = _weapon_mesh_budget(base_anchor)
+		weapon_catalog_ok = weapon_catalog_ok and base_budget.x <= 500 and base_budget.y <= 350
+		base_anchor.free()
+	_log("INFO" if weapon_catalog_ok else "FAIL", "100 weapons, equipment, saves and 500 triangle / 350 vertex budgets=%s" % str(weapon_catalog_ok))
 	Game.settlement_quests = old_rewards["quests"]
 	Game.coins = old_rewards["coins"]
 	Game.starlight = old_rewards["starlight"]
@@ -3457,6 +3468,21 @@ func _orbit_player(world: Node, yaw_delta: float, pitch: float) -> bool:
 ## view with the grass swaying have a respectable mean difference, so a duplicate
 ## and a genuine orbit score alike. The share of clearly-changed pixels separates
 ## them - wind moves a few percent of the frame, a camera turn moves most of it.
+
+func _weapon_mesh_budget(root: Node) -> Vector2i:
+	var triangles := 0
+	var vertices := 0
+	for child in root.get_children():
+		if child is MeshInstance3D:
+			var mesh: Mesh = (child as MeshInstance3D).mesh
+			if mesh == null: continue
+			triangles += mesh.get_faces().size() / 3
+			for surface in range(mesh.get_surface_count()):
+				var arrays: Array = mesh.surface_get_arrays(surface)
+				if arrays.size() > Mesh.ARRAY_VERTEX and arrays[Mesh.ARRAY_VERTEX] != null:
+					vertices += arrays[Mesh.ARRAY_VERTEX].size()
+	return Vector2i(triangles, vertices)
+
 func _image_difference(a: Image, b: Image) -> float:
 	if a == null or b == null:
 		return 0.0

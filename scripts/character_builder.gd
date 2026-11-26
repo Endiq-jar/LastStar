@@ -481,6 +481,7 @@ static func _build_reward_sword(anchor: Node3D, id: String) -> void:
 	var shaft := CylinderMesh.new()
 	shaft.top_radius = 0.025
 	shaft.bottom_radius = 0.03
+	shaft.radial_segments = 8
 	shaft.height = 0.67 if shape >= 5 else 0.20
 	_no_shadow(_add(anchor, shaft, leather, Vector3(0, -0.30 if shape >= 5 else -0.06, 0), "RewardGrip"))
 	if shape < 5:
@@ -518,6 +519,8 @@ static func _build_reward_sword(anchor: Node3D, id: String) -> void:
 	var jewel := SphereMesh.new()
 	jewel.radius = 0.035
 	jewel.height = 0.07
+	jewel.radial_segments = 8
+	jewel.rings = 4
 	_no_shadow(_add(anchor, jewel, trim, Vector3(0, 0.05, 0), "WeaponPommel"))
 
 
@@ -537,6 +540,8 @@ static func _build_weapon(anchor: Node3D, kind: String, glow: StandardMaterial3D
 			var grip := CapsuleMesh.new()
 			grip.radius = 0.024
 			grip.height = 0.16
+			grip.radial_segments = 8
+			grip.rings = 4
 			_add(anchor, grip, _toon(Color(0.10, 0.08, 0.10)), Vector3(0, -0.14, 0))
 		"bow":
 			var frame := TorusMesh.new()
@@ -554,6 +559,8 @@ static func _build_weapon(anchor: Node3D, kind: String, glow: StandardMaterial3D
 			var orb := SphereMesh.new()
 			orb.radius = 0.10
 			orb.height = 0.20
+			orb.radial_segments = 8
+			orb.rings = 4
 			_add(anchor, orb, glow, Vector3(0, -0.34, -0.02))
 			var ring := TorusMesh.new()
 			ring.inner_radius = 0.12
