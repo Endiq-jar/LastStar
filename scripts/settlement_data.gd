@@ -26,6 +26,12 @@ static func by_id(id: String) -> Dictionary:
 	return {}
 
 
+# One paved village footprint shared by terrain, placement and rendering.
+# The surrounding flat margin keeps both 4 m visual and 8 m collision
+# samples level at the edge of the paving.
+const PAVING_HALF_SIZE := 56.0
+const FLAT_MARGIN := 8.0
+const TERRAIN_BLEND_WIDTH := 24.0
 const RESIDENT_COUNT := 20
 const FIRST_NAMES := ["Ari", "Bela", "Cira", "Daren", "Eli", "Fara", "Galen", "Hana", "Iven", "Jori", "Kira", "Lio", "Maren", "Navi", "Oren", "Pera", "Quin", "Risa", "Tavi"]
 const ROLES := ["baker", "apprentice", "gardener", "mason", "traveller", "weaver", "caretaker", "scribe", "courier", "forager", "carpenter", "musician", "cook", "herbalist", "hunter", "potter", "archivist", "trader", "watcher"]

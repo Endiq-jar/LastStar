@@ -843,11 +843,20 @@ func _run() -> void:
 			var center: Vector2 = flat_site["resolved"]
 			var level: float = terrain_node.call("get_height_at", center.x, center.y)
 			flat_villages_ok = flat_villages_ok and level > 1.2
-			for offset in [Vector2.ZERO, Vector2(-38, -38), Vector2(38, -38), Vector2(-38, 38), Vector2(38, 38), Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14)]:
+			for offset in [Vector2.ZERO, Vector2(-55, -55), Vector2(55, -55), Vector2(-55, 55), Vector2(55, 55), Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14)]:
 				var point: Vector2 = center + offset
 				flat_villages_ok = flat_villages_ok and absf(float(terrain_node.call("get_height_at", point.x, point.y)) - level) < 0.001
 				flat_villages_ok = flat_villages_ok and absf(float(terrain_node.call("surface_height_at", point.x, point.y)) - level) < 0.001
 				flat_villages_ok = flat_villages_ok and bool(terrain_node.call("is_village_ground", point.x, point.y))
+			# All resident and quest anchors must lie on the actual paving, not
+			# merely in the wider flat terrain margin.
+			for resident_index in range(site_data.RESIDENT_COUNT):
+				var resident_point: Vector2 = settlement_manager.call("_resident_position", center, resident_index)
+				var resident_offset: Vector2 = resident_point - center
+				flat_villages_ok = flat_villages_ok and maxf(absf(resident_offset.x), absf(resident_offset.y)) < site_data.PAVING_HALF_SIZE
+				for quest_kind in ["main", "side"]:
+					var quest_offset: Vector2 = site_data.quest_offset(resident_index, quest_kind)
+					flat_villages_ok = flat_villages_ok and maxf(absf(quest_offset.x), absf(quest_offset.y)) < site_data.PAVING_HALF_SIZE
 	_log("INFO" if flat_villages_ok else "FAIL", "All 14 settlements have level dry paved ground and level house approaches=%s" % str(flat_villages_ok))
 
 	# Twenty distinct residents in the streamed outpost, each with independent
@@ -920,6 +929,8 @@ func _run() -> void:
 			resident_ok = residents.size() == 20 and houses.size() == 3
 			var paving := settlement.get_node_or_null("StonePaving") as MeshInstance3D
 			resident_ok = resident_ok and paving != null and paving.mesh is PlaneMesh and paving.material_override is ShaderMaterial
+			if paving != null and paving.mesh is PlaneMesh:
+				resident_ok = resident_ok and (paving.mesh as PlaneMesh).size == Vector2.ONE * site_data.PAVING_HALF_SIZE * 2.0
 			for village_house in houses:
 				resident_ok = resident_ok and not village_house.has_node("EntranceRamp") and village_house.find_children("*Stair*", "", true, false).is_empty()
 			# Each resident shares four actual meshes with strictly descending

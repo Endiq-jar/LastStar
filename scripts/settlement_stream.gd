@@ -25,7 +25,7 @@ const ITEM := preload("res://scripts/settlement_item.gd")
 const HOUSE := preload("res://scripts/village_house.gd")
 const PROPS := preload("res://scripts/interior_props.gd")
 const STONE_SHADER := preload("res://shaders/village_stone.gdshader")
-const VILLAGE_GROUND_SIZE := 80.0
+const VILLAGE_GROUND_SIZE := DATA.PAVING_HALF_SIZE * 2.0
 static var _ground_mesh: PlaneMesh
 static var _ground_material: ShaderMaterial
 const LOAD_DISTANCE := 230.0

@@ -4,9 +4,9 @@ render_mode diffuse_burley, specular_schlick_ggx;
 uniform vec4 mortar_color : source_color = vec4(0.23, 0.22, 0.21, 1.0);
 
 // A regular laid-stone surface, shaded per tile rather than using thousands of
-// individual meshes. World-scale UVs are supplied by the 80 m paving plane.
+// individual meshes. World-scale UVs are supplied by the 112 m paving plane.
 void fragment() {
-    vec2 grid = UV * 64.0;
+    vec2 grid = UV * 89.6;
     vec2 cell = floor(grid);
     vec2 local_uv = fract(grid);
     float edge = min(min(local_uv.x, 1.0 - local_uv.x), min(local_uv.y, 1.0 - local_uv.y));

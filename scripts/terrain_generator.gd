@@ -29,8 +29,8 @@ extends Node3D
 ## The whole map, metres across. The playable core is the middle half of it.
 const BIOMES := preload("res://scripts/biome_regions.gd")
 const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
-const VILLAGE_FLAT_HALF_SIZE := 48.0
-const VILLAGE_BLEND_HALF_SIZE := 72.0
+const VILLAGE_FLAT_HALF_SIZE := SETTLEMENTS.PAVING_HALF_SIZE + SETTLEMENTS.FLAT_MARGIN
+const VILLAGE_BLEND_HALF_SIZE := VILLAGE_FLAT_HALF_SIZE + SETTLEMENTS.TERRAIN_BLEND_WIDTH
 const WORLD_SIZE := 10000.0
 const SEA_LEVEL := 1.2
 
