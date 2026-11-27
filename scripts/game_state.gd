@@ -161,6 +161,7 @@ var in_final_dungeon := false
 # Story memories are derived from unique dungeon clears, so old saves receive
 # them automatically and repeat victories can never duplicate an item.
 const STORY_DUNGEONS := preload("res://scripts/story_dungeons.gd")
+const STORY_CHRONICLE := preload("res://scripts/story_chronicle.gd")
 const OPTIONAL_DUNGEONS := preload("res://scripts/optional_dungeons.gd")
 const STORY_MEMORY_GOAL := 25
 const MEMORY_SPELLS := {"memory_10": "tide_remedy", "memory_15": "winter_resolve", "memory_22": "dusk_seal"}
@@ -173,6 +174,18 @@ const STORY_MEMORIES := [
 
 func story_memory_owned(id: String) -> bool:
 	return ashvale_hollow_cleared if id == "ashvale" else bool(dungeon_clears.get(id, false))
+
+
+# Stories are derived from clear flags, including saves made before the
+# chronicle was added. Unrecovered memories never leak their revelations.
+func story_account(id: String) -> String:
+	if not story_memory_owned(id): return ""
+	return STORY_CHRONICLE.account(id)
+
+
+func story_ending() -> String:
+	if not bool(guard_story.get("keeper_defeated", false)): return ""
+	return STORY_CHRONICLE.ending(str(guard_story.get("memory_choice", "")))
 
 
 func all_story_memories() -> Array:

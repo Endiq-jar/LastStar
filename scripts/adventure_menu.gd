@@ -358,6 +358,8 @@ func _quests() -> void:
 	for memory in Game.all_story_memories():
 		if Game.story_memory_owned(str(memory["id"])):
 			_line("%s — %s" % [memory["name"], memory["lore"]])
+			var account: String = Game.story_account(str(memory["id"]))
+			if not account.is_empty(): _line(account)
 		else:
 			var hint := str(SETTLEMENTS.SITES[int(memory["site"])]["name"]) if memory.has("site") else str(memory["id"]).replace("_", " ").capitalize()
 			var reward_id := str(Game.MEMORY_SPELLS.get(str(memory["id"]), ""))
@@ -391,7 +393,7 @@ func _quests() -> void:
 			_line("%s · guide locked: complete %s's main quest" % [guide_site["name"], guide_site["npc"]])
 	_line("THE LAST SEAL", 18, UI.ACCENT)
 	if bool(Game.guard_story.get("keeper_defeated", false)):
-		_line("The Keeper is defeated. The Seals hold because the people of Elaris chose to share their light. The world remembers again.")
+		_line(Game.story_ending())
 	else:
 		_line("Aetheris · The underground gate requires Ilyra's memory quest and the original 100 Hollow victories (the five new Hollows are optional).")
 	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
@@ -604,7 +606,8 @@ func _dialogue() -> void:
 	_line("STAR GUARD ILYRA", 25, UI.ACCENT)
 	var story := Game.guard_story
 	if not bool(story.get("seal_accepted", false)):
-		_line("The lights around Ashvale are fading. A star sigil may tell us why the Seven Seals have weakened. What brings you here, traveller?")
+		_line("Last night an Ashvale lamp went out. This morning its keeper could not remember who lit it. The same thing happened to my patrol's names. If the light is taking memories with it, we are running out of time.")
+		_line("A star sigil may tell us why the Seven Seals are weakening. What brings you here, traveller?")
 		_action("I want to protect the valley.", _accept_guard.bind("seal", "duty"))
 		_action("I want to understand what happened.", _accept_guard.bind("seal", "curiosity"))
 	else:
@@ -642,6 +645,12 @@ func _dialogue() -> void:
 					_line("The patrol's families know the truth. Thank you for trusting me with it. Our bond strengthens my healing Gift.")
 				else:
 					_line("We kept the fragment safe for the scholars. I still hope the families can hear its story someday.")
+				if Game.story_memory_owned("memory_23"):
+					_line("Ilyra: The missing voices were not just lost. Someone decided which parts of the truth we were allowed to keep. We have to reach the Last Seal with more than one answer.")
+				elif Game.story_memory_owned("memory_17"):
+					_line("Ilyra: The Keeper was a guard once. I understand wanting to protect everyone. I am afraid of what happens when fear makes that choice for them.")
+				elif Game.story_memory_owned("memory_vault"):
+					_line("Ilyra: The Vault calls the Seals shields. Then why were the names of the people who raised them erased?")
 			elif bool(story.get("memory_found", false)):
 				_line("The fragment remembers the patrol sealing a breach, not abandoning their post. What should we do with it?")
 				_action("Share the truth with the families · learn Sun Spear", _resolve_hollow_memory.bind("share"))
@@ -681,7 +690,10 @@ func _settlement_dialogue() -> void:
 		return
 	_line("%s  ·  %s" % [resident["name"], site["name"]], 25, UI.ACCENT)
 	_line("%s — %s" % [resident["role"], site["lore"]])
-	if dialogue_resident_index == 0: _line("Complete my main quest to receive a written guide to this region's Hollows.")
+	if dialogue_resident_index == 0:
+		var local_hook: String = str(Game.STORY_CHRONICLE.REGION_HOOKS.get(dialogue_site_id, ""))
+		if not local_hook.is_empty(): _line(local_hook)
+		_line("Complete my main quest to receive a written guide to this region's Hollows.")
 	for kind in ["main", "side"]:
 		var status: String = Game.settlement_quest_status(dialogue_site_id, kind, dialogue_resident_index)
 		var title := "Main" if kind == "main" else "Side"
@@ -726,7 +738,7 @@ func _story() -> void:
 	_line("Visit Star Guard Ilyra in Ashvale. A recovered sigil leads to a memory in the Hollow, and a choice about who should hear its story.")
 	_line("Seek the memories in Ashvale Hollow, the Memory Vault and Suncrest Roost. Recover all 25 memories and clear the other 75 Hollows to open the Last Seal.")
 	if bool(Game.guard_story.get("keeper_defeated", false)):
-		_line("At the Last Seal, the Keeper's control was broken. With their shared memories, the people renewed the Seals together, and Elaris remembered its light.")
+		_line(Game.story_ending())
 	if Game.wander != null:
 		_line("WANDER RESEARCH", 18, UI.ACCENT)
 		if not bool(Game.guard_story.get("seal_done", false)):

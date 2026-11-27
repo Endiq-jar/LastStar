@@ -315,6 +315,7 @@ func _build() -> void:
 	_toast.offset_top = 92
 	_toast.offset_bottom = 132
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_toast.add_theme_font_size_override("font_size", 19)
 	_toast.add_theme_color_override("font_color", Color(1.0, 0.95, 0.82))
 	_toast.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
@@ -796,7 +797,8 @@ func _on_toast(text: String) -> void:
 	if _toast_tween and _toast_tween.is_valid():
 		_toast_tween.kill()
 	_toast_tween = create_tween()
-	_toast_tween.tween_interval(1.8)
+	# Long story echoes need time to read; short combat messages stay brief.
+	_toast_tween.tween_interval(clampf(float(text.length()) / 16.0, 1.8, 8.0))
 	_toast_tween.tween_property(_toast, "modulate:a", 0.0, 0.9)
 
 

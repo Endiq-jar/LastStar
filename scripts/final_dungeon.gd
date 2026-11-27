@@ -18,6 +18,7 @@ var boss: Node3D
 var sector := 0
 var _remaining := 0
 var _gates: Array[Node3D] = []
+var _story_echoes: Array[Node3D] = []
 var _exit: Vector3
 var _arena_exit: Vector3
 var _checkpoint: Vector3
@@ -42,6 +43,10 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
 
 func try_interact(actor: Node3D) -> bool:
 	if inside:
+		for echo in _story_echoes:
+			if is_instance_valid(echo) and actor.global_position.distance_to(echo.global_position) < 3.5:
+				Game.toast.emit(str(echo.get_meta("story")))
+				return true
 		if actor.global_position.distance_to(_exit) < 4.0 or actor.global_position.distance_to(_arena_exit) < 4.0:
 			_leave()
 			return true
@@ -62,6 +67,7 @@ func _enter() -> void:
 	sector = 0
 	_remaining = 0
 	_gates.clear()
+	_story_echoes.clear()
 	chamber = Node3D.new()
 	chamber.name = "LastSealDepths"
 	get_parent().add_child(chamber)
@@ -84,6 +90,23 @@ func _enter() -> void:
 			torch.position = Vector3(5.3, -DESCENT_PER_SECTOR * (float(i) + z_offset / SECTOR_LENGTH) + 1.2, -SECTOR_LENGTH * i - z_offset)
 			torch.rotation.y = -PI / 2
 			chamber.add_child(torch)
+	# Optional echoes give the Keeper and the witnesses a voice on the descent.
+	# They never lock progress, rewards or a returning player's route.
+	for index in range(Game.STORY_CHRONICLE.FINAL_ECHOES.size()):
+		var echo := Node3D.new()
+		echo.name = "LastSealEcho%d" % (index + 1)
+		var depth := 50.0 + float(index) * 300.0
+		echo.position = Vector3(-4, -DESCENT_PER_SECTOR * depth / SECTOR_LENGTH, -depth)
+		echo.set_meta("story", Game.STORY_CHRONICLE.FINAL_ECHOES[index])
+		chamber.add_child(echo)
+		var echo_label := Label3D.new()
+		echo_label.text = "F / Talk · Listen to an echo"
+		echo_label.position.y = 1.8
+		echo_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		echo_label.font_size = 32
+		echo_label.pixel_size = 0.004
+		echo.add_child(echo_label)
+		_story_echoes.append(echo)
 	# Closed arena is a continuation of the descending kilometre corridor.
 	_block(chamber, Vector3(0, -80.5, -1010), Vector3(20, 1, 20), Color(0.24, 0.20, 0.29))
 	_block(chamber, Vector3(-10, -77, -1010), Vector3(0.5, 7, 20), Color(0.18, 0.16, 0.23))
@@ -140,7 +163,7 @@ func _spawn_keeper() -> void:
 	boss.position = Vector3(0, -79.8, -1013)
 	chamber.add_child(boss)
 	boss.connect("defeated", _keeper_defeated)
-	Game.toast.emit("The Keeper awakens. Watch for the star slash and shockwaves!")
+	Game.toast.emit("The Keeper: I will not let the world lose anyone again. Watch for the star slash!")
 
 
 func _keeper_defeated() -> void:
@@ -198,6 +221,7 @@ func _leave() -> void:
 	chamber = null
 	boss = null
 	_gates.clear()
+	_story_echoes.clear()
 	Game.toast.emit("You returned from the Last Seal.")
 
 

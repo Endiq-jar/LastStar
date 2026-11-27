@@ -6,6 +6,17 @@ Seal. Twenty-two of the memory Hollows share a reusable arena and creature
 families; they are not bespoke levels. The broader story and companion arcs
 remain substantially shorter than the original design brief.
 
+## Story chronicle update
+
+All 25 existing memory clears now unlock individual written accounts in the
+journal, with a hook for each of the 14 settlement leaders. Ilyra comments on
+specific recovered memories and the opening establishes the missing-patrol
+mystery. Three optional, interactable echoes on the Last Seal descent give the
+Keeper and a witness opposing voices. The journal and Story page show an ending
+that reflects the player's existing share/study decision; old saves derive the
+accounts from their existing clear flags. These are written dialogue and
+interactions, not new cinematics, bespoke levels, or an expanded companion arc.
+
 ## Premise
 
 Long ago the First Silence nearly extinguished the light of Elaris. The Seven
