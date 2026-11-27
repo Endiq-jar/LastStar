@@ -54,7 +54,7 @@ func _build(key: Vector2i) -> void:
 	for i in range(5):
 		var x := origin.x + rng.randf_range(0, CHUNK)
 		var z := origin.y + rng.randf_range(0, CHUNK)
-		if terrain.is_underwater(x, z) or terrain.get_slope_at(x, z) > 0.55 or terrain.is_path(x, z): continue
+		if terrain.is_underwater(x, z) or terrain.get_slope_at(x, z) > 0.55 or terrain.is_path(x, z) or (terrain.has_method("is_village_ground") and terrain.is_village_ground(x, z)): continue
 		var h: float = terrain.surface_height_at(x, z)
 		var scale := rng.randf_range(0.55, 1.7)
 		var basis := Basis(Vector3.UP, rng.randf_range(0, TAU)).scaled(Vector3(scale, scale, scale))

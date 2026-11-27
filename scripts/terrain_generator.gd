@@ -326,7 +326,7 @@ func biome_at(x: float, z: float) -> String:
 ## Matches terrain_anime.gdshader: a winding path runs north/south near spawn.
 ## Grass avoids its center; the shader softly blends the edges into the meadow.
 func is_path(x: float, z: float) -> bool:
-	return is_village_ground(x, z) or absf(x - (18.0 + 10.0 * sin(z * 0.012))) < 3.9
+	return absf(x - (18.0 + 10.0 * sin(z * 0.012))) < 3.9
 
 
 ## Steepness at a point, as a true gradient: metres of rise per metre of run.

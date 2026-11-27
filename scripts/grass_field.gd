@@ -345,7 +345,7 @@ func _build_chunk(key: Vector2i) -> void:
 			_tried += 1
 			var x := origin_x + (float(gx) + rng.randf()) * cell
 			var z := origin_z + (float(gz) + rng.randf()) * cell
-			if _terrain.has_method("is_path") and _terrain.is_path(x, z):
+			if (_terrain.has_method("is_path") and _terrain.is_path(x, z)) or (_terrain.has_method("is_village_ground") and _terrain.is_village_ground(x, z)):
 				continue
 			# surface_height_at(), not get_height_at(): the grass has to sit on the
 			# bumpy mesh the camera actually sees, not on the smooth analytic field
