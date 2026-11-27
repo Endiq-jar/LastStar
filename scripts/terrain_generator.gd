@@ -197,7 +197,10 @@ func _village_blend(x: float, z: float, pad: Dictionary) -> float:
 func is_village_ground(x: float, z: float) -> bool:
 	for pad in _village_pads:
 		var center: Vector2 = pad["center"]
-		if maxf(absf(x - center.x), absf(z - center.y)) <= 40.0: return true
+		# Suppress visual bumps and scattered vegetation over the whole flat
+		# core, not just the paving: mesh interpolation at its edges samples
+		# vertices outside the stone square.
+		if maxf(absf(x - center.x), absf(z - center.y)) <= VILLAGE_FLAT_HALF_SIZE: return true
 	return false
 
 
