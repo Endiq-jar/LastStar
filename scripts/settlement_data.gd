@@ -50,3 +50,37 @@ static func quest_offset(index: int, kind: String) -> Vector2:
 	var angle := TAU * float(slot % 10) / 10.0 + (PI / 10.0 if kind == "side" else 0.0)
 	var radius := 32.0 + float(slot / 10) * 11.0
 	return Vector2(sin(angle), -cos(angle)) * radius
+
+
+static func resolve_site(origin: Vector2, height: Callable, wet: Callable) -> Vector2:
+	# Avoid water and excessive gradients; deterministic offsets keep quest IDs
+	# and settlement locations stable across saves.
+	for radius in [0.0, 40.0, 80.0, 120.0, 180.0, 250.0, 350.0, 500.0]:
+		for i in range(8):
+			var p: Vector2 = origin + Vector2(cos(TAU * i / 8.0), sin(TAU * i / 8.0)) * radius
+			if bool(wet.call(p.x, p.y)):
+				continue
+			var h := float(height.call(p.x, p.y))
+			if h < 2.0:
+				continue
+			var good := true
+			for offset in [Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14)]:
+				var q: Vector2 = p + offset
+				var low := INF
+				var high := -INF
+				for corner in [Vector2(-3, -3), Vector2(-3, 3), Vector2(3, -3), Vector2(3, 3), Vector2.ZERO]:
+					var sample: Vector2 = q + corner
+					if bool(wet.call(sample.x, sample.y)):
+						good = false
+					var y := float(height.call(sample.x, sample.y))
+					low = minf(low, y)
+					high = maxf(high, y)
+				if high - low > 2.0 or absf(high - h) > 12.0:
+					good = false
+			for offset in [Vector2(0, -27), Vector2(27, 0)]:
+				var q: Vector2 = p + offset
+				if bool(wet.call(q.x, q.y)) or absf(float(height.call(q.x, q.y)) - h) > 12.0:
+					good = false
+			if good:
+				return p
+	return origin

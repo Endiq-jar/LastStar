@@ -834,6 +834,21 @@ func _run() -> void:
 	var settlement_manager := world.get_node_or_null("Settlements")
 	var stream_ok: bool = settlement_manager != null and settlement_manager.get("_sites").size() == 14 and not get_tree().get_nodes_in_group("story_npc").is_empty()
 	_log("INFO" if village_ok and stream_ok else "FAIL", "settlement quest persistence=%s streamed sites=%s" % [str(village_ok), str(stream_ok)])
+	# All village centers are resolved before terrain meshes/collision build.
+	# Verify the paved square and approach to each house use one level height.
+	var flat_villages_ok := settlement_manager != null and terrain_node != null
+	if flat_villages_ok:
+		var flat_sites: Array = settlement_manager.get("_sites")
+		for flat_site in flat_sites:
+			var center: Vector2 = flat_site["resolved"]
+			var level: float = terrain_node.call("get_height_at", center.x, center.y)
+			flat_villages_ok = flat_villages_ok and level > 1.2
+			for offset in [Vector2.ZERO, Vector2(-38, -38), Vector2(38, -38), Vector2(-38, 38), Vector2(38, 38), Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14)]:
+				var point: Vector2 = center + offset
+				flat_villages_ok = flat_villages_ok and absf(float(terrain_node.call("get_height_at", point.x, point.y)) - level) < 0.001
+				flat_villages_ok = flat_villages_ok and absf(float(terrain_node.call("surface_height_at", point.x, point.y)) - level) < 0.001
+				flat_villages_ok = flat_villages_ok and bool(terrain_node.call("is_village_ground", point.x, point.y))
+	_log("INFO" if flat_villages_ok else "FAIL", "All 14 settlements have level dry paved ground and level house approaches=%s" % str(flat_villages_ok))
 
 	# Twenty distinct residents in the streamed outpost, each with independent
 	# quest state. Index zero retains the old save key for existing players.
@@ -903,6 +918,10 @@ func _run() -> void:
 				elif child.is_in_group("village_house"):
 					houses.append(child)
 			resident_ok = residents.size() == 20 and houses.size() == 3
+			var paving := settlement.get_node_or_null("StonePaving") as MeshInstance3D
+			resident_ok = resident_ok and paving != null and paving.mesh is PlaneMesh and paving.material_override is ShaderMaterial
+			for village_house in houses:
+				resident_ok = resident_ok and not village_house.has_node("EntranceRamp") and village_house.find_children("*Stair*", "", true, false).is_empty()
 			# Each resident shares four actual meshes with strictly descending
 			# triangle counts, and disappears beyond the final distance band.
 			if not residents.is_empty():
@@ -1013,8 +1032,8 @@ func _run() -> void:
 				house_ok = furniture_ok
 				player.global_position = old_pos
 				house.call("_process", 0.2)
-				house_ok = house_ok and roof_lod_ok and door_closed and door_opened and door_hit.is_empty() and door_closed_again and house.scale.x > 1.0 and not wall_hit.is_empty() and roof_hidden and roof.visible and house.has_node("EntranceRamp")
-				_log("INFO", "House checks closed=%s opened=%s clear=%s reclosed=%s scale=%s wall=%s roof_hidden=%s roof_visible=%s ramp=%s" % [door_closed, door_opened, door_hit.is_empty(), door_closed_again, house.scale, not wall_hit.is_empty(), roof_hidden, roof.visible, house.has_node("EntranceRamp")])
+				house_ok = house_ok and roof_lod_ok and door_closed and door_opened and door_hit.is_empty() and door_closed_again and house.scale.x > 1.0 and not wall_hit.is_empty() and roof_hidden and roof.visible and not house.has_node("EntranceRamp")
+				_log("INFO", "House checks closed=%s opened=%s clear=%s reclosed=%s scale=%s wall=%s roof_hidden=%s roof_visible=%s no_ramp=%s" % [door_closed, door_opened, door_hit.is_empty(), door_closed_again, house.scale, not wall_hit.is_empty(), roof_hidden, roof.visible, not house.has_node("EntranceRamp")])
 	_log("INFO" if resident_ok and quest_ui_ok and house_ok else "FAIL", "20 residents=%s independent quest=%s enterable house=%s" % [str(resident_ok), str(quest_ui_ok), str(house_ok)])
 	var guard_lod_ok := false
 	var ilyra_lod := world.get_node_or_null("StarGuardIlyra") as Node3D

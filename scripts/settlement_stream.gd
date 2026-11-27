@@ -24,6 +24,10 @@ const NPC := preload("res://scripts/settler.gd")
 const ITEM := preload("res://scripts/settlement_item.gd")
 const HOUSE := preload("res://scripts/village_house.gd")
 const PROPS := preload("res://scripts/interior_props.gd")
+const STONE_SHADER := preload("res://shaders/village_stone.gdshader")
+const VILLAGE_GROUND_SIZE := 80.0
+static var _ground_mesh: PlaneMesh
+static var _ground_material: ShaderMaterial
 const LOAD_DISTANCE := 230.0
 const UNLOAD_DISTANCE := 290.0
 
@@ -46,38 +50,12 @@ func setup(world: Node3D, player: Node3D) -> void:
 
 
 func _resolve(origin: Vector2) -> Vector2:
-	# Avoid water and excessive gradients; deterministic offsets keep quest IDs
-	# and settlement locations stable across saves.
-	for radius in [0.0, 40.0, 80.0, 120.0, 180.0, 250.0, 350.0, 500.0]:
-		for i in range(8):
-			var p: Vector2 = origin + Vector2(cos(TAU * i / 8.0), sin(TAU * i / 8.0)) * radius
-			if bool(_world.call("_is_wet", p.x, p.y)):
-				continue
-			var h := float(_world.call("_height", p.x, p.y))
-			if h < 2.0:
-				continue
-			var good := true
-			for offset in [Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14)]:
-				var q: Vector2 = p + offset
-				var low := INF
-				var high := -INF
-				for corner in [Vector2(-3, -3), Vector2(-3, 3), Vector2(3, -3), Vector2(3, 3), Vector2.ZERO]:
-					var sample: Vector2 = q + corner
-					if bool(_world.call("_is_wet", sample.x, sample.y)):
-						good = false
-					var y := float(_world.call("_height", sample.x, sample.y))
-					low = minf(low, y)
-					high = maxf(high, y)
-				if high - low > 2.0 or absf(high - h) > 12.0:
-					good = false
-			for offset in [Vector2(0, -27), Vector2(27, 0)]:
-				var q: Vector2 = p + offset
-				if bool(_world.call("_is_wet", q.x, q.y)) or absf(float(_world.call("_height", q.x, q.y)) - h) > 12.0:
-					good = false
-			if good:
-				return p
-	return origin
-
+	# Terrain resolves these once against the original landscape before building
+	# meshes, so placement and the flattened collision always agree.
+	var terrain := _world.get_node_or_null("Terrain")
+	if terrain != null and terrain.has_method("village_site_position"):
+		return terrain.call("village_site_position", origin)
+	return DATA.resolve_site(origin, Callable(_world, "_height"), Callable(_world, "_is_wet"))
 
 func _process(delta: float) -> void:
 	_timer -= delta
@@ -107,26 +85,18 @@ func _build_site(site: Dictionary) -> Node3D:
 	root.name = "Settlement_" + str(site["id"])
 	add_child(root)
 	var center: Vector2 = site["resolved"]
+	_add_village_ground(root, center)
 	var house_slot := 0
 	var site_index := 0
 	for index in range(DATA.SITES.size()):
 		if str(DATA.SITES[index]["id"]) == str(site["id"]): site_index = index
 	for offset in [Vector2(-12, -6), Vector2(12, -6), Vector2(0, 14)]:
 		var p: Vector2 = center + offset
-		var low := INF
-		var high := -INF
-		for corner in [Vector2(-3, -3), Vector2(-3, 3), Vector2(3, -3), Vector2(3, 3), Vector2.ZERO]:
-			var sample: Vector2 = p + corner
-			var y := float(_world.call("_height", sample.x, sample.y))
-			low = minf(low, y)
-			high = maxf(high, y)
 		var house := _house(site_index, house_slot)
 		house_slot += 1
-		house.position = Vector3(p.x, high + 0.08, p.y)
+		house.position = Vector3(p.x, float(_world.call("_height", p.x, p.y)), p.y)
 		house.scale = Vector3(1.5, 1.0, 1.5)
 		root.add_child(house)
-		_add_foundation(house, high - low + 0.4)
-		_add_entrance_ramp(house, p, high + 0.08)
 	for index in range(DATA.RESIDENT_COUNT):
 		var pos := _resident_position(center, index)
 		var npc := NPC.new()
@@ -192,19 +162,22 @@ func _sync_items_for_site(site: Dictionary, root: Node3D) -> void:
 				node.queue_free()
 
 
-func _add_foundation(house: Node3D, depth: float) -> void:
-	var foundation := MeshInstance3D.new()
-	var block := BoxMesh.new()
-	block.size = Vector3(4.1, depth, 4.1)
-	foundation.mesh = block
-	foundation.position.y = -depth * 0.5
-	var stone := StandardMaterial3D.new()
-	stone.albedo_color = Color(0.43, 0.40, 0.39)
-	stone.roughness = 1.0
-	foundation.material_override = stone
-	foundation.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	house.add_child(foundation)
-
+func _add_village_ground(root: Node3D, center: Vector2) -> void:
+	# One shared, two-triangle surface per loaded settlement: the flat terrain
+	# supplies collision, while this material supplies stone paving.
+	if _ground_mesh == null:
+		_ground_mesh = PlaneMesh.new()
+		_ground_mesh.size = Vector2(VILLAGE_GROUND_SIZE, VILLAGE_GROUND_SIZE)
+	if _ground_material == null:
+		_ground_material = ShaderMaterial.new()
+		_ground_material.shader = STONE_SHADER
+	var ground := MeshInstance3D.new()
+	ground.name = "StonePaving"
+	ground.mesh = _ground_mesh
+	ground.material_override = _ground_material
+	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ground.position = Vector3(center.x, float(_world.call("_height", center.x, center.y)) + 0.025, center.y)
+	root.add_child(ground)
 
 func _part(parent: Node3D, scene: PackedScene, position: Vector3, yaw: float = 0.0) -> void:
 	var part := scene.instantiate() as Node3D
@@ -327,27 +300,3 @@ func _box_collision(body: StaticBody3D, size: Vector3, position: Vector3) -> Col
 	shape.position = position
 	body.add_child(shape)
 	return shape
-
-
-func _add_entrance_ramp(house: Node3D, at: Vector2, floor_height: float) -> void:
-	var far_height := float(_world.call("_height", at.x - 1.5, at.y - 9.0))
-	var rise := floor_height - far_height
-	var length := sqrt(16.0 + rise * rise)
-	var angle := -atan2(rise, 4.0)
-	var body := StaticBody3D.new()
-	body.name = "EntranceRamp"
-	body.collision_layer = 1
-	body.collision_mask = 0
-	body.position = Vector3(-1, (far_height - floor_height) * 0.5, -4)
-	body.rotation.x = angle
-	house.add_child(body)
-	_box_collision(body, Vector3(1.2, 0.18, length), Vector3(0, -0.08, 0))
-	var visual := MeshInstance3D.new()
-	var ramp := BoxMesh.new()
-	ramp.size = Vector3(1.2, 0.14, length)
-	visual.mesh = ramp
-	visual.position.y = -0.07
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.42, 0.32, 0.23)
-	visual.material_override = mat
-	body.add_child(visual)

@@ -28,6 +28,9 @@ extends Node3D
 
 ## The whole map, metres across. The playable core is the middle half of it.
 const BIOMES := preload("res://scripts/biome_regions.gd")
+const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
+const VILLAGE_FLAT_HALF_SIZE := 48.0
+const VILLAGE_BLEND_HALF_SIZE := 72.0
 const WORLD_SIZE := 10000.0
 const SEA_LEVEL := 1.2
 
@@ -80,6 +83,9 @@ const MOVE_REFRESH := 48.0
 const NEAR_BUILDS_PER_FRAME := 2
 const MID_BUILDS_PER_FRAME := 1
 
+# Stable pads are resolved against the unmodified terrain before any mesh or
+# collision is built. The same centers are used by the settlement streamer.
+var _village_pads: Array[Dictionary] = []
 var height_noise: FastNoiseLite
 var ridge_noise: FastNoiseLite
 var detail_noise: FastNoiseLite
@@ -108,6 +114,7 @@ var last_chunk_ms := 0.0
 func _ready() -> void:
 	add_to_group("terrain")
 	_setup_noise()
+	_setup_village_pads()
 	_material = _terrain_material()
 	_build_far_shell()
 
@@ -162,6 +169,36 @@ func _setup_noise() -> void:
 	surface_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
 	surface_noise.fractal_octaves = 3
 	surface_noise.fractal_gain = 0.5
+
+
+func _setup_village_pads() -> void:
+	var pads: Array[Dictionary] = []
+	for site in SETTLEMENTS.SITES:
+		var origin: Vector2 = site["pos"]
+		var center: Vector2 = SETTLEMENTS.resolve_site(origin, Callable(self, "surface_height_at"), Callable(self, "is_underwater"))
+		var level := surface_height_at(center.x, center.y)
+		pads.append({"origin": origin, "center": center, "height": level})
+	_village_pads = pads
+
+
+func village_site_position(origin: Vector2) -> Vector2:
+	for pad in _village_pads:
+		if pad["origin"] == origin: return pad["center"]
+	return origin
+
+
+func _village_blend(x: float, z: float, pad: Dictionary) -> float:
+	var center: Vector2 = pad["center"]
+	var distance := maxf(absf(x - center.x), absf(z - center.y))
+	if distance >= VILLAGE_BLEND_HALF_SIZE: return 0.0
+	return 1.0 - smoothstep(VILLAGE_FLAT_HALF_SIZE, VILLAGE_BLEND_HALF_SIZE, distance)
+
+
+func is_village_ground(x: float, z: float) -> bool:
+	for pad in _village_pads:
+		var center: Vector2 = pad["center"]
+		if maxf(absf(x - center.x), absf(z - center.y)) <= 40.0: return true
+	return false
 
 
 # --------------------------------------------------------------------------
@@ -228,6 +265,11 @@ func get_height_at(x: float, z: float) -> float:
 		h = _carve(h, Vector2(x, z).distance_to(Vector2(pond.x, pond.y)), pond.z, SEA_LEVEL - 1.6)
 	if absf(z) < 3400.0:
 		h = _carve(h, absf(x - river_x(z)), RIVER_REACH, SEA_LEVEL - 2.6)
+	for pad in _village_pads:
+		var blend := _village_blend(x, z, pad)
+		if blend > 0.0:
+			h = lerpf(h, float(pad["height"]), blend)
+			break
 	return h
 
 
@@ -239,8 +281,8 @@ func get_height_at(x: float, z: float) -> float:
 func _surface_point(x: float, z: float) -> Vector3:
 	var bump := surface_noise.get_noise_2d(x, z) * SURFACE_DETAIL
 	# Fade the bump out under the waterline so the beds stay smooth.
-	if get_height_at(x, z) < SEA_LEVEL + 1.0:
-		bump *= 0.0
+	if get_height_at(x, z) < SEA_LEVEL + 1.0 or is_village_ground(x, z):
+		bump = 0.0
 	return Vector3(x, get_height_at(x, z) + bump, z)
 
 
@@ -272,7 +314,7 @@ func surface_height_at(x: float, z: float) -> float:
 		h = h00 + (h10 - h00) * fx + (h01 - h00) * fz
 	else:
 		h = h11 + (h01 - h11) * (1.0 - fx) + (h10 - h11) * (1.0 - fz)
-	if h < SEA_LEVEL + 1.0:
+	if h < SEA_LEVEL + 1.0 or is_village_ground(x, z):
 		return h
 	return h + surface_noise.get_noise_2d(x, z) * SURFACE_DETAIL
 
@@ -284,7 +326,7 @@ func biome_at(x: float, z: float) -> String:
 ## Matches terrain_anime.gdshader: a winding path runs north/south near spawn.
 ## Grass avoids its center; the shader softly blends the edges into the meadow.
 func is_path(x: float, z: float) -> bool:
-	return absf(x - (18.0 + 10.0 * sin(z * 0.012))) < 3.9
+	return is_village_ground(x, z) or absf(x - (18.0 + 10.0 * sin(z * 0.012))) < 3.9
 
 
 ## Steepness at a point, as a true gradient: metres of rise per metre of run.
