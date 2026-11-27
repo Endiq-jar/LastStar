@@ -1136,6 +1136,28 @@ func _run() -> void:
 	scout_orc.is_orc = true
 	challenge_fixture.add_child(scout_orc)
 	challenge_fixture.add_child(challenge_boss)
+	var second_boss = load("res://scripts/hollow_warden.gd").new()
+	challenge_fixture.add_child(second_boss)
+	# Telegraphs share immutable geometry/materials and belong to their enemy.
+	# Top-level keeps a committed marker fixed even if its owner moves or rotates.
+	var scout_warning: MeshInstance3D = challenge_scout.get("_warning")
+	var orc_warning: MeshInstance3D = scout_orc.get("_warning")
+	var boss_warning: MeshInstance3D = challenge_boss.get("_warning")
+	var second_warning: MeshInstance3D = second_boss.get("_warning")
+	var warning_ok: bool = scout_warning.get_parent() == challenge_scout and boss_warning.get_parent() == challenge_boss and scout_warning.top_level and boss_warning.top_level
+	warning_ok = warning_ok and scout_warning.mesh == orc_warning.mesh and scout_warning.material_override == orc_warning.material_override
+	warning_ok = warning_ok and boss_warning.mesh == second_warning.mesh and boss_warning.material_override == second_warning.material_override
+	var disc: CylinderMesh = challenge_boss._disc_mesh(3.4)
+	var line: BoxMesh = challenge_boss._line_mesh()
+	var ring: TorusMesh = challenge_boss._ring_mesh()
+	warning_ok = warning_ok and disc == challenge_boss._disc_mesh(3.4) and is_equal_approx(disc.top_radius, 3.4)
+	warning_ok = warning_ok and line == second_boss._line_mesh() and line.size == Vector3(2.0, 0.04, 12.0)
+	warning_ok = warning_ok and ring == second_boss._ring_mesh() and is_equal_approx(ring.inner_radius, 2.2) and is_equal_approx(ring.outer_radius, 5.0)
+	var committed_target := Vector3(3, 805, 4)
+	scout_warning.global_position = committed_target
+	challenge_scout.global_position += Vector3(2, 0, 0)
+	warning_ok = warning_ok and scout_warning.global_position.is_equal_approx(committed_target)
+	_log("INFO" if warning_ok else "FAIL", "Combat telegraphs are owner-scoped, world-fixed and shared=%s" % str(warning_ok))
 	challenge_fixture.add_child(challenge_slime)
 	challenge_fixture.add_child(challenge_trap)
 	tier_ok = tier_ok and is_equal_approx(challenge_scout.hp, 3900000.0) and is_equal_approx(challenge_boss.max_hp, 16500000.0) and is_equal_approx(challenge_slime.max_hp, 150.0)

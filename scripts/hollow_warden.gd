@@ -7,6 +7,10 @@ const KEEPER := preload("res://assets/creatures/Ninja.gltf")
 const DEMON := preload("res://assets/creatures/Demon.gltf")
 const DRAGON := preload("res://assets/creatures/Dragon_Evolved.gltf")
 const BLUE_DEMON := preload("res://assets/creatures/BlueDemon.gltf")
+static var _warning_discs: Dictionary = {}
+static var _warning_stripe: BoxMesh
+static var _warning_ring: TorusMesh
+static var _warning_material: StandardMaterial3D
 var is_vault := false
 var is_dragon := false
 var is_keeper := false
@@ -72,19 +76,44 @@ func _ready() -> void:
 	add_child(_label)
 	_update_label()
 	_warning = MeshInstance3D.new()
-	var disc := CylinderMesh.new()
-	disc.top_radius = 2.6
-	disc.bottom_radius = 2.6
-	disc.height = 0.03
-	disc.radial_segments = 32
-	_warning.mesh = disc
-	var warning_material := StandardMaterial3D.new()
-	warning_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	warning_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	warning_material.albedo_color = Color(1.0, 0.18, 0.12, 0.48)
-	_warning.material_override = warning_material
+	_warning.mesh = _disc_mesh(2.6)
+	if _warning_material == null:
+		_warning_material = StandardMaterial3D.new()
+		_warning_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_warning_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_warning_material.albedo_color = Color(1.0, 0.18, 0.12, 0.48)
+	_warning.material_override = _warning_material
 	_warning.visible = false
-	get_parent().add_child.call_deferred(_warning)
+	_warning.top_level = true
+	add_child(_warning)
+
+
+static func _disc_mesh(radius: float) -> CylinderMesh:
+	if not _warning_discs.has(radius):
+		var disc := CylinderMesh.new()
+		disc.top_radius = radius
+		disc.bottom_radius = radius
+		disc.height = 0.03
+		disc.radial_segments = 32
+		_warning_discs[radius] = disc
+	return _warning_discs[radius]
+
+
+static func _line_mesh() -> BoxMesh:
+	if _warning_stripe == null:
+		_warning_stripe = BoxMesh.new()
+		_warning_stripe.size = Vector3(LINE_HALF_WIDTH * 2.0, 0.04, LINE_LENGTH)
+	return _warning_stripe
+
+
+static func _ring_mesh() -> TorusMesh:
+	if _warning_ring == null:
+		_warning_ring = TorusMesh.new()
+		_warning_ring.outer_radius = RING_OUTER
+		_warning_ring.inner_radius = RING_INNER
+		_warning_ring.rings = 32
+		_warning_ring.ring_segments = 8
+	return _warning_ring
 
 
 func _physics_process(delta: float) -> void:
@@ -118,32 +147,20 @@ func _physics_process(delta: float) -> void:
 				_line_direction = _line_direction.normalized()
 				_target = _line_origin + _line_direction * LINE_LENGTH * 0.5
 				_target.y = global_position.y + 0.08
-				var stripe := BoxMesh.new()
-				stripe.size = Vector3(LINE_HALF_WIDTH * 2.0, 0.04, LINE_LENGTH)
-				_warning.mesh = stripe
+				_warning.mesh = _line_mesh()
 				_warning.rotation.y = atan2(_line_direction.x, _line_direction.z)
 				_timer = 1.25 if is_keeper and phase >= 4 else 1.45 # Readable committed wind-up.
 				Game.toast.emit("%s: star slash — dodge sideways!" % _boss_name())
 			elif _attack_kind == "ring":
 				# A flat annulus leaves safe space inside and outside its visible band.
 				_target = global_position + Vector3(0, 0.08, 0)
-				var ring := TorusMesh.new()
-				ring.outer_radius = RING_OUTER
-				ring.inner_radius = RING_INNER
-				ring.rings = 32
-				ring.ring_segments = 8
-				_warning.mesh = ring
+				_warning.mesh = _ring_mesh()
 				_warning.scale.y = 0.03
 				_warning.rotation.y = 0.0
 				_timer = 1.5
 				Game.toast.emit("%s: eclipse ring — move inside or beyond the ring!" % _boss_name())
 			else:
-				var disc := CylinderMesh.new()
-				disc.top_radius = _radius
-				disc.bottom_radius = _radius
-				disc.height = 0.03
-				disc.radial_segments = 32
-				_warning.mesh = disc
+				_warning.mesh = _disc_mesh(_radius)
 				_warning.rotation.y = 0.0
 				_target = _player.global_position if targeted else global_position
 				_target.y = global_position.y + 0.08
@@ -205,7 +222,6 @@ func take_hit(power: float, _element: int, _direction: Vector3) -> void:
 	_update_label()
 	if hp <= 0.0:
 		_dead = true
-		if is_instance_valid(_warning): _warning.queue_free()
 		defeated.emit()
 		queue_free()
 
@@ -226,10 +242,6 @@ func _play_animation(part: String) -> void:
 			if _animation.current_animation != name or not _animation.is_playing():
 				_animation.play(name)
 			return
-
-
-func _exit_tree() -> void:
-	if is_instance_valid(_warning): _warning.queue_free()
 
 
 func _boss_name() -> String:

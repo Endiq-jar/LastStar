@@ -3,6 +3,8 @@ extends CharacterBody3D
 signal defeated
 const CREATURE := preload("res://assets/creatures/Ghost_Skull_Scout.glb")
 const ORC := preload("res://assets/creatures/Orc_Scout.glb")
+static var _warning_mesh: CylinderMesh
+static var _warning_material: StandardMaterial3D
 var is_orc := false
 var hp := 260.0
 var _power_multiplier := 1.0
@@ -45,19 +47,24 @@ func _ready() -> void:
 	_label.outline_size = 6
 	add_child(_label)
 	_warning = MeshInstance3D.new()
-	var circle := CylinderMesh.new()
-	circle.top_radius = 1.65
-	circle.bottom_radius = 1.65
-	circle.height = 0.03
-	circle.radial_segments = 24
-	_warning.mesh = circle
-	var mat := StandardMaterial3D.new()
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(1.0, 0.32, 0.16, 0.48)
-	_warning.material_override = mat
+	if _warning_mesh == null:
+		_warning_mesh = CylinderMesh.new()
+		_warning_mesh.top_radius = 1.65
+		_warning_mesh.bottom_radius = 1.65
+		_warning_mesh.height = 0.03
+		_warning_mesh.radial_segments = 24
+	if _warning_material == null:
+		_warning_material = StandardMaterial3D.new()
+		_warning_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_warning_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_warning_material.albedo_color = Color(1.0, 0.32, 0.16, 0.48)
+	_warning.mesh = _warning_mesh
+	_warning.material_override = _warning_material
 	_warning.visible = false
-	get_parent().add_child.call_deferred(_warning)
+	# Own the marker so it cannot be orphaned by a deferred parent add after a
+	# rapid encounter unload. Top-level keeps the committed target in world space.
+	_warning.top_level = true
+	add_child(_warning)
 
 
 func _physics_process(delta: float) -> void:
@@ -121,10 +128,6 @@ func take_hit(power: float, _element: int, _direction: Vector3) -> void:
 
 func take_combined_hit(power: float, first: int, _second: int, direction: Vector3) -> void:
 	take_hit(power, first, direction)
-
-
-func _exit_tree() -> void:
-	if is_instance_valid(_warning): _warning.queue_free()
 
 
 func _play(part: String) -> void:
