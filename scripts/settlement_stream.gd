@@ -16,6 +16,10 @@ const TABLE := preload("res://assets/furniture/table_small.gltf")
 const CHAIR := preload("res://assets/furniture/chair_A_wood.gltf")
 const SHELF := preload("res://assets/furniture/shelf_B_small_decorated.gltf")
 const RUG := preload("res://assets/furniture/rug_rectangle_A.gltf")
+const BED_MID := preload("res://assets/furniture/bed_single_A_Mid.glb")
+const COUCH_MID := preload("res://assets/furniture/couch_Mid.glb")
+const CHAIR_MID := preload("res://assets/furniture/chair_A_wood_Mid.glb")
+const SHELF_MID := preload("res://assets/furniture/shelf_B_small_decorated_Mid.glb")
 const NPC := preload("res://scripts/settler.gd")
 const ITEM := preload("res://scripts/settlement_item.gd")
 const HOUSE := preload("res://scripts/village_house.gd")
@@ -273,15 +277,15 @@ func _house(site_index: int, house_slot: int) -> Node3D:
 	# first house; living rooms swap in a couch rather than placing every prop.
 	var variation := (site_index + house_slot) % 3
 	if variation == 1:
-		_furnish(house, COUCH, "couch", "Inspect couch", Vector3(1.0, 0.08, 0.35))
+		_furnish(house, COUCH, "couch", "Inspect couch", Vector3(1.0, 0.08, 0.35), 0.0, COUCH_MID)
 	else:
-		_furnish(house, BED, "bed", "Rest at bed", Vector3(1.0, 0.08, 0.35))
+		_furnish(house, BED, "bed", "Rest at bed", Vector3(1.0, 0.08, 0.35), 0.0, BED_MID)
 	if variation != 2:
 		_furnish(house, TABLE, "table", "Inspect table", Vector3(-1.0, 0.08, 0.65))
 	if variation != 0:
-		_furnish(house, CHAIR, "chair", "Inspect chair", Vector3(-1.0, 0.08, 1.5), PI)
+		_furnish(house, CHAIR, "chair", "Inspect chair", Vector3(-1.0, 0.08, 1.5), PI, CHAIR_MID)
 	if (site_index + house_slot) % 2 == 0:
-		_furnish(house, SHELF, "shelf", "Read shelf", Vector3(0.0, 0.18, 1.85), PI)
+		_furnish(house, SHELF, "shelf", "Read shelf", Vector3(0.0, 0.18, 1.85), PI, SHELF_MID)
 	if (site_index + house_slot) % 4 != 3:
 		_furnish(house, RUG, "rug", "Inspect rug", Vector3(0.05, 0.08, 0.0))
 	# Two small props per house, selected deterministically, never all 20 at once.
@@ -297,14 +301,20 @@ func _house(site_index: int, house_slot: int) -> Node3D:
 	return house
 
 
-func _furnish(house: Node3D, model: PackedScene, id: String, label: String, at: Vector3, yaw: float = 0.0) -> void:
-	var furnishing := model.instantiate() as Node3D
+func _furnish(house: Node3D, model: PackedScene, id: String, label: String, at: Vector3, yaw: float = 0.0, middle_model: PackedScene = null) -> void:
+	var furnishing := Node3D.new()
 	furnishing.name = "Furniture_" + id
 	furnishing.position = at
 	furnishing.rotation.y = yaw
-	# Interior details do not need to be drawn across the settlement. Keep the
-	# interaction registration and model intact; only distance-cull the visuals.
-	_set_mesh_range(furnishing, 0.0, 50.0)
+	var near := model.instantiate() as Node3D
+	near.name = "Near"
+	furnishing.add_child(near)
+	_set_mesh_range(near, 0.0, 15.0 if middle_model != null else 50.0)
+	if middle_model != null:
+		var middle := middle_model.instantiate() as Node3D
+		middle.name = "Middle"
+		furnishing.add_child(middle)
+		_set_mesh_range(middle, 15.0, 50.0)
 	house.add_child(furnishing)
 	house.call("register_furniture", id, label, at)
 

@@ -872,7 +872,16 @@ func _run() -> void:
 					var furnishing_node := sample_house.get_node_or_null("Furniture_" + str(furnishing["id"]))
 					interior_variants_ok = interior_variants_ok and furnishing_node != null
 					if furnishing_node != null and not str(furnishing["id"]).begins_with("prop_"):
-						interior_variants_ok = interior_variants_ok and _mesh_ranges_match(furnishing_node, 0.0, 50.0)
+						var furniture_near := furnishing_node.get_node_or_null("Near")
+						var furniture_mid := furnishing_node.get_node_or_null("Middle")
+						interior_variants_ok = interior_variants_ok and furniture_near != null
+						if furniture_near != null:
+							interior_variants_ok = interior_variants_ok and _mesh_ranges_match(furniture_near, 0.0, 15.0 if furniture_mid != null else 50.0)
+							if furniture_mid != null:
+								var near_count := _recursive_mesh_triangles(furniture_near)
+								var mid_count := _recursive_mesh_triangles(furniture_mid)
+								interior_variants_ok = interior_variants_ok and _mesh_ranges_match(furniture_mid, 15.0, 50.0) and mid_count > 0 and mid_count < near_count
+						interior_variants_ok = interior_variants_ok and (furniture_mid != null) == (str(furnishing["id"]) in ["bed", "chair", "couch", "shelf"])
 					if str(furnishing["id"]).begins_with("prop_"):
 						prop_census[str(furnishing["id"])] = true
 						interior_variants_ok = interior_variants_ok and not str(furnishing["message"]).is_empty()

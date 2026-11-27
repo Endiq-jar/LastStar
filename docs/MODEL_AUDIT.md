@@ -59,7 +59,7 @@ assets/village/Window_Wide_Flat1.gltf	160 triangles	317 vertices
 
 ```
 
-Imported house furnishings retain their original close-up models and interactions but their visuals are distance-culled at 50 m; this is not a multi-level LOD and does not reduce the close-up model budgets.
+Bed, couch, chair and shelf keep their original close-up models at 0–15 m, use simplified versions at 15–50 m, and are hidden beyond 50 m. Their interactions are unchanged. Table and rug remain single-mesh distance-culled at 50 m. Source triangle counts before/after simplification are bed 474/262, couch 636/318, chair 308/230, shelf 532/396. These changes do not meet the close-up 200-triangle furniture target or guarantee visual quality; transitions require review.
 
 The 20 interior props are made from two or three boxes (24–36 triangles per prop) combined into one cached surface and one draw call per instance. They retain per-face normals and vertex colours, with 48–72 stored vertices; three-piece props exceed the 70-vertex target by two. They use flat colours rather than hand-painted textures or normal maps. Only two are placed in each house, and their geometry is hidden beyond 35 m. This is not a multi-level LOD system.
 
