@@ -305,11 +305,12 @@ func get_height_at(x: float, z: float) -> float:
 ## get_height_at(), so the bump is cosmetic and can never desync a collision
 ## query - see surface_height_at() for how scattered props still land on it.
 func _surface_point(x: float, z: float) -> Vector3:
+	var height := get_height_at(x, z)
 	var bump := surface_noise.get_noise_2d(x, z) * SURFACE_DETAIL
 	# Fade the bump out under the waterline so the beds stay smooth.
-	if get_height_at(x, z) < SEA_LEVEL + 1.0 or is_village_ground(x, z):
+	if height < SEA_LEVEL + 1.0 or is_village_ground(x, z):
 		bump = 0.0
-	return Vector3(x, get_height_at(x, z) + bump, z)
+	return Vector3(x, height + bump, z)
 
 
 ## The height of the RENDERED surface at a point, i.e. the bumpy mesh the player
@@ -563,6 +564,20 @@ func _add_skirts(st: SurfaceTool, pts: PackedVector3Array, row: int, x0: float, 
 				st.add_vertex(v)
 
 
+# Neighbouring quads share their corner positions. Sample each grid point once
+# instead of recomputing the same terrain and noise four times per interior point.
+func _sample_grid(origin: Vector2, step: float, quads: int, visual: bool, sink: float = 0.0) -> PackedVector3Array:
+	var row := quads + 1
+	var points := PackedVector3Array()
+	points.resize(row * row)
+	for gz in range(row):
+		for gx in range(row):
+			var x := origin.x + gx * step
+			var z := origin.y + gz * step
+			points[gz * row + gx] = _surface_point(x, z) if visual else Vector3(x, get_height_at(x, z) - sink, z)
+	return points
+
+
 func _build_mid(key: Vector2i) -> void:
 	if _mid.has(key):
 		return
@@ -576,6 +591,8 @@ func _build_mid(key: Vector2i) -> void:
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var points := _sample_grid(Vector2(x0, z0), step, MID_QUADS, true)
+	var row := MID_QUADS + 1
 	var quads := 0
 	for gz in range(MID_QUADS):
 		for gx in range(MID_QUADS):
@@ -583,10 +600,10 @@ func _build_mid(key: Vector2i) -> void:
 			var cz := z0 + (gz + 0.5) * step
 			if cx > wlo.x and cx < whi.x and cz > wlo.y and cz < whi.y:
 				continue
-			var p00 := _surface_point(x0 + gx * step, z0 + gz * step)
-			var p10 := _surface_point(x0 + (gx + 1) * step, z0 + gz * step)
-			var p01 := _surface_point(x0 + gx * step, z0 + (gz + 1) * step)
-			var p11 := _surface_point(x0 + (gx + 1) * step, z0 + (gz + 1) * step)
+			var p00 := points[gz * row + gx]
+			var p10 := points[gz * row + gx + 1]
+			var p01 := points[(gz + 1) * row + gx]
+			var p11 := points[(gz + 1) * row + gx + 1]
 			for v in [p00, p10, p01, p10, p11, p01]:
 				st.set_uv(Vector2(v.x, v.z) * 0.02)
 				st.add_vertex(v)
@@ -609,16 +626,14 @@ func _build_far_shell() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var half := FAR_CELL * float(FAR_CELLS) * 0.5
+	var points := _sample_grid(Vector2(-half, -half), FAR_CELL, FAR_CELLS, false, FAR_SINK)
+	var row := FAR_CELLS + 1
 	for gz in range(FAR_CELLS):
 		for gx in range(FAR_CELLS):
-			var x0 := -half + gx * FAR_CELL
-			var z0 := -half + gz * FAR_CELL
-			var x1 := x0 + FAR_CELL
-			var z1 := z0 + FAR_CELL
-			var p00 := Vector3(x0, get_height_at(x0, z0) - FAR_SINK, z0)
-			var p10 := Vector3(x1, get_height_at(x1, z0) - FAR_SINK, z0)
-			var p01 := Vector3(x0, get_height_at(x0, z1) - FAR_SINK, z1)
-			var p11 := Vector3(x1, get_height_at(x1, z1) - FAR_SINK, z1)
+			var p00 := points[gz * row + gx]
+			var p10 := points[gz * row + gx + 1]
+			var p01 := points[(gz + 1) * row + gx]
+			var p11 := points[(gz + 1) * row + gx + 1]
 			for v in [p00, p10, p01, p10, p11, p01]:
 				st.set_uv(Vector2(v.x, v.z) * 0.02)
 				st.add_vertex(v)
@@ -645,16 +660,14 @@ func _rebuild_collision(at: Vector2) -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var half := COLLIDE_SPAN * 0.5
 	var n := int(COLLIDE_SPAN / COLLIDE_STEP)
+	var points := _sample_grid(Vector2(cx - half, cz - half), COLLIDE_STEP, n, false)
+	var row := n + 1
 	for gz in range(n):
 		for gx in range(n):
-			var x0 := cx - half + gx * COLLIDE_STEP
-			var z0 := cz - half + gz * COLLIDE_STEP
-			var x1 := x0 + COLLIDE_STEP
-			var z1 := z0 + COLLIDE_STEP
-			var p00 := Vector3(x0, get_height_at(x0, z0), z0)
-			var p10 := Vector3(x1, get_height_at(x1, z0), z0)
-			var p01 := Vector3(x0, get_height_at(x0, z1), z1)
-			var p11 := Vector3(x1, get_height_at(x1, z1), z1)
+			var p00 := points[gz * row + gx]
+			var p10 := points[gz * row + gx + 1]
+			var p01 := points[(gz + 1) * row + gx]
+			var p11 := points[(gz + 1) * row + gx + 1]
 			for v in [p00, p10, p01, p10, p11, p01]:
 				st.add_vertex(v)
 	var mesh := st.commit()

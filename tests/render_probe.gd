@@ -881,6 +881,18 @@ func _run() -> void:
 		var empty_sample: Array = terrain_node.call("_nearby_village_pads", 4999.0, -4999.0)
 		village_index_ok = village_index_ok and empty_sample.is_empty()
 	_log("INFO" if village_index_ok else "FAIL", "Village spatial index preserves full-scan terrain results=%s" % str(village_index_ok))
+	var grid_ok := terrain_node != null
+	if terrain_node != null:
+		for visual in [false, true]:
+			var origin := Vector2(-149.0, 54.0)
+			var grid: PackedVector3Array = terrain_node.call("_sample_grid", origin, 8.0, 4, visual)
+			grid_ok = grid_ok and grid.size() == 25
+			for z in range(5):
+				for x in range(5):
+					var point: Vector3 = grid[z * 5 + x]
+					var expected_point: Vector3 = terrain_node.call("_surface_point", point.x, point.z) if visual else Vector3(point.x, terrain_node.call("get_height_at", point.x, point.z), point.z)
+					grid_ok = grid_ok and point.is_equal_approx(expected_point)
+	_log("INFO" if grid_ok else "FAIL", "Shared terrain sampling matches direct heights and visual points=%s" % str(grid_ok))
 
 	# Twenty distinct residents in the streamed outpost, each with independent
 	# quest state. Index zero retains the old save key for existing players.
