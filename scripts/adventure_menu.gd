@@ -342,6 +342,8 @@ func _quests() -> void:
 	if bool(story.get("memory_accepted", false)):
 		var memory_status := "Completed · choice: %s" % str(story.get("memory_choice", "")) if bool(story.get("memory_done", false)) else ("Return the fragment to Ilyra" if bool(story.get("memory_found", false)) else "Defeat the Warden, then recover the fragment from the chest")
 		_line("Main · A Memory in the Hollow: %s" % memory_status)
+	var ilyra_objective: String = Game.ilyra_arc_objective()
+	if not ilyra_objective.is_empty(): _line("Companion · The Names We Carry: " + ilyra_objective)
 	_line("STORY PATH", 18, UI.ACCENT)
 	_line("1. Complete Ilyra's A Light Remembered; accept and resolve A Memory in the Hollow. 2. In each settlement, complete the named leader's main quest for a written dungeon guide. 3. Clear the original 100 Hollows, then enter the Last Seal in Aetheris.")
 	_line("First tier: %d / 20 named memory Hollows cleared. The next 20 regional expeditions unlock afterwards; their enemies have 20× health and damage, and trials deal 20× damage. Many attacks are lethal in one hit." % Game.first_tier_clear_count())
@@ -646,6 +648,28 @@ func _dialogue() -> void:
 					_line("The patrol's families know the truth. Thank you for trusting me with it. Our bond strengthens my healing Gift.")
 				else:
 					_line("We kept the fragment safe for the scholars. I still hope the families can hear its story someday.")
+				_line("THE NAMES WE CARRY", 18, UI.ACCENT)
+				match int(story.get("ilyra_arc_stage", 0)):
+					0:
+						_line("Ilyra: I trained to mend wounds. I never learned what to say to a family when the Guard will not let me give them a name. Will you help me find the missing patrol record?")
+						_action("Help Ilyra · begin The Names We Carry", _begin_ilyra_arc)
+					1:
+						_line("Ilyra: The patrol memorial stands west of Ashvale's center. Read it and tell me what the Guard left out.")
+					2:
+						_line("Ilyra: The memorial has no names. Captain Ren in Elaris Capital may know why the order was sealed. Earn his trust through his main quest, then ask him.")
+					3:
+						if not Game.story_memory_owned("memory_vault"):
+							_line("Ilyra: Ren kept a copy. The Memory Vault near Lunareth holds the matching record. Recover it, then return to me.")
+						else:
+							_line("Ilyra: The names match. Ren hid the record because the order was wrong; I stayed silent because I was afraid the families would blame me. They deserved a choice, not my silence.")
+							_line("Ilyra asks how to return the names. Both choices strengthen her healing Gift and grant 60 starlight; the choice changes her later account.")
+							_action("Read the names at the memorial", _finish_ilyra_arc.bind("names"))
+							_action("Bring private letters to the families", _finish_ilyra_arc.bind("letters"))
+					4:
+						if str(story.get("ilyra_arc_choice", "")) == "names":
+							_line("Ilyra: We read every name at the memorial. The families corrected our record where it was wrong. I will keep a place for their voices.")
+						else:
+							_line("Ilyra: We carried the letters to the families first. They can decide which memories to share. For once, the Guard will listen before it records.")
 				if bool(story.get("keeper_defeated", false)):
 					var resolution := str(story.get("keeper_resolution", ""))
 					if resolution == "witness": _line("Ilyra: Their testimony is in the record, but it does not erase the people they silenced. That is where we begin again.")
@@ -724,6 +748,12 @@ func _settlement_dialogue() -> void:
 		if leader_status in ["available", "active"] and not local_hook.is_empty(): _line(local_hook)
 		if leader_status == "found" and payoff.size() == 2: _line(str(payoff[0]))
 		if leader_status == "done" and payoff.size() == 2: _line(str(payoff[1]))
+		if dialogue_site_id == "capital" and int(Game.guard_story.get("ilyra_arc_stage", 0)) == 2:
+			if leader_status == "done":
+				_line("Ren: The patrol record was sealed under my command. I believed hiding a failed order would spare their families. The copy in Lunareth's Memory Vault can tell Ilyra what I would not.")
+				_action("Ask Ren for the patrol record", _hear_ilyra_guard_record)
+			else:
+				_line("Ren: Recover my Seal report first. I need to know I can trust you with the patrol's sealed order.")
 		if leader_status != "done": _line("Complete my main quest to receive a written guide to this region's Hollows.")
 		elif bool(Game.guard_story.get("keeper_defeated", false)):
 			var resolution := str(Game.guard_story.get("keeper_resolution", ""))
@@ -864,6 +894,21 @@ func _buy_sunrise_outfit() -> void:
 
 func _toggle_weapons() -> void:
 	_show_weapons = not _show_weapons
+	_refresh()
+
+
+func _begin_ilyra_arc() -> void:
+	_status = "The Names We Carry added to your journal." if Game.begin_ilyra_arc() else "Resolve Ilyra's Hollow memory first."
+	_refresh()
+
+
+func _hear_ilyra_guard_record() -> void:
+	_status = "Ren's account recorded. Find the matching record in the Memory Vault." if Game.hear_ilyra_guard_record() else "Complete Ren's main quest first."
+	_refresh()
+
+
+func _finish_ilyra_arc(choice: String) -> void:
+	_status = "Ilyra's Gift is strengthened. You received 60 starlight." if Game.finish_ilyra_arc(choice) else "Recover the Vault memory first."
 	_refresh()
 
 

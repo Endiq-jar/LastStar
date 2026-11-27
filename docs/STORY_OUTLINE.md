@@ -28,6 +28,17 @@ and does not alter rewards or entry requirements. Older completed saves can
 return to the Last Seal to decide. These are narrative consequences, not a new
 branch of levels or cinematics.
 
+## Ilyra — The Names We Carry
+
+After resolving the Ashvale memory, players can accept Ilyra's optional personal
+quest. They read an interactable memorial in Ashvale, earn Captain Ren's trust
+through his existing capital quest and ask about the sealed order, then recover
+the existing Memory Vault record. They choose whether to read the names at the
+memorial or bring private letters to the families. The decision changes Ilyra's
+later dialogue and the written ending; either choice strengthens her existing
+healing support and grants 60 starlight once. Quest stage and choice are saved,
+old clears count, and this quest does not gate the main story or finale.
+
 ## Premise
 
 Long ago the First Silence nearly extinguished the light of Elaris. The Seven

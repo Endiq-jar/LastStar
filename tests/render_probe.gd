@@ -1255,6 +1255,48 @@ func _run() -> void:
 	Game.save_collection()
 	_log("INFO" if chronicle_ok else "FAIL", "25 gated story accounts, 14 regional arcs, finale choices and save compatibility=%s" % str(chronicle_ok))
 
+	# Optional companion quest: real memorial interaction, prerequisites, both
+	# decisions, once-only reward, older clears and save persistence.
+	var arc_story: Dictionary = Game.guard_story.duplicate(true)
+	var arc_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+	var arc_quests: Dictionary = Game.settlement_quests.duplicate(true)
+	var arc_light: int = Game.starlight
+	Game.guard_story = {}
+	Game.dungeon_clears = {}
+	Game.settlement_quests = {}
+	var arc_ok := not Game.begin_ilyra_arc() and not Game.read_ilyra_memorial()
+	Game.guard_story["memory_done"] = true
+	arc_ok = arc_ok and Game.begin_ilyra_arc() and not Game.begin_ilyra_arc() and not Game.hear_ilyra_guard_record()
+	var memorial = load("res://scripts/patrol_memorial.gd").new()
+	world.add_child(memorial)
+	var arc_actor := Node3D.new()
+	world.add_child(arc_actor)
+	arc_actor.global_position = memorial.global_position
+	arc_ok = arc_ok and memorial.call("try_interact", arc_actor) and not memorial.call("try_interact", arc_actor)
+	arc_ok = arc_ok and not Game.hear_ilyra_guard_record()
+	Game.settlement_quests["capital:main"] = "done"
+	arc_ok = arc_ok and Game.hear_ilyra_guard_record() and not Game.finish_ilyra_arc("names")
+	Game.dungeon_clears["memory_vault"] = true
+	arc_ok = arc_ok and not Game.finish_ilyra_arc("invalid") and Game.finish_ilyra_arc("names") and not Game.finish_ilyra_arc("names")
+	arc_ok = arc_ok and Game.starlight == arc_light + 60 and int(Game.guard_story.get("ilyra_bond", 0)) == 3
+	Game.save_collection()
+	Game.guard_story = {}
+	Game.load_collection()
+	arc_ok = arc_ok and int(Game.guard_story.get("ilyra_arc_stage", 0)) == 4 and str(Game.guard_story.get("ilyra_arc_choice", "")) == "names"
+	Game.guard_story["keeper_defeated"] = true
+	var names_ending: String = Game.story_ending()
+	Game.guard_story["ilyra_arc_stage"] = 3
+	arc_ok = arc_ok and Game.finish_ilyra_arc("letters") and names_ending != Game.story_ending()
+	memorial.queue_free()
+	arc_actor.queue_free()
+	Game.guard_story = arc_story
+	Game.dungeon_clears = arc_clears
+	Game.settlement_quests = arc_quests
+	Game.starlight = arc_light
+	Game.save_collection()
+	Game.collection_changed.emit()
+	_log("INFO" if arc_ok else "FAIL", "Ilyra companion quest, memorial, choices and persistence=%s" % str(arc_ok))
+
 	# Fixed tiers scale regional encounters and the Keeper without a setting.
 	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_039"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_040"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_059"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_060"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_079"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_080"), 1.0)
 	var challenge_fixture := Node3D.new()

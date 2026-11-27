@@ -81,7 +81,8 @@ func _process(delta: float) -> void:
 		for enemy in get_tree().get_nodes_in_group("enemy"):
 			if enemy is Node3D and is_instance_valid(enemy) and enemy.global_position.distance_to(player.global_position) < 16.0:
 				_support_cooldown = 18.0
-				var amount := 105.0 if int(Game.guard_story.get("ilyra_bond", 0)) >= 2 else 75.0
+				var bond := int(Game.guard_story.get("ilyra_bond", 0))
+				var amount := 125.0 if bond >= 3 else (105.0 if bond >= 2 else 75.0)
 				Game.heal(amount)
 				Game.toast.emit("Ilyra's Gift: +%d health" % int(amount))
 				break

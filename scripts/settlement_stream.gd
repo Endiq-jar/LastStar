@@ -24,6 +24,7 @@ const NPC := preload("res://scripts/settler.gd")
 const ITEM := preload("res://scripts/settlement_item.gd")
 const HOUSE := preload("res://scripts/village_house.gd")
 const PROPS := preload("res://scripts/interior_props.gd")
+const PATROL_MEMORIAL := preload("res://scripts/patrol_memorial.gd")
 const STONE_SHADER := preload("res://shaders/village_stone.gdshader")
 const VILLAGE_GROUND_SIZE := DATA.PAVING_HALF_SIZE * 2.0
 static var _ground_mesh: PlaneMesh
@@ -160,6 +161,18 @@ func _sync_items_for_site(site: Dictionary, root: Node3D) -> void:
 			elif not active and node != null:
 				root.remove_child(node)
 				node.queue_free()
+	if id == "ashvale":
+		var memorial := root.get_node_or_null("PatrolMemorial")
+		var needed := int(Game.guard_story.get("ilyra_arc_stage", 0)) == 1
+		if needed and memorial == null:
+			var pos: Vector2 = center + Vector2(-32, 8)
+			var marker := PATROL_MEMORIAL.new()
+			marker.name = "PatrolMemorial"
+			marker.position = Vector3(pos.x, float(_world.call("_height", pos.x, pos.y)), pos.y)
+			root.add_child(marker)
+		elif not needed and memorial != null:
+			root.remove_child(memorial)
+			memorial.queue_free()
 
 
 func _add_village_ground(root: Node3D, center: Vector2) -> void:

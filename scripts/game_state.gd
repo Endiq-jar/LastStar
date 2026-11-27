@@ -185,7 +185,13 @@ func story_account(id: String) -> String:
 
 func story_ending() -> String:
 	if not bool(guard_story.get("keeper_defeated", false)): return ""
-	return STORY_CHRONICLE.ending(str(guard_story.get("memory_choice", "")), str(guard_story.get("keeper_resolution", "")))
+	var conclusion: String = STORY_CHRONICLE.ending(str(guard_story.get("memory_choice", "")), str(guard_story.get("keeper_resolution", "")))
+	if int(guard_story.get("ilyra_arc_stage", 0)) == 4:
+		if str(guard_story.get("ilyra_arc_choice", "")) == "names":
+			conclusion += " Ilyra keeps the patrol's names at the memorial, with room for their families to correct the record."
+		else:
+			conclusion += " Ilyra delivers the patrol's letters to their families, who decide what to share."
+	return conclusion
 
 
 func resolve_keeper_memory(choice: String) -> bool:
@@ -850,6 +856,52 @@ func resolve_hollow_memory(choice: String) -> bool:
 	collection_changed.emit()
 	toast.emit("Memory understood: %s learned." % wander.spell(spell)["name"])
 	return true
+
+
+# Optional personal quest. Stages are persisted in the existing guard_story
+# dictionary and never gate the main Hollows or the Last Seal.
+func begin_ilyra_arc() -> bool:
+	if not bool(guard_story.get("memory_done", false)) or int(guard_story.get("ilyra_arc_stage", 0)) != 0: return false
+	guard_story["ilyra_arc_stage"] = 1
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func read_ilyra_memorial() -> bool:
+	if int(guard_story.get("ilyra_arc_stage", 0)) != 1: return false
+	guard_story["ilyra_arc_stage"] = 2
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func hear_ilyra_guard_record() -> bool:
+	if int(guard_story.get("ilyra_arc_stage", 0)) != 2 or not region_chart_unlocked("capital"): return false
+	guard_story["ilyra_arc_stage"] = 3
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func finish_ilyra_arc(choice: String) -> bool:
+	if int(guard_story.get("ilyra_arc_stage", 0)) != 3 or not story_memory_owned("memory_vault") or not ["names", "letters"].has(choice): return false
+	guard_story["ilyra_arc_stage"] = 4
+	guard_story["ilyra_arc_choice"] = choice
+	guard_story["ilyra_bond"] = maxi(3, int(guard_story.get("ilyra_bond", 0)))
+	starlight += 60
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func ilyra_arc_objective() -> String:
+	match int(guard_story.get("ilyra_arc_stage", 0)):
+		1: return "Read the patrol memorial west of Ashvale's center."
+		2: return "Complete Captain Ren's main quest in Elaris Capital, then ask him about the sealed order."
+		3: return "Clear the Memory Vault near Lunareth and speak to Ilyra."
+		4: return "Completed · Ilyra's Gift is strengthened; 60 starlight received."
+	return ""
 
 
 func set_ilyra_following(following: bool) -> bool:

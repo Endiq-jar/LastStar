@@ -606,6 +606,18 @@ func _nearest_house_interaction(actor: Node3D) -> Dictionary:
 	return result
 
 
+func _nearest_story_interaction(actor: Node3D) -> Dictionary:
+	var best := INF
+	var result: Dictionary = {}
+	for object in get_tree().get_nodes_in_group("story_interaction"):
+		if not is_instance_valid(object) or object.is_queued_for_deletion(): continue
+		var choice: Dictionary = object.call("interaction_for", actor)
+		if not choice.is_empty() and float(choice["distance"]) < best:
+			best = float(choice["distance"])
+			result = {"object": object, "name": choice["name"]}
+	return result
+
+
 func _nearest_story_npc(actor: Node3D) -> Node3D:
 	var nearest: Node3D = null
 	var distance := 8.0
@@ -642,6 +654,10 @@ func _use_nearby_house_object() -> void:
 	var actor := get_tree().get_first_node_in_group("player") as Node3D
 	if actor == null: return
 	# Re-evaluate at click time so a stale button cannot act at a distance.
+	var story_target := _nearest_story_interaction(actor)
+	if not story_target.is_empty():
+		story_target["object"].call("try_interact", actor)
+		return
 	var target := _nearest_house_interaction(actor)
 	if not target.is_empty():
 		target["house"].call("try_interact", actor)
@@ -654,7 +670,8 @@ func _update_nearby_object_button() -> void:
 	var actor := get_tree().get_first_node_in_group("player") as Node3D
 	var target: Dictionary = {}
 	if actor != null and not Game.is_paused and not Game.has_won:
-		target = _nearest_house_interaction(actor)
+		target = _nearest_story_interaction(actor)
+		if target.is_empty(): target = _nearest_house_interaction(actor)
 		if target.is_empty():
 			var npc := _nearest_story_npc(actor)
 			if npc != null: target = {"name": "Talk to " + _npc_name(npc)}
@@ -671,6 +688,10 @@ func _talk_to_guard() -> void:
 	for hollow in get_tree().get_nodes_in_group("hollow_entrance"):
 		if hollow.call("try_interact", player):
 			return
+	var story_target := _nearest_story_interaction(player)
+	if not story_target.is_empty():
+		story_target["object"].call("try_interact", player)
+		return
 	var house_target := _nearest_house_interaction(player)
 	if not house_target.is_empty():
 		house_target["house"].call("try_interact", player)
@@ -831,6 +852,8 @@ func _refresh_quest_box() -> void:
 	if bool(story.get("memory_accepted", false)):
 		var memory_status := "Completed" if bool(story.get("memory_done", false)) else ("Return the fragment to Ilyra" if bool(story.get("memory_found", false)) else "Defeat the Warden and search its chest")
 		lines.append("Ilyra · A Memory in the Hollow\n%s" % memory_status)
+	var companion_objective: String = Game.ilyra_arc_objective()
+	if not companion_objective.is_empty(): lines.append("Ilyra · The Names We Carry\n" + companion_objective)
 	for site in SETTLEMENTS.SITES:
 		for index in range(SETTLEMENTS.RESIDENT_COUNT):
 			for kind in ["main", "side"]:
