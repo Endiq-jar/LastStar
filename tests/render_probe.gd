@@ -394,15 +394,15 @@ func _run() -> void:
 		# Simulate a far batch becoming near after travel. It must be removed
 		# and queued again rather than remaining permanently sparse.
 		var live_chunks: Dictionary = grass.get("_chunks")
-		var center: Vector2i = grass.get("_last_center")
 		var checked_tier := false
 		for key in live_chunks.keys():
-			if int(grass.call("_tier_for_chunk", key, center)) == 0:
-				var chunk: Node = live_chunks[key]
-				chunk.set_meta("grass_tier", 2)
-				grass.call("_queue_around", center)
-				checked_tier = not live_chunks.has(key)
-				break
+			# The paved village may contain no near grass. Simulate travel to an
+			# existing grassy chunk rather than assuming spawn is meadow.
+			var chunk: Node = live_chunks[key]
+			chunk.set_meta("grass_tier", 2)
+			grass.call("_queue_around", key)
+			checked_tier = int(grass.call("_tier_for_chunk", key, key)) == 0 and not live_chunks.has(key)
+			break
 		_log("INFO" if checked_tier else "FAIL", "grass density upgrades when a far chunk becomes near: %s" % str(checked_tier))
 		# A quality change must retire the old dense batches rather than merely
 		# changing the budget for future chunks. Restore the original setting
