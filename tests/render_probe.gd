@@ -2006,6 +2006,26 @@ func _run() -> void:
 				finale_ok = false
 			hollow_player.global_position = finale.get("_arena_exit")
 			finale_ok = finale.call("try_interact", hollow_player) and not Game.in_final_dungeon and finale_ok
+			# An already-completed save without the newer decision can return and
+			# choose without fighting again or receiving the boss reward twice.
+			Game.guard_story.erase("keeper_resolution")
+			Game.save_collection()
+			hollow_player.global_position = finale.get("entrance")
+			finale_ok = finale_ok and bool(finale.call("try_interact", hollow_player)) and bool(finale.get("inside"))
+			var revisit_marker := finale.get("_resolution_marker") as Node3D
+			finale_ok = finale_ok and revisit_marker != null and not is_instance_valid(finale.get("boss"))
+			if revisit_marker != null and menu != null:
+				hollow_player.global_position = revisit_marker.global_position
+				finale_ok = finale_ok and bool(finale.call("try_interact", hollow_player)) and menu.visible
+				menu.call("_resolve_keeper_memory", "private")
+				menu.call("close_menu")
+				Game.guard_story = {}
+				Game.load_collection()
+				finale_ok = finale_ok and str(Game.guard_story.get("keeper_resolution", "")) == "private" and Game.coins == finale_coins + 1000 and Game.starlight == finale_light + 200
+			else:
+				finale_ok = false
+			hollow_player.global_position = finale.get("_arena_exit")
+			finale_ok = bool(finale.call("try_interact", hollow_player)) and not Game.in_final_dungeon and finale_ok
 		hollow_player.global_position = finale_pos
 		Game.guard_story = finale_story
 		Game.dungeon_clears = finale_clears
