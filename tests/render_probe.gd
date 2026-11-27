@@ -858,6 +858,29 @@ func _run() -> void:
 					var quest_offset: Vector2 = site_data.quest_offset(resident_index, quest_kind)
 					flat_villages_ok = flat_villages_ok and maxf(absf(quest_offset.x), absf(quest_offset.y)) < site_data.PAVING_HALF_SIZE
 	_log("INFO" if flat_villages_ok else "FAIL", "All 14 settlements have level dry paved ground and level house approaches=%s" % str(flat_villages_ok))
+	# Compare the spatial index with a full ordered scan, including negative
+	# coordinates, cell boundaries, and every village's blend edge.
+	var village_index_ok := terrain_node != null
+	if terrain_node != null:
+		var all_pads: Array = terrain_node.get("_village_pads")
+		var samples: Array[Vector2] = [Vector2.ZERO, Vector2(-256, -256), Vector2(256, 256), Vector2(4999, -4999)]
+		for pad in all_pads:
+			var pad_center: Vector2 = pad["center"]
+			for dx in [-89.0, -88.0, -64.0, 0.0, 64.0, 88.0, 89.0]:
+				for dz in [-89.0, -64.0, 0.0, 64.0, 89.0]:
+					samples.append(pad_center + Vector2(dx, dz))
+		for sample in samples:
+			var expected: Array = []
+			for pad in all_pads:
+				if float(terrain_node.call("_village_blend", sample.x, sample.y, pad)) > 0.0: expected.append(pad)
+			var indexed: Array = terrain_node.call("_nearby_village_pads", sample.x, sample.y)
+			var actual: Array = []
+			for pad in indexed:
+				if float(terrain_node.call("_village_blend", sample.x, sample.y, pad)) > 0.0: actual.append(pad)
+			village_index_ok = village_index_ok and expected == actual
+		var empty_sample: Array = terrain_node.call("_nearby_village_pads", 4999.0, -4999.0)
+		village_index_ok = village_index_ok and empty_sample.is_empty()
+	_log("INFO" if village_index_ok else "FAIL", "Village spatial index preserves full-scan terrain results=%s" % str(village_index_ok))
 
 	# Twenty distinct residents in the streamed outpost, each with independent
 	# quest state. Index zero retains the old save key for existing players.

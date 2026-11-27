@@ -31,6 +31,8 @@ const BIOMES := preload("res://scripts/biome_regions.gd")
 const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
 const VILLAGE_FLAT_HALF_SIZE := SETTLEMENTS.PAVING_HALF_SIZE + SETTLEMENTS.FLAT_MARGIN
 const VILLAGE_BLEND_HALF_SIZE := VILLAGE_FLAT_HALF_SIZE + SETTLEMENTS.TERRAIN_BLEND_WIDTH
+const VILLAGE_INDEX_CELL := 256.0
+const NO_VILLAGE_PADS := []
 const WORLD_SIZE := 10000.0
 const SEA_LEVEL := 1.2
 
@@ -86,6 +88,7 @@ const MID_BUILDS_PER_FRAME := 1
 # Stable pads are resolved against the unmodified terrain before any mesh or
 # collision is built. The same centers are used by the settlement streamer.
 var _village_pads: Array[Dictionary] = []
+var _village_cells: Dictionary = {}
 var height_noise: FastNoiseLite
 var ridge_noise: FastNoiseLite
 var detail_noise: FastNoiseLite
@@ -179,6 +182,26 @@ func _setup_village_pads() -> void:
 		var level := surface_height_at(center.x, center.y)
 		pads.append({"origin": origin, "center": center, "height": level})
 	_village_pads = pads
+	# Index each blend square into every grid cell it overlaps. Most terrain
+	# samples are far from villages and now examine no pads rather than all 14.
+	# Append in site order so overlapping pads retain the original precedence.
+	_village_cells.clear()
+	for pad in _village_pads:
+		var center: Vector2 = pad["center"]
+		var min_x := floori((center.x - VILLAGE_BLEND_HALF_SIZE) / VILLAGE_INDEX_CELL)
+		var max_x := floori((center.x + VILLAGE_BLEND_HALF_SIZE) / VILLAGE_INDEX_CELL)
+		var min_z := floori((center.y - VILLAGE_BLEND_HALF_SIZE) / VILLAGE_INDEX_CELL)
+		var max_z := floori((center.y + VILLAGE_BLEND_HALF_SIZE) / VILLAGE_INDEX_CELL)
+		for z in range(min_z, max_z + 1):
+			for x in range(min_x, max_x + 1):
+				var key := Vector2i(x, z)
+				if not _village_cells.has(key): _village_cells[key] = []
+				_village_cells[key].append(pad)
+
+
+func _nearby_village_pads(x: float, z: float) -> Array:
+	var key := Vector2i(floori(x / VILLAGE_INDEX_CELL), floori(z / VILLAGE_INDEX_CELL))
+	return _village_cells.get(key, NO_VILLAGE_PADS)
 
 
 func village_site_position(origin: Vector2) -> Vector2:
@@ -195,7 +218,7 @@ func _village_blend(x: float, z: float, pad: Dictionary) -> float:
 
 
 func is_village_ground(x: float, z: float) -> bool:
-	for pad in _village_pads:
+	for pad in _nearby_village_pads(x, z):
 		var center: Vector2 = pad["center"]
 		# Suppress visual bumps and scattered vegetation over the whole flat
 		# core, not just the paving: mesh interpolation at its edges samples
@@ -268,7 +291,7 @@ func get_height_at(x: float, z: float) -> float:
 		h = _carve(h, Vector2(x, z).distance_to(Vector2(pond.x, pond.y)), pond.z, SEA_LEVEL - 1.6)
 	if absf(z) < 3400.0:
 		h = _carve(h, absf(x - river_x(z)), RIVER_REACH, SEA_LEVEL - 2.6)
-	for pad in _village_pads:
+	for pad in _nearby_village_pads(x, z):
 		var blend := _village_blend(x, z, pad)
 		if blend > 0.0:
 			h = lerpf(h, float(pad["height"]), blend)
