@@ -19,6 +19,7 @@ var sector := 0
 var _remaining := 0
 var _gates: Array[Node3D] = []
 var _story_echoes: Array[Node3D] = []
+var _resolution_marker: Node3D
 var _exit: Vector3
 var _arena_exit: Vector3
 var _checkpoint: Vector3
@@ -43,6 +44,11 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
 
 func try_interact(actor: Node3D) -> bool:
 	if inside:
+		if is_instance_valid(_resolution_marker) and actor.global_position.distance_to(_resolution_marker.global_position) < 3.5:
+			var menu := get_parent().get_node_or_null("HUD/Root/AdventureMenu")
+			if menu != null: menu.call("open_menu", "Finale")
+			else: Game.toast.emit("The Keeper's memory waits at the Seal.")
+			return true
 		for echo in _story_echoes:
 			if is_instance_valid(echo) and actor.global_position.distance_to(echo.global_position) < 3.5:
 				Game.toast.emit(str(echo.get_meta("story")))
@@ -68,6 +74,7 @@ func _enter() -> void:
 	_remaining = 0
 	_gates.clear()
 	_story_echoes.clear()
+	_resolution_marker = null
 	chamber = Node3D.new()
 	chamber.name = "LastSealDepths"
 	get_parent().add_child(chamber)
@@ -122,6 +129,7 @@ func _enter() -> void:
 	player.velocity = Vector3.ZERO
 	if bool(Game.guard_story.get("keeper_defeated", false)):
 		for gate in _gates: gate.queue_free()
+		_spawn_resolution_marker()
 		Game.toast.emit("The Keeper is defeated. The Last Seal remembers.")
 	else:
 		_spawn_guardians()
@@ -163,7 +171,7 @@ func _spawn_keeper() -> void:
 	boss.position = Vector3(0, -79.8, -1013)
 	chamber.add_child(boss)
 	boss.connect("defeated", _keeper_defeated)
-	Game.toast.emit("The Keeper: I will not let the world lose anyone again. Watch for the star slash!")
+	Game.toast.emit(str(Game.STORY_CHRONICLE.KEEPER_PHASES[0]))
 
 
 func _keeper_defeated() -> void:
@@ -173,7 +181,35 @@ func _keeper_defeated() -> void:
 		Game.starlight += 200
 		Game.save_collection()
 		Game.collection_changed.emit()
-	Game.toast.emit("The Keeper falls. The Seals hold, and Elaris remembers. +1000 Ane, +200 starlight.")
+	_spawn_resolution_marker()
+	Game.toast.emit("The Keeper falls. The Seals hold. The Keeper's memory awaits your decision.")
+
+
+func _spawn_resolution_marker() -> void:
+	if not is_instance_valid(chamber) or is_instance_valid(_resolution_marker) or not str(Game.guard_story.get("keeper_resolution", "")).is_empty(): return
+	_resolution_marker = Node3D.new()
+	_resolution_marker.name = "KeeperMemory"
+	_resolution_marker.position = Vector3(0, -80.0, -1015)
+	chamber.add_child(_resolution_marker)
+	var visual := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.32
+	sphere.height = 0.64
+	visual.mesh = sphere
+	visual.position.y = 1.0
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(0.8, 0.76, 1.0)
+	visual.material_override = material
+	_resolution_marker.add_child(visual)
+	var label := Label3D.new()
+	label.text = "F / Talk · The Keeper's memory"
+	label.position.y = 2.0
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 36
+	label.pixel_size = 0.004
+	label.outline_size = 6
+	_resolution_marker.add_child(label)
 
 
 func _marker(text: String, at: Vector3) -> void:
@@ -222,6 +258,7 @@ func _leave() -> void:
 	boss = null
 	_gates.clear()
 	_story_echoes.clear()
+	_resolution_marker = null
 	Game.toast.emit("You returned from the Last Seal.")
 
 

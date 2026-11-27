@@ -218,7 +218,10 @@ func take_hit(power: float, _element: int, _direction: Vector3) -> void:
 		next_phase = 2
 	if next_phase > phase:
 		phase = next_phase
-		Game.toast.emit("%s phase %d: watch the strike patterns!" % [_boss_name(), phase])
+		if is_keeper:
+			Game.toast.emit(str(Game.STORY_CHRONICLE.KEEPER_PHASES[mini(phase - 1, 3)]))
+		else:
+			Game.toast.emit("%s phase %d: watch the strike patterns!" % [_boss_name(), phase])
 	_update_label()
 	if hp <= 0.0:
 		_dead = true

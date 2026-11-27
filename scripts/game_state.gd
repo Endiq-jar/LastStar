@@ -185,7 +185,16 @@ func story_account(id: String) -> String:
 
 func story_ending() -> String:
 	if not bool(guard_story.get("keeper_defeated", false)): return ""
-	return STORY_CHRONICLE.ending(str(guard_story.get("memory_choice", "")))
+	return STORY_CHRONICLE.ending(str(guard_story.get("memory_choice", "")), str(guard_story.get("keeper_resolution", "")))
+
+
+func resolve_keeper_memory(choice: String) -> bool:
+	if not bool(guard_story.get("keeper_defeated", false)) or not ["witness", "private"].has(choice) or not str(guard_story.get("keeper_resolution", "")).is_empty():
+		return false
+	guard_story["keeper_resolution"] = choice
+	save_collection()
+	collection_changed.emit()
+	return true
 
 
 func all_story_memories() -> Array:

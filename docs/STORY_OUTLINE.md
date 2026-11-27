@@ -17,6 +17,17 @@ that reflects the player's existing share/study decision; old saves derive the
 accounts from their existing clear flags. These are written dialogue and
 interactions, not new cinematics, bespoke levels, or an expanded companion arc.
 
+## Regional and finale dialogue
+
+The 14 leaders now have authored discoveries and completion payoffs linked to
+their existing quest items. At the end of the Last Seal, players can record the
+Keeper's testimony publicly or keep the Keeper's own memory private while the
+witnesses retain their accounts. The decision is optional until selected,
+persists in existing story saves, changes the written ending and later dialogue,
+and does not alter rewards or entry requirements. Older completed saves can
+return to the Last Seal to decide. These are narrative consequences, not a new
+branch of levels or cinematics.
+
 ## Premise
 
 Long ago the First Silence nearly extinguished the light of Elaris. The Seven

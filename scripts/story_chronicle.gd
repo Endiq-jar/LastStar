@@ -46,6 +46,32 @@ const REGION_HOOKS := {
 	"aetheris": "The oldest Seal inscriptions describe a door as well as a shield. Recover the notes and we can read them together."
 }
 
+# Written specifically for each leader's existing main-quest item. These are
+# delivered at the found and completed stages, not as new fetch objectives.
+const REGIONAL_PAYOFFS := {
+	"ashvale": ["The dispatch is addressed to the missing patrol. Its final order is sealed, but Mira will recognise the hand.", "Mira: I wrote this order. I told them to guide families out, not hold the breach alone. I will give the families their names and help Ilyra find the truth."],
+	"capital": ["The report bears two seals: an official order and an older note hidden beneath it. Captain Ren should see both.", "Ren: The Guard was ordered to protect a secret before the people. I cannot undo that order, but I can refuse it today. Take our guide and let the record be challenged."],
+	"lunareth": ["The folio's margins contain a second set of notes on memories and light. Veya can make sense of the experiment.", "Veya: These are not the notes of a lone genius. Several scholars corrected one another. Perhaps light holds because memories are allowed to disagree."],
+	"tidefall": ["The tide chart marks a safe crossing and a bell below the waterline. Neri will know which crews are still at sea.", "Neri: The chart gives us time to warn the boats. We cannot raise the old tower, but we can keep its warning alive. Follow these routes to the echoes."],
+	"glassheaven": ["The prism carries a faint, unfinished voice. Prism has the tools to hear it without breaking the crystal.", "Prism: There are several voices inside, not one. I will preserve the recording without deciding which voice matters most. You should hear where it came from."],
+	"frostmere": ["The trail record marks a return route that ends before the pass. Bryn may know why the guides never used it.", "Bryn: They erased the trail behind the caravans to draw the creatures away. We will mark the path again and remember who stayed behind."],
+	"suncrest": ["A caravan ledger hides directions among ordinary trades. Zara can separate the route from the cargo list.", "Zara: The traders divided the route because no single caravan was safe. I will share the pieces with the other settlements; you can follow this one."],
+	"orchard": ["The bark rubbing reveals marks beneath the oldest roots. Orin may recognise their pattern.", "Orin: Those marks were made by the people sheltering children here. I will plant their seeds where their names can be spoken again."],
+	"ravenhold": ["The sentry orders include a retreat signal that was never answered. Tamsin needs to read the last page.", "Tamsin: The defenders held the wall after the road was clear. Their sacrifice will not become an excuse to leave the next watch alone."],
+	"duskhaven": ["The twilight notes contain a copy of a witness statement, hidden inside a damaged cover. Nox asked for the original.", "Nox: Someone tried to erase this testimony. I will keep both the damaged record and the copy, so no one can pretend they were always the same."],
+	"deep": ["The passage sketch shows a service route under Aetheris. Delve can check whether its markings are still trustworthy.", "Delve: Our builders made the passage for repair, not conquest. I will send word to the surface; the people who enter should know why it exists."],
+	"starfall": ["The skywatch notes describe a falling light and a group of unnamed observers. Aster can compare them with the current sky.", "Aster: Our founders were witnesses, not owners of a star. I will add their account to the records we share with the other settlements."],
+	"evergloom": ["The survey marks abandoned homes and the tracks of those who left them. Rook can tell which paths remain safe.", "Rook: They did not simply vanish. Some escaped and some stayed to hold a route open. I will trace both stories instead of treating this place as empty."],
+	"aetheris": ["The inscription names a shield, a passage, and a promise. Seren can compare it with the guarded record.", "Seren: The Last Seal was meant to be tended, not owned. I will open the archive to witnesses. When you are ready, follow the passage beneath Aetheris."]
+}
+
+const KEEPER_PHASES := [
+	"The Keeper: I watched a world go dark. I will not let it happen again.",
+	"The Keeper: Trust did not save the people at the wall. My Seals did.",
+	"The Keeper: If you break my hold, who will answer when the Silence returns?",
+	"The Keeper: Then show me a promise strong enough to outlive its keeper."
+]
+
 const FINAL_ECHOES := [
 	"A witness: The Seals were raised to give the living time, not to make their choices for them.",
 	"The Keeper: I counted every person I lost. I could not bear to entrust the next life to chance.",
@@ -56,10 +82,18 @@ static func account(id: String) -> String:
 	return str(ACCOUNTS.get(id, ""))
 
 
-static func ending(choice: String) -> String:
+static func ending(choice: String, resolution: String = "") -> String:
 	var first := "At the Last Seal, the Keeper's grip breaks. The Seals do not fall: the people of Elaris take up the work together, keeping the promise the lost voices preserved."
 	if choice == "share":
-		return first + " In Ashvale, the patrol's families speak their names aloud; Ilyra carries their words into the new record."
-	if choice == "study":
-		return first + " In Ashvale, Ilyra and the scholars prepare the preserved fragment for the families, so its truth need not stay locked away."
-	return first + " Ilyra brings the recovered accounts home, where the work of remembering begins."
+		first += " In Ashvale, the patrol's families speak their names aloud; Ilyra carries their words into the new record."
+	elif choice == "study":
+		first += " In Ashvale, Ilyra and the scholars prepare the preserved fragment for the families, so its truth need not stay locked away."
+	else:
+		first += " Ilyra brings the recovered accounts home, where the work of remembering begins."
+	if resolution == "witness":
+		first += " The Keeper's testimony joins the public record beside those who challenged them. No single account is treated as the whole truth."
+	elif resolution == "private":
+		first += " The Keeper's memory remains private, but witnesses retain their own accounts. Ilyra promises that privacy will not become another erased history."
+	else:
+		first += " At the Seal's heart, the Keeper's memory still waits for a decision."
+	return first

@@ -3,7 +3,7 @@ extends Control
 
 signal closed
 const UI := preload("res://scripts/ui_style.gd")
-const TABS := ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story", "Wardrobe", "Dialogue"]
+const TABS := ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story", "Wardrobe", "Dialogue", "Finale"]
 const HOME_TABS := ["Wardrobe", "Profile", "Settings", "Shop"]
 const GAME_TABS := ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story"]
 var home_mode := false
@@ -209,6 +209,7 @@ func _refresh() -> void:
 		"Story": _story()
 		"Wardrobe": _wardrobe()
 		"Dialogue": _dialogue()
+		"Finale": _finale_dialogue()
 	if _status != "":
 		_line(_status, 16, UI.ACCENT)
 
@@ -645,7 +646,12 @@ func _dialogue() -> void:
 					_line("The patrol's families know the truth. Thank you for trusting me with it. Our bond strengthens my healing Gift.")
 				else:
 					_line("We kept the fragment safe for the scholars. I still hope the families can hear its story someday.")
-				if Game.story_memory_owned("memory_23"):
+				if bool(story.get("keeper_defeated", false)):
+					var resolution := str(story.get("keeper_resolution", ""))
+					if resolution == "witness": _line("Ilyra: Their testimony is in the record, but it does not erase the people they silenced. That is where we begin again.")
+					elif resolution == "private": _line("Ilyra: We can respect one person's privacy without hiding what happened to everyone else. I will make sure of it.")
+					else: _line("Ilyra: The Keeper's memory is still at the Last Seal. We can return when you are ready to decide.")
+				elif Game.story_memory_owned("memory_23"):
 					_line("Ilyra: The missing voices were not just lost. Someone decided which parts of the truth we were allowed to keep. We have to reach the Last Seal with more than one answer.")
 				elif Game.story_memory_owned("memory_17"):
 					_line("Ilyra: The Keeper was a guard once. I understand wanting to protect everyone. I am afraid of what happens when fear makes that choice for them.")
@@ -657,6 +663,27 @@ func _dialogue() -> void:
 				_action("Preserve it for research · learn Tide Step", _resolve_hollow_memory.bind("study"))
 			else:
 				_line("Defeat the Warden in Ashvale Hollow, then interact with the chest to recover the fragment. You can leave and try again.")
+
+
+func _finale_dialogue() -> void:
+	_line("THE KEEPER'S MEMORY", 25, UI.ACCENT)
+	if not bool(Game.guard_story.get("keeper_defeated", false)):
+		_line("The Seal is still held. There is no decision to make yet.")
+		return
+	var resolution := str(Game.guard_story.get("keeper_resolution", ""))
+	if not resolution.is_empty():
+		_line(Game.story_ending())
+		return
+	_line("The Keeper is defeated, but their memory remains in the Seal. The witnesses' accounts are already safe; this choice concerns the Keeper's own testimony.")
+	_line("Ilyra: We came here because one person decided what everyone else could remember. Whatever we choose, we must not let that happen again.")
+	_action("Include the Keeper's testimony in the public record", _resolve_keeper_memory.bind("witness"))
+	_action("Keep the Keeper's memory private; preserve the witnesses' accounts", _resolve_keeper_memory.bind("private"))
+	_line("You can leave and decide later. This choice changes the epilogue and conversations; it does not change rewards or access.")
+
+
+func _resolve_keeper_memory(choice: String) -> void:
+	_status = "The decision is recorded." if Game.resolve_keeper_memory(choice) else "The decision is unavailable or already recorded."
+	_refresh()
 
 
 func _dungeon_direction(id: String, site_index: int) -> String:
@@ -691,9 +718,17 @@ func _settlement_dialogue() -> void:
 	_line("%s  ·  %s" % [resident["name"], site["name"]], 25, UI.ACCENT)
 	_line("%s — %s" % [resident["role"], site["lore"]])
 	if dialogue_resident_index == 0:
+		var leader_status: String = Game.settlement_quest_status(dialogue_site_id, "main", 0)
 		var local_hook: String = str(Game.STORY_CHRONICLE.REGION_HOOKS.get(dialogue_site_id, ""))
-		if not local_hook.is_empty(): _line(local_hook)
-		_line("Complete my main quest to receive a written guide to this region's Hollows.")
+		var payoff: Array = Game.STORY_CHRONICLE.REGIONAL_PAYOFFS.get(dialogue_site_id, [])
+		if leader_status in ["available", "active"] and not local_hook.is_empty(): _line(local_hook)
+		if leader_status == "found" and payoff.size() == 2: _line(str(payoff[0]))
+		if leader_status == "done" and payoff.size() == 2: _line(str(payoff[1]))
+		if leader_status != "done": _line("Complete my main quest to receive a written guide to this region's Hollows.")
+		elif bool(Game.guard_story.get("keeper_defeated", false)):
+			var resolution := str(Game.guard_story.get("keeper_resolution", ""))
+			if resolution == "witness": _line("The Keeper's testimony will stand beside ours, not replace it.")
+			elif resolution == "private": _line("We will share our own histories, even while the Keeper's memory remains private.")
 	for kind in ["main", "side"]:
 		var status: String = Game.settlement_quest_status(dialogue_site_id, kind, dialogue_resident_index)
 		var title := "Main" if kind == "main" else "Side"

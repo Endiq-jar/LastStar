@@ -1198,7 +1198,7 @@ func _run() -> void:
 	Game.dungeon_clears = {}
 	Game.ashvale_hollow_cleared = false
 	Game.guard_story = {}
-	var chronicle_ok := Game.all_story_memories().size() == 25 and Game.STORY_CHRONICLE.ACCOUNTS.size() == 25 and Game.STORY_CHRONICLE.REGION_HOOKS.size() == 14
+	var chronicle_ok := Game.all_story_memories().size() == 25 and Game.STORY_CHRONICLE.ACCOUNTS.size() == 25 and Game.STORY_CHRONICLE.REGION_HOOKS.size() == 14 and Game.STORY_CHRONICLE.REGIONAL_PAYOFFS.size() == 14
 	for memory in Game.all_story_memories():
 		var memory_id := str(memory["id"])
 		chronicle_ok = chronicle_ok and Game.story_account(memory_id).is_empty() and not Game.STORY_CHRONICLE.account(memory_id).is_empty()
@@ -1207,23 +1207,53 @@ func _run() -> void:
 		chronicle_ok = chronicle_ok and Game.story_account(memory_id) == Game.STORY_CHRONICLE.account(memory_id)
 	for story_site in SETTLEMENTS.SITES:
 		chronicle_ok = chronicle_ok and not str(Game.STORY_CHRONICLE.REGION_HOOKS.get(story_site["id"], "")).is_empty()
-	chronicle_ok = chronicle_ok and Game.story_ending().is_empty()
+		var regional_payoff: Array = Game.STORY_CHRONICLE.REGIONAL_PAYOFFS.get(story_site["id"], [])
+		chronicle_ok = chronicle_ok and regional_payoff.size() == 2
+		if regional_payoff.size() == 2: chronicle_ok = chronicle_ok and not str(regional_payoff[0]).is_empty() and not str(regional_payoff[1]).is_empty()
+	chronicle_ok = chronicle_ok and Game.story_ending().is_empty() and not Game.resolve_keeper_memory("witness")
 	Game.guard_story["keeper_defeated"] = true
 	Game.guard_story["memory_choice"] = "share"
 	var shared_ending: String = Game.story_ending()
 	Game.guard_story["memory_choice"] = "study"
 	chronicle_ok = chronicle_ok and not shared_ending.is_empty() and shared_ending != Game.story_ending()
+	chronicle_ok = chronicle_ok and not Game.resolve_keeper_memory("invalid") and Game.resolve_keeper_memory("private")
+	var private_ending: String = Game.story_ending()
+	chronicle_ok = chronicle_ok and not Game.resolve_keeper_memory("witness")
+	Game.guard_story.erase("keeper_resolution")
+	chronicle_ok = chronicle_ok and Game.resolve_keeper_memory("witness") and private_ending != Game.story_ending()
 	Game.save_collection()
 	Game.guard_story = {}
 	Game.dungeon_clears = {}
 	Game.ashvale_hollow_cleared = false
 	Game.load_collection()
-	chronicle_ok = chronicle_ok and Game.story_memory_count() == 25 and str(Game.guard_story.get("memory_choice", "")) == "study" and not Game.story_ending().is_empty()
+	chronicle_ok = chronicle_ok and Game.story_memory_count() == 25 and str(Game.guard_story.get("memory_choice", "")) == "study" and str(Game.guard_story.get("keeper_resolution", "")) == "witness" and not Game.story_ending().is_empty()
+	# Exercise the actual dialogue view at all three leader quest stages.
+	var quest_dialogues_before: Dictionary = Game.settlement_quests.duplicate(true)
+	if menu != null:
+		for leader_site in SETTLEMENTS.SITES:
+			var leader_id := str(leader_site["id"])
+			menu.set("dialogue_site_id", leader_id)
+			menu.set("dialogue_resident_index", 0)
+			for leader_stage in ["available", "found", "done"]:
+				Game.settlement_quests[leader_id + ":main"] = leader_stage
+				menu.call("open_menu", "Dialogue")
+				var dialogue_body := menu.get("_body") as VBoxContainer
+				var expected_line := str(Game.STORY_CHRONICLE.REGION_HOOKS[leader_id]) if leader_stage == "available" else str(Game.STORY_CHRONICLE.REGIONAL_PAYOFFS[leader_id][0 if leader_stage == "found" else 1])
+				var found_line := false
+				for dialogue_child in dialogue_body.get_children():
+					if dialogue_child is Label and dialogue_child.text == expected_line: found_line = true
+				chronicle_ok = chronicle_ok and found_line
+		menu.call("close_menu")
+		menu.set("dialogue_site_id", "")
+		menu.set("dialogue_resident_index", 0)
+	else:
+		chronicle_ok = false
+	Game.settlement_quests = quest_dialogues_before
 	Game.dungeon_clears = chronicle_clears
 	Game.ashvale_hollow_cleared = chronicle_ashvale
 	Game.guard_story = chronicle_story
 	Game.save_collection()
-	_log("INFO" if chronicle_ok else "FAIL", "25 gated story accounts, 14 regional hooks, choice ending and save compatibility=%s" % str(chronicle_ok))
+	_log("INFO" if chronicle_ok else "FAIL", "25 gated story accounts, 14 regional arcs, finale choices and save compatibility=%s" % str(chronicle_ok))
 
 	# Fixed tiers scale regional encounters and the Keeper without a setting.
 	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_039"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_040"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_059"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_060"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_079"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_080"), 1.0)
@@ -1887,6 +1917,7 @@ func _run() -> void:
 		var finale_light: int = Game.starlight
 		var finale_hp: float = Game.current_hp()
 		Game.guard_story.erase("keeper_defeated")
+		Game.guard_story.erase("keeper_resolution")
 		hollow_player.global_position = finale.get("entrance") + Vector3(0, 0.2, 0)
 		finale_ok = finale.call("try_interact", hollow_player) and not bool(finale.get("inside"))
 		Game.ashvale_hollow_cleared = true
@@ -1956,11 +1987,21 @@ func _run() -> void:
 				finale_ok = finale_ok and int(keeper.get("phase")) == 4
 				keeper.call("take_hit", 1000000000.0, 0, Vector3.ZERO)
 				finale_ok = finale_ok and bool(Game.guard_story.get("keeper_defeated", false)) and Game.coins == finale_coins + 1000 and Game.starlight == finale_light + 200
+				var ending_marker := finale.get("_resolution_marker") as Node3D
+				finale_ok = finale_ok and ending_marker != null
+				if ending_marker != null and menu != null:
+					hollow_player.global_position = ending_marker.global_position
+					finale_ok = finale_ok and bool(finale.call("try_interact", hollow_player)) and menu.visible and str(menu.get("_tab")) == "Finale"
+					menu.call("_resolve_keeper_memory", "witness")
+					finale_ok = finale_ok and str(Game.guard_story.get("keeper_resolution", "")) == "witness" and not Game.story_ending().is_empty()
+					menu.call("close_menu")
+				else:
+					finale_ok = false
 				finale.call("_keeper_defeated")
 				finale_ok = finale_ok and Game.coins == finale_coins + 1000
 				Game.guard_story = {}
 				Game.load_collection()
-				finale_ok = finale_ok and bool(Game.guard_story.get("keeper_defeated", false))
+				finale_ok = finale_ok and bool(Game.guard_story.get("keeper_defeated", false)) and str(Game.guard_story.get("keeper_resolution", "")) == "witness"
 			else:
 				finale_ok = false
 			hollow_player.global_position = finale.get("_arena_exit")
