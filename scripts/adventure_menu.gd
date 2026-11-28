@@ -371,6 +371,10 @@ func _quests() -> void:
 				_line("%s · %s%s" % [memory["name"], _dungeon_direction(str(memory["id"]), int(memory["site"])), reward_hint])
 			else:
 				_line("Undiscovered memory · near %s%s" % [hint, reward_hint])
+	_line("CONNECTIONS · %d / %d" % [Game.story_connections().size(), Game.STORY_CHRONICLE.CONNECTIONS.size()], 18, UI.ACCENT)
+	_line("Recover related memories to connect their accounts. They can be found in any order.")
+	for connection in Game.story_connections():
+		_line("%s — %s" % [connection["title"], connection["text"]])
 	_line("Find two memory Hollows near each listed settlement. Their arenas share a common Hollow design.")
 	_line("REGIONAL HOLLOWS · %d / %d" % [Game.optional_dungeon_count(), Game.OPTIONAL_DUNGEONS.COUNT], 18, UI.ACCENT)
 	_line("Complete each settlement leader's main quest to earn its written dungeon guide. These encounters reuse Hollow arenas and enemy families; rewards are claimed once.")
@@ -665,6 +669,10 @@ func _dialogue() -> void:
 							_line("Ilyra asks how to return the names. Both choices strengthen her healing Gift and grant 60 starlight; the choice changes her later account.")
 							_action("Read the names at the memorial", _finish_ilyra_arc.bind("names"))
 							_action("Bring private letters to the families", _finish_ilyra_arc.bind("letters"))
+					5:
+						_line("Ilyra: Let us read the names at the memorial together. The families may add what the Guard forgot.")
+					6:
+						_line("Ilyra: Mira knows the families. Ask her to help us deliver their letters privately.")
 					4:
 						if str(story.get("ilyra_arc_choice", "")) == "names":
 							_line("Ilyra: We read every name at the memorial. The families corrected our record where it was wrong. I will keep a place for their voices.")
@@ -675,6 +683,8 @@ func _dialogue() -> void:
 					if resolution == "witness": _line("Ilyra: Their testimony is in the record, but it does not erase the people they silenced. That is where we begin again.")
 					elif resolution == "private": _line("Ilyra: We can respect one person's privacy without hiding what happened to everyone else. I will make sure of it.")
 					else: _line("Ilyra: The Keeper's memory is still at the Last Seal. We can return when you are ready to decide.")
+				elif Game.story_memory_owned("memory_24") and Game.story_memory_owned("memory_25"):
+					_line("Ilyra: The builders left a way to repair the Seals, not destroy them. No one has to carry the light alone. When the way to Aetheris is open, we bring the witnesses with us.")
 				elif Game.story_memory_owned("memory_23"):
 					_line("Ilyra: The missing voices were not just lost. Someone decided which parts of the truth we were allowed to keep. We have to reach the Last Seal with more than one answer.")
 				elif Game.story_memory_owned("memory_17"):
@@ -748,6 +758,9 @@ func _settlement_dialogue() -> void:
 		if leader_status in ["available", "active"] and not local_hook.is_empty(): _line(local_hook)
 		if leader_status == "found" and payoff.size() == 2: _line(str(payoff[0]))
 		if leader_status == "done" and payoff.size() == 2: _line(str(payoff[1]))
+		if dialogue_site_id == "ashvale" and int(Game.guard_story.get("ilyra_arc_stage", 0)) == 6:
+			_line("Mira: I will help Ilyra carry the letters. Each family can decide what to keep and what to share. Thank you for bringing their loved ones home in words.")
+			_action("Deliver the letters with Mira and Ilyra", _deliver_ilyra_letters)
 		if dialogue_site_id == "capital" and int(Game.guard_story.get("ilyra_arc_stage", 0)) == 2:
 			if leader_status == "done":
 				_line("Ren: The patrol record was sealed under my command. I believed hiding a failed order would spare their families. The copy in Lunareth's Memory Vault can tell Ilyra what I would not.")
@@ -908,7 +921,12 @@ func _hear_ilyra_guard_record() -> void:
 
 
 func _finish_ilyra_arc(choice: String) -> void:
-	_status = "Ilyra's Gift is strengthened. You received 60 starlight." if Game.finish_ilyra_arc(choice) else "Recover the Vault memory first."
+	_status = "Choice recorded. Complete the final step in Ashvale." if Game.finish_ilyra_arc(choice) else "Recover the Vault memory first."
+	_refresh()
+
+
+func _deliver_ilyra_letters() -> void:
+	_status = "The letters are delivered. Ilyra's Gift is strengthened; you received 60 starlight." if Game.complete_ilyra_arc() else "The letters are not ready."
 	_refresh()
 
 

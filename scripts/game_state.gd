@@ -183,6 +183,15 @@ func story_account(id: String) -> String:
 	return STORY_CHRONICLE.account(id)
 
 
+func story_connections() -> Array:
+	var found: Array = []
+	for connection in STORY_CHRONICLE.CONNECTIONS:
+		var ids: Array = connection["ids"]
+		if story_memory_owned(str(ids[0])) and story_memory_owned(str(ids[1])):
+			found.append(connection)
+	return found
+
+
 func story_ending() -> String:
 	if not bool(guard_story.get("keeper_defeated", false)): return ""
 	var conclusion: String = STORY_CHRONICLE.ending(str(guard_story.get("memory_choice", "")), str(guard_story.get("keeper_resolution", "")))
@@ -886,8 +895,17 @@ func hear_ilyra_guard_record() -> bool:
 
 func finish_ilyra_arc(choice: String) -> bool:
 	if int(guard_story.get("ilyra_arc_stage", 0)) != 3 or not story_memory_owned("memory_vault") or not ["names", "letters"].has(choice): return false
-	guard_story["ilyra_arc_stage"] = 4
+	guard_story["ilyra_arc_stage"] = 5 if choice == "names" else 6
 	guard_story["ilyra_arc_choice"] = choice
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func complete_ilyra_arc() -> bool:
+	var stage := int(guard_story.get("ilyra_arc_stage", 0))
+	if stage != 5 and stage != 6: return false
+	guard_story["ilyra_arc_stage"] = 4
 	guard_story["ilyra_bond"] = maxi(3, int(guard_story.get("ilyra_bond", 0)))
 	starlight += 60
 	save_collection()
@@ -901,6 +919,8 @@ func ilyra_arc_objective() -> String:
 		2: return "Complete Captain Ren's main quest in Elaris Capital, then ask him about the sealed order."
 		3: return "Clear the Memory Vault near Lunareth and speak to Ilyra."
 		4: return "Completed · Ilyra's Gift is strengthened; 60 starlight received."
+		5: return "Return to the patrol memorial west of Ashvale's center and read the names."
+		6: return "Speak to Mira in Ashvale about delivering the families' letters."
 	return ""
 
 

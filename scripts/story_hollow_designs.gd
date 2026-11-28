@@ -141,11 +141,25 @@ const DESIGNS := {
 		"second": "Without those voices, the people mistook control for their only protection.",
 		"runes": [Vector3(-6, 0, -5), Vector3(14, 0, 2)],
 		"columns": [Vector3(-5, 0, 3), Vector3(6, 0, -6), Vector3(14, 0, -3)]
+	},
+	"memory_24": {
+		"side": -1, "color": Color(0.44, 0.79, 0.76), "boss": "The Buried Gatekeeper",
+		"theme": "THE BUILDERS' PASSAGE", "first": "The Deep's builders cut a road beneath Aetheris for the day the Seals would need repair.",
+		"second": "Their instructions end with a warning: bring witnesses, not a conqueror.",
+		"runes": [Vector3(6, 0, -5), Vector3(-14, 0, 2)],
+		"columns": [Vector3(-6, 0, -6), Vector3(6, 0, 3), Vector3(-14, 0, -3)]
+	},
+	"memory_25": {
+		"side": 1, "color": Color(1.0, 0.83, 0.48), "boss": "The Last Star's Guardian",
+		"theme": "THE SHARED LIGHT", "first": "One light cannot hold the Seven Seals forever; the makers knew the burden would break its keeper.",
+		"second": "Many lights, freely offered, can renew the pattern without putting the world in one person's hands.",
+		"runes": [Vector3(-6, 0, -6), Vector3(14, 0, -2)],
+		"columns": [Vector3(-6, 0, 3), Vector3(6, 0, -6), Vector3(14, 0, 3)]
 	}
 }
 
 
-## Individual encounter tuning for the first twenty named memories. The depth is
+## Individual encounter tuning for the twenty-two named memories. The depth is
 ## measured beyond the first annex; rule and attack patterns are persisted by ID.
 const ENCOUNTERS := {
 	"memory_04": {"depth": 12, "rule": "ordered", "attack": "slash", "hazard": "Falling starlight"},
@@ -168,6 +182,8 @@ const ENCOUNTERS := {
 	"memory_21": {"depth": 12, "rule": "guarded", "attack": "circle", "hazard": "Shield's recoil"},
 	"memory_22": {"depth": 20, "rule": "ordered", "attack": "slash", "hazard": "Twilight strike"},
 	"memory_23": {"depth": 16, "rule": "guarded", "attack": "ring", "hazard": "Silenced echo"},
+	"memory_24": {"depth": 20, "rule": "ordered", "attack": "slash", "hazard": "Buried passage"},
+	"memory_25": {"depth": 20, "rule": "guarded", "attack": "circle", "hazard": "Unbound light"},
 }
 
 
@@ -175,6 +191,6 @@ static func get_design(id: String) -> Dictionary:
 	if not DESIGNS.has(id): return {}
 	var design: Dictionary = DESIGNS[id].duplicate(true)
 	design.merge(ENCOUNTERS.get(id, {}))
-	# The existing twenty routes now extend farther into the Hollow.
+	# The twenty-two routes extend farther into the Hollow.
 	design["depth"] = int(design["depth"]) * 2
 	return design

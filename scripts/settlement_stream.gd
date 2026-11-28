@@ -163,7 +163,7 @@ func _sync_items_for_site(site: Dictionary, root: Node3D) -> void:
 				node.queue_free()
 	if id == "ashvale":
 		var memorial := root.get_node_or_null("PatrolMemorial")
-		var needed := int(Game.guard_story.get("ilyra_arc_stage", 0)) == 1
+		var needed := int(Game.guard_story.get("ilyra_arc_stage", 0)) in [1, 5]
 		if needed and memorial == null:
 			var pos: Vector2 = center + Vector2(-32, 8)
 			var marker := PATROL_MEMORIAL.new()

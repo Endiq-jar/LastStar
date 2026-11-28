@@ -34,9 +34,10 @@ After resolving the Ashvale memory, players can accept Ilyra's optional personal
 quest. They read an interactable memorial in Ashvale, earn Captain Ren's trust
 through his existing capital quest and ask about the sealed order, then recover
 the existing Memory Vault record. They choose whether to read the names at the
-memorial or bring private letters to the families. The decision changes Ilyra's
-later dialogue and the written ending; either choice strengthens her existing
-healing support and grants 60 starlight once. Quest stage and choice are saved,
+memorial or bring private letters to the families. The player then returns to
+the memorial or speaks to Mira to deliver the letters. The decision changes
+Ilyra's later dialogue and the written ending; completing either path strengthens
+her existing healing support and grants 60 starlight once. Quest stage and choice are saved,
 old clears count, and this quest does not gate the main story or finale.
 
 ## Premise
@@ -200,3 +201,16 @@ Old clears stay revisitable and original IDs and payouts are unchanged. Only the
 original 100 Hollows count towards the finale; the five new ones cannot replace
 missing originals. There are 105 Hollows in total. Assets and mechanics are shared,
 and balance and practical completion at these extreme numbers are untested.
+
+
+### The final two named memories and connections
+
+The Underground Path and The Last Star now have their own two echoes, deeper
+chambers, named guardians and floor trials, using the same modular encounter
+systems as the other twenty named memories. Eight journal connections join
+specific recovered accounts into a coherent investigation of the Keeper and the
+Seals. Each requires both supporting memories, works in any discovery order and
+uses existing clear flags, so earlier saves reveal the same connections. Ilyra
+also reacts to the final two records before the Last Seal. These additions are
+not bespoke levels or cinematics, and the broader companion and side-quest
+brief remains unfinished.

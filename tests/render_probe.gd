@@ -1199,12 +1199,17 @@ func _run() -> void:
 	Game.ashvale_hollow_cleared = false
 	Game.guard_story = {}
 	var chronicle_ok := Game.all_story_memories().size() == 25 and Game.STORY_CHRONICLE.ACCOUNTS.size() == 25 and Game.STORY_CHRONICLE.REGION_HOOKS.size() == 14 and Game.STORY_CHRONICLE.REGIONAL_PAYOFFS.size() == 14
+	chronicle_ok = chronicle_ok and Game.story_connections().is_empty()
 	for memory in Game.all_story_memories():
 		var memory_id := str(memory["id"])
 		chronicle_ok = chronicle_ok and Game.story_account(memory_id).is_empty() and not Game.STORY_CHRONICLE.account(memory_id).is_empty()
 		if memory_id == "ashvale": Game.ashvale_hollow_cleared = true
 		else: Game.dungeon_clears[memory_id] = true
 		chronicle_ok = chronicle_ok and Game.story_account(memory_id) == Game.STORY_CHRONICLE.account(memory_id)
+	chronicle_ok = chronicle_ok and Game.story_connections().size() == Game.STORY_CHRONICLE.CONNECTIONS.size()
+	Game.dungeon_clears.erase("memory_25")
+	chronicle_ok = chronicle_ok and Game.story_connections().size() == Game.STORY_CHRONICLE.CONNECTIONS.size() - 1
+	Game.dungeon_clears["memory_25"] = true
 	for story_site in SETTLEMENTS.SITES:
 		chronicle_ok = chronicle_ok and not str(Game.STORY_CHRONICLE.REGION_HOOKS.get(story_site["id"], "")).is_empty()
 		var regional_payoff: Array = Game.STORY_CHRONICLE.REGIONAL_PAYOFFS.get(story_site["id"], [])
@@ -1278,6 +1283,8 @@ func _run() -> void:
 	arc_ok = arc_ok and Game.hear_ilyra_guard_record() and not Game.finish_ilyra_arc("names")
 	Game.dungeon_clears["memory_vault"] = true
 	arc_ok = arc_ok and not Game.finish_ilyra_arc("invalid") and Game.finish_ilyra_arc("names") and not Game.finish_ilyra_arc("names")
+	arc_ok = arc_ok and int(Game.guard_story.get("ilyra_arc_stage", 0)) == 5 and Game.starlight == arc_light
+	arc_ok = arc_ok and memorial.call("try_interact", arc_actor) and not Game.complete_ilyra_arc()
 	arc_ok = arc_ok and Game.starlight == arc_light + 60 and int(Game.guard_story.get("ilyra_bond", 0)) == 3
 	Game.save_collection()
 	Game.guard_story = {}
@@ -1286,7 +1293,8 @@ func _run() -> void:
 	Game.guard_story["keeper_defeated"] = true
 	var names_ending: String = Game.story_ending()
 	Game.guard_story["ilyra_arc_stage"] = 3
-	arc_ok = arc_ok and Game.finish_ilyra_arc("letters") and names_ending != Game.story_ending()
+	arc_ok = arc_ok and Game.finish_ilyra_arc("letters") and int(Game.guard_story.get("ilyra_arc_stage", 0)) == 6
+	arc_ok = arc_ok and Game.complete_ilyra_arc() and names_ending != Game.story_ending()
 	memorial.queue_free()
 	arc_actor.queue_free()
 	Game.guard_story = arc_story
@@ -1666,7 +1674,7 @@ func _run() -> void:
 		memories_ok = story_probe_locations.size() == 22 and Game.all_story_memories().size() == 25
 		var authored_designs = load("res://scripts/story_hollow_designs.gd")
 		var authored_names := {}
-		memories_ok = memories_ok and authored_designs.DESIGNS.size() == 20 and authored_designs.ENCOUNTERS.size() == 20
+		memories_ok = memories_ok and authored_designs.DESIGNS.size() == 22 and authored_designs.ENCOUNTERS.size() == 22
 		for authored_id in authored_designs.DESIGNS:
 			var authored: Dictionary = authored_designs.get_design(authored_id)
 			memories_ok = memories_ok and authored.has("depth") and authored.has("rule") and authored.has("attack") and authored.has("hazard") and not authored_names.has(authored["boss"])

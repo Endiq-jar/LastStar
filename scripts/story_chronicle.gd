@@ -29,6 +29,20 @@ const ACCOUNTS := {
 	"memory_25": "The last record completes the broken pattern: the Seven Seals can be renewed by light freely shared. No one person has to be its keeper. The question is whether Elaris can choose that responsibility together."
 }
 
+# Connections are shown only when both supporting memories have been recovered.
+# They can be found out of order; no extra save data or progression gate is used.
+const CONNECTIONS := [
+	{"ids": ["ashvale", "memory_06"], "title": "The oath and the order", "text": "Ilyra's patrol and the first Guard faced the same choice: protect a sealed order, or protect people. Both records were altered afterwards. Who benefited from calling obedience courage?"},
+	{"ids": ["memory_05", "memory_08"], "title": "A light held together", "text": "The shared hearth lasted when individual Gifts failed; the scholar's many voices briefly anchored the light. These are not proof of a cure, but they point to cooperation rather than a stronger solitary Gift."},
+	{"ids": ["memory_vault", "memory_13"], "title": "Shield or lock", "text": "The Vault calls the Seals shields. The broken lens shows shared light steadying one of them. Someone hid that experiment: a shield controlled by one hand can also shut people out."},
+	{"ids": ["memory_11", "memory_15"], "title": "Promises across the dark", "text": "The drowned bell gave the coast time to flee, while the winter survivors promised to help one another. Their promise was carried in many voices, not kept by a single ruler."},
+	{"ids": ["suncrest_roost", "memory_17"], "title": "The guard behind the title", "text": "The dragon sheltered the caravan whose scattered records survived. Among its guards was the person later called the Keeper. The title conceals a survivor as well as an antagonist."},
+	{"ids": ["memory_20", "memory_21"], "title": "The wall and its cost", "text": "Ravenhold's defenders bought time for others and were left behind. The Keeper saw that loss and chose control over uncertainty. The loss explains the fear; it does not excuse what came next."},
+	{"ids": ["memory_22", "memory_23"], "title": "The missing witnesses", "text": "The Keeper sealed away memories as well as Hollows. Without the witnesses, the official account made their control seem inevitable. Restoring disagreement is part of restoring the truth."},
+	{"ids": ["memory_24", "memory_25"], "title": "A road and a choice", "text": "The builders left a repair route beneath Aetheris and asked for witnesses. The final pattern describes a Seal renewed by light freely shared. Reaching the Keeper means choosing who gets to carry the future."},
+]
+
+
 const REGION_HOOKS := {
 	"ashvale": "Our lamps flicker on the same nights the patrol's names disappear from the watch book. Find my dispatch and I can show you where to look.",
 	"capital": "Our orders mention an old breach, but the signature has been cut away. Bring me the report; the Guard deserves the whole story.",

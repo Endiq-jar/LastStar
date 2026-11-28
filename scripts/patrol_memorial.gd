@@ -17,7 +17,7 @@ func _ready() -> void:
 	stone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(stone)
 	_label = Label3D.new()
-	_label.text = "F / Talk · Read the patrol memorial"
+	_label.text = "F / Talk · Read the patrol memorial" if int(Game.guard_story.get("ilyra_arc_stage", 0)) == 1 else "F / Talk · Read the patrol names"
 	_label.position.y = 1.65
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.font_size = 36
@@ -27,7 +27,7 @@ func _ready() -> void:
 
 
 func interaction_for(actor: Node3D) -> Dictionary:
-	if not is_instance_valid(actor) or int(Game.guard_story.get("ilyra_arc_stage", 0)) != 1:
+	if not is_instance_valid(actor) or int(Game.guard_story.get("ilyra_arc_stage", 0)) not in [1, 5]:
 		return {}
 	var distance := actor.global_position.distance_to(global_position)
 	if distance > 3.5: return {}
@@ -36,6 +36,9 @@ func interaction_for(actor: Node3D) -> Dictionary:
 
 func try_interact(actor: Node3D) -> bool:
 	if interaction_for(actor).is_empty(): return false
-	if Game.read_ilyra_memorial():
+	if int(Game.guard_story.get("ilyra_arc_stage", 0)) == 5:
+		if Game.complete_ilyra_arc():
+			Game.toast.emit("Ilyra reads the names. The families add their own memories. Her Gift is strengthened; you receive 60 starlight.")
+	elif Game.read_ilyra_memorial():
 		Game.toast.emit("The memorial bears no names. Ask Captain Ren in Elaris Capital why the patrol record was sealed.")
 	return true
