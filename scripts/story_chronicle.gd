@@ -98,6 +98,19 @@ const REGIONAL_EPILOGUES := {
 }
 
 
+# Seven voluntary promises at the Seal. The witnesses are recorded voices,
+# rather than NPCs being teleported into the final arena.
+const RENEWAL_VOICES := [
+	"Mira: I offer the light of a hearth where the families can speak or be silent.",
+	"Ren: I offer the Guard's service, and accept that the people can question our orders.",
+	"Veya: I offer the scholars' knowledge, including the pages that disagree with us.",
+	"Neri: I offer the warning of the coast, so no harbour has to face a breach alone.",
+	"Prism: I offer the crystal's light, and room for voices we have not heard yet.",
+	"Delve: I offer the builders' road and the work of repairing what we inherit.",
+	"Seren: I offer the archive and a promise: no one will tend the Seals alone again."
+]
+
+
 const KEEPER_PHASES := [
 	"The Keeper: I watched a world go dark. I will not let it happen again.",
 	"The Keeper: Trust did not save the people at the wall. My Seals did.",

@@ -20,6 +20,7 @@ var _remaining := 0
 var _gates: Array[Node3D] = []
 var _story_echoes: Array[Node3D] = []
 var _resolution_marker: Node3D
+var _renewal_lights: Array[Node3D] = []
 var _exit: Vector3
 var _arena_exit: Vector3
 var _checkpoint: Vector3
@@ -44,6 +45,17 @@ func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
 
 func try_interact(actor: Node3D) -> bool:
 	if inside:
+		for index in range(_renewal_lights.size()):
+			var light := _renewal_lights[index]
+			if is_instance_valid(light) and actor.global_position.distance_to(light.global_position) < 2.2:
+				if Game.offer_renewal_light(index):
+					_update_renewal_light(index)
+					var message: String = Game.STORY_CHRONICLE.RENEWAL_VOICES[index]
+					if Game.renewal_count() == Game.STORY_CHRONICLE.RENEWAL_VOICES.size(): message += " The seven lights steady the Seal together."
+					Game.toast.emit(message)
+				else:
+					Game.toast.emit("This witness has already offered their light.")
+				return true
 		if is_instance_valid(_resolution_marker) and actor.global_position.distance_to(_resolution_marker.global_position) < 3.5:
 			var menu := get_parent().get_node_or_null("HUD/Root/AdventureMenu")
 			if menu != null: menu.call("open_menu", "Finale")
@@ -74,6 +86,7 @@ func _enter() -> void:
 	_remaining = 0
 	_gates.clear()
 	_story_echoes.clear()
+	_renewal_lights.clear()
 	_resolution_marker = null
 	chamber = Node3D.new()
 	chamber.name = "LastSealDepths"
@@ -130,7 +143,8 @@ func _enter() -> void:
 	if bool(Game.guard_story.get("keeper_defeated", false)):
 		for gate in _gates: gate.queue_free()
 		_spawn_resolution_marker()
-		Game.toast.emit("The Keeper is defeated. The Last Seal remembers.")
+		_spawn_renewal_lights()
+		Game.toast.emit("The Keeper is defeated. Seven witnesses can renew the Seal together.")
 	else:
 		_spawn_guardians()
 		Game.toast.emit("The Last Seal: defeat each pair of guardians to open the way down.")
@@ -182,14 +196,15 @@ func _keeper_defeated() -> void:
 		Game.save_collection()
 		Game.collection_changed.emit()
 	_spawn_resolution_marker()
-	Game.toast.emit("The Keeper falls. The Seals hold. The Keeper's memory awaits your decision.")
+	_spawn_renewal_lights()
+	Game.toast.emit("The Keeper falls. Seven witnesses offer their light. The Keeper's memory awaits your decision.")
 
 
 func _spawn_resolution_marker() -> void:
 	if not is_instance_valid(chamber) or is_instance_valid(_resolution_marker) or not str(Game.guard_story.get("keeper_resolution", "")).is_empty(): return
 	_resolution_marker = Node3D.new()
 	_resolution_marker.name = "KeeperMemory"
-	_resolution_marker.position = Vector3(0, -80.0, -1015)
+	_resolution_marker.position = Vector3(0, -80.0, -1010)
 	chamber.add_child(_resolution_marker)
 	var visual := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
@@ -210,6 +225,49 @@ func _spawn_resolution_marker() -> void:
 	label.pixel_size = 0.004
 	label.outline_size = 6
 	_resolution_marker.add_child(label)
+
+
+func _spawn_renewal_lights() -> void:
+	if not is_instance_valid(chamber) or not _renewal_lights.is_empty(): return
+	var names := ["Mira", "Ren", "Veya", "Neri", "Prism", "Delve", "Seren"]
+	for index in range(names.size()):
+		var angle := TAU * float(index) / float(names.size())
+		var light := Node3D.new()
+		light.name = "RenewalLight%d" % index
+		light.position = Vector3(sin(angle) * 5.5, -80, -1010 + cos(angle) * 5.5)
+		chamber.add_child(light)
+		var visual := MeshInstance3D.new()
+		var sphere := SphereMesh.new()
+		sphere.radius = 0.3
+		sphere.height = 0.6
+		sphere.radial_segments = 8
+		sphere.rings = 4
+		visual.mesh = sphere
+		visual.position.y = 1.0
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		visual.material_override = material
+		light.add_child(visual)
+		var label := Label3D.new()
+		label.text = "F / Talk · " + names[index]
+		label.position.y = 1.8
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.font_size = 28
+		label.pixel_size = 0.003
+		label.outline_size = 6
+		light.add_child(label)
+		_renewal_lights.append(light)
+		_update_renewal_light(index)
+
+
+func _update_renewal_light(index: int) -> void:
+	if index < 0 or index >= _renewal_lights.size(): return
+	var light := _renewal_lights[index]
+	var active := (Game.renewal_mask() & (1 << index)) != 0
+	var material := (light.get_child(0) as MeshInstance3D).material_override as StandardMaterial3D
+	material.albedo_color = Color(1.0, 0.84, 0.42) if active else Color(0.28, 0.31, 0.4)
+	var label := light.get_child(1) as Label3D
+	label.text = "Light offered" if active else "F / Talk · Offer witness light"
 
 
 func _marker(text: String, at: Vector3) -> void:
@@ -258,6 +316,7 @@ func _leave() -> void:
 	boss = null
 	_gates.clear()
 	_story_echoes.clear()
+	_renewal_lights.clear()
 	_resolution_marker = null
 	Game.toast.emit("You returned from the Last Seal.")
 

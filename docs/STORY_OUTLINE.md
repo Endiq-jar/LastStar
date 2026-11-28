@@ -229,3 +229,12 @@ Neri to learn Harbor Light, a defensive shield-and-stamina spell. The plan
 changes Neri's later dialogue. Existing clears count and quest stage and choice
 persist; this does not alter Hollow gates. This is one authored optional quest,
 not a replacement for the brief's complete side-quest and companion scope.
+
+## Seven Witnesses
+
+After the Keeper falls, seven optional lights appear in the Last Seal arena.
+Each interaction shares a recorded promise from a settlement leader. They can
+be heard in any order, survive leaving and re-entering, and add a renewal passage
+to the journal ending after all seven are heard. Older completed saves can return
+to the arena. This does not gate the existing ending or change boss rewards, and
+uses recorded voices rather than claiming that the NPCs physically appear.

@@ -353,6 +353,8 @@ func _quests() -> void:
 	_line("Third tier: %d / 20 cleared. The next 20 are 15× stronger again (7,500× the first tier)." % Game.third_tier_clear_count())
 	_line("Fourth tier: %d / 20 cleared. The next 20 are 2× stronger again (15,000× the first tier)." % Game.fourth_tier_clear_count())
 	_line("Total Hollows cleared: %d / 105. Original Hollows cleared for the finale: %d / 100. Side quests grant equipment and spell blueprints." % [Game.dungeon_count(), Game.original_hollow_clear_count()])
+	if bool(story.get("keeper_defeated", false)):
+		_line("Epilogue · Seven Witnesses: %d / 7 lights offered at the Last Seal. Return to its heart to hear the recorded promises; this is optional and does not change rewards." % Game.renewal_count())
 	_line("ASHVALE HOLLOW", 18, UI.ACCENT)
 	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Accept Ilyra's A Memory in the Hollow, then find the entrance near Ashvale. Dodge the Warden's warning circles.")
 	_line("MEMORY VAULT", 18, UI.ACCENT)

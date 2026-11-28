@@ -200,7 +200,33 @@ func story_ending() -> String:
 			conclusion += " Ilyra keeps the patrol's names at the memorial, with room for their families to correct the record."
 		else:
 			conclusion += " Ilyra delivers the patrol's letters to their families, who decide what to share."
+	if renewal_count() == STORY_CHRONICLE.RENEWAL_VOICES.size():
+		conclusion += " At the heart of the Seal, seven witnesses offer their light freely; the promise is renewed together."
 	return conclusion
+
+
+# Optional, replay-safe epilogue interaction. Existing Keeper victories can
+# return to the arena; it neither gates the ending nor changes prior rewards.
+func renewal_mask() -> int:
+	return int(guard_story.get("renewal_mask", 0)) & 127
+
+
+func offer_renewal_light(index: int) -> bool:
+	if not bool(guard_story.get("keeper_defeated", false)) or index < 0 or index >= STORY_CHRONICLE.RENEWAL_VOICES.size(): return false
+	var bit := 1 << index
+	var mask := renewal_mask()
+	if (mask & bit) != 0: return false
+	guard_story["renewal_mask"] = mask | bit
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func renewal_count() -> int:
+	var total := 0
+	for index in range(STORY_CHRONICLE.RENEWAL_VOICES.size()):
+		if (renewal_mask() & (1 << index)) != 0: total += 1
+	return total
 
 
 func resolve_keeper_memory(choice: String) -> bool:

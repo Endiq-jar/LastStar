@@ -2038,6 +2038,8 @@ func _run() -> void:
 		var finale_hp: float = Game.current_hp()
 		Game.guard_story.erase("keeper_defeated")
 		Game.guard_story.erase("keeper_resolution")
+		Game.guard_story.erase("renewal_mask")
+		finale_ok = not Game.offer_renewal_light(0) and Game.renewal_count() == 0
 		hollow_player.global_position = finale.get("entrance") + Vector3(0, 0.2, 0)
 		finale_ok = finale.call("try_interact", hollow_player) and not bool(finale.get("inside"))
 		Game.ashvale_hollow_cleared = true
@@ -2107,6 +2109,16 @@ func _run() -> void:
 				finale_ok = finale_ok and int(keeper.get("phase")) == 4
 				keeper.call("take_hit", 1000000000.0, 0, Vector3.ZERO)
 				finale_ok = finale_ok and bool(Game.guard_story.get("keeper_defeated", false)) and Game.coins == finale_coins + 1000 and Game.starlight == finale_light + 200
+				var renewal_lights: Array = finale.get("_renewal_lights")
+				finale_ok = finale_ok and renewal_lights.size() == 7 and not Game.offer_renewal_light(-1) and not Game.offer_renewal_light(7)
+				if renewal_lights.size() == 7:
+					for index in range(3):
+						hollow_player.global_position = renewal_lights[index].global_position
+						finale_ok = bool(finale.call("try_interact", hollow_player)) and finale_ok
+					finale_ok = finale_ok and Game.renewal_count() == 3 and not Game.offer_renewal_light(0)
+					Game.guard_story = {}
+					Game.load_collection()
+					finale_ok = finale_ok and Game.renewal_count() == 3
 				var ending_marker := finale.get("_resolution_marker") as Node3D
 				finale_ok = finale_ok and ending_marker != null
 				if ending_marker != null and menu != null:
@@ -2132,6 +2144,16 @@ func _run() -> void:
 			Game.save_collection()
 			hollow_player.global_position = finale.get("entrance")
 			finale_ok = finale_ok and bool(finale.call("try_interact", hollow_player)) and bool(finale.get("inside"))
+			var revisit_lights: Array = finale.get("_renewal_lights")
+			finale_ok = finale_ok and revisit_lights.size() == 7 and Game.renewal_count() == 3
+			if revisit_lights.size() == 7:
+				for index in range(3, 7):
+					hollow_player.global_position = revisit_lights[index].global_position
+					finale_ok = bool(finale.call("try_interact", hollow_player)) and finale_ok
+				finale_ok = finale_ok and Game.renewal_count() == 7 and "seven witnesses" in Game.story_ending()
+				Game.guard_story = {}
+				Game.load_collection()
+				finale_ok = finale_ok and Game.renewal_count() == 7
 			var revisit_marker := finale.get("_resolution_marker") as Node3D
 			finale_ok = finale_ok and revisit_marker != null and not is_instance_valid(finale.get("boss"))
 			if revisit_marker != null and menu != null:
