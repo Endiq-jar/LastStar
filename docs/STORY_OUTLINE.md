@@ -321,3 +321,15 @@ resident assets rather than a bespoke character model.
 The ending also recalls the completed harbour quest's actual decision: either
 boat-to-boat warnings or the accountable harbour station. The decision is read
 from the existing saved choice; unfinished harbour stories add no outcome.
+
+## The Last Caravan
+
+After Zara's Suncrest leader quest, a missing medicine caravan leads to Bryn in
+Frostmere. Once Bryn's quest is complete, the player searches the packs east of
+Frostmere and defeats two scouts; interrupted or unloaded encounters can be
+retried. Zara offers two plans: free stocked shelters or paired guides carrying
+travellers who cannot pay. Both grant the equippable Caravan hairpin once; Zara,
+Bryn and the ending reflect the choice. This uses existing save data without
+changing the original Hollow requirements. The encounter uses existing scout
+models and represents the sheltered travellers through the packs and dialogue,
+not unique survivor models or escort AI.

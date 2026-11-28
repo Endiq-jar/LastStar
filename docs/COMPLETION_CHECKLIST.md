@@ -17,6 +17,8 @@ encounter quality. See `STORY_OUTLINE.md`, `MODEL_AUDIT.md` and
 - [x] Three cross-region/personal stories (Ilyra's patrol, Neri's harbour and
   Veya's lost Wander), and Frostmere's replayable defense, with saved choices and
   rewards. Neri and Veya can follow without duplicating their resident identities.
+- [ ] Verify The Last Caravan's streamed rescue, saved choice, cosmetic reward and
+  downstream dialogue in the latest CI and during a full gameplay review.
 - [x] All 14 leaders have authored dialogue for the existing side-quest stages;
   these are retrieval quests, not 14 bespoke encounters.
 - [x] Fourteen settlement pads are flat and stone-paved with no village entrance

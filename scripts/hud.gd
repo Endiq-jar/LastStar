@@ -857,6 +857,8 @@ func _refresh_quest_box() -> void:
 		if not next_story.is_empty(): lines.append("Main journey\n" + str(next_story["brief"]))
 	var homecoming: String = Game.homecoming_objective()
 	if not homecoming.is_empty(): lines.append("Epilogue · The Promise Carried Home\n" + homecoming)
+	var caravan_objective: String = Game.caravan_story_objective()
+	if not caravan_objective.is_empty(): lines.append("Zara · The Last Caravan\n" + caravan_objective)
 	var watch_objective: String = Game.watch_story_objective()
 	if not watch_objective.is_empty(): lines.append("Bryn · A Watch for Everyone\n" + watch_objective)
 	var wander_objective: String = Game.wander_story_objective()

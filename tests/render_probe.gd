@@ -1665,6 +1665,90 @@ func _run() -> void:
 	if settlement_manager != null: settlement_manager.call("_update_stream")
 	_log("INFO" if watch_ok else "FAIL", "Frostmere defense, retry, choices, spell and save=%s" % str(watch_ok))
 
+	# The Last Caravan: cross-region prerequisites, streamed encounter, retry,
+	# decision consequences, one-time wearable reward and save compatibility.
+	var caravan_story_before: Dictionary = Game.guard_story.duplicate(true)
+	var caravan_quests_before: Dictionary = Game.settlement_quests.duplicate(true)
+	var caravan_cosmetics_before: Array = Game.owned_cosmetics.duplicate()
+	var caravan_equipped_before: String = Game.equipped_cosmetic
+	var caravan_actor := world.get_node_or_null("Player") as CharacterBody3D
+	var caravan_position_before := caravan_actor.global_position
+	Game.guard_story = {}
+	Game.settlement_quests = {}
+	Game.owned_cosmetics.erase("caravan_pin")
+	var caravan_ok := not Game.begin_caravan_story() and not Game.trace_caravan() and not Game.finish_caravan_story("guides")
+	Game.settlement_quests["suncrest:main"] = "done"
+	caravan_ok = caravan_ok and Game.begin_caravan_story() and not Game.begin_caravan_story() and not Game.trace_caravan()
+	Game.settlement_quests["frostmere:main"] = "done"
+	caravan_ok = caravan_ok and Game.trace_caravan() and not Game.trace_caravan()
+	if settlement_manager != null:
+		var caravan_sites: Array = settlement_manager.get("_sites")
+		var caravan_center: Vector2 = caravan_sites[5]["resolved"]
+		caravan_actor.global_position = Vector3(caravan_center.x, float(world.call("_height", caravan_center.x, caravan_center.y)) + 0.2, caravan_center.y)
+		settlement_manager.call("_update_stream")
+		var caravan_loaded: Dictionary = settlement_manager.get("_loaded")
+		var caravan_root := caravan_loaded.get("frostmere") as Node3D
+		var caravan: Node3D = caravan_root.get_node_or_null("StrandedCaravan") if caravan_root != null else null
+		if caravan != null:
+			caravan_ok = caravan_ok and caravan.call("interaction_for", caravan_actor).is_empty()
+			caravan_actor.global_position = caravan.global_position + Vector3(0, 0.2, 0)
+			caravan_ok = bool(caravan.call("try_interact", caravan_actor)) and caravan_ok
+			caravan_ok = bool(caravan.call("try_interact", caravan_actor)) and caravan_ok
+			var caravan_first_wave: Array = []
+			for child in caravan.get_children():
+				if child is CharacterBody3D: caravan_first_wave.append(child)
+			caravan_ok = caravan_ok and caravan_first_wave.size() == 2
+			Game.respawned.emit()
+			caravan_ok = caravan_ok and not bool(caravan.get("_active")) and int(Game.guard_story.get("caravan_stage", 0)) == 2
+			await get_tree().process_frame
+			caravan_actor.global_position = caravan.global_position + Vector3(0, 0.2, 0)
+			caravan_ok = bool(caravan.call("try_interact", caravan_actor)) and caravan_ok
+			var caravan_retry: Array = []
+			for child in caravan.get_children():
+				if child is CharacterBody3D and not child.is_queued_for_deletion(): caravan_retry.append(child)
+			caravan_ok = caravan_ok and caravan_retry.size() == 2
+			for foe in caravan_retry: foe.call("take_hit", 10000.0, 0, Vector3.ZERO)
+			caravan_ok = caravan_ok and int(Game.guard_story.get("caravan_stage", 0)) == 3 and not caravan_root.has_node("StrandedCaravan")
+		else: caravan_ok = false
+	else: caravan_ok = false
+	Game.guard_story = {}
+	Game.load_collection()
+	caravan_ok = caravan_ok and int(Game.guard_story.get("caravan_stage", 0)) == 3 and not Game.finish_caravan_story("invalid")
+	caravan_ok = caravan_ok and Game.finish_caravan_story("shelters") and not Game.finish_caravan_story("shelters") and Game.owned_cosmetics.has("caravan_pin")
+	caravan_ok = caravan_ok and Game.equip_reward_cosmetic("caravan_pin")
+	Game.guard_story["keeper_defeated"] = true
+	var caravan_shelters_ending: String = Game.story_ending()
+	caravan_ok = caravan_ok and "shared shelters" in caravan_shelters_ending
+	Game.guard_story["caravan_stage"] = 3
+	caravan_ok = caravan_ok and Game.finish_caravan_story("guides") and "paired guides" in Game.story_ending() and Game.story_ending() != caravan_shelters_ending
+	caravan_ok = caravan_ok and Game.owned_cosmetics.count("caravan_pin") == 1
+	Game.guard_story = {}
+	Game.owned_cosmetics = []
+	Game.equipped_cosmetic = ""
+	Game.load_collection()
+	caravan_ok = caravan_ok and str(Game.guard_story.get("caravan_choice", "")) == "guides" and Game.owned_cosmetics.has("caravan_pin") and Game.equipped_cosmetic == "caravan_pin"
+	if menu != null:
+		menu.set("dialogue_site_id", "frostmere")
+		menu.set("dialogue_resident_index", 0)
+		menu.call("open_menu", "Dialogue")
+		var caravan_body := menu.get("_body") as VBoxContainer
+		var caravan_line_found := false
+		for child in caravan_body.get_children():
+			if child is Label and "My guides share the route" in child.text: caravan_line_found = true
+		caravan_ok = caravan_ok and caravan_line_found
+		menu.call("close_menu")
+		menu.set("dialogue_site_id", "")
+	else: caravan_ok = false
+	caravan_actor.global_position = caravan_position_before
+	Game.guard_story = caravan_story_before
+	Game.settlement_quests = caravan_quests_before
+	Game.owned_cosmetics = caravan_cosmetics_before
+	Game.equipped_cosmetic = caravan_equipped_before
+	Game.save_collection()
+	Game.collection_changed.emit()
+	if settlement_manager != null: settlement_manager.call("_update_stream")
+	_log("INFO" if caravan_ok else "FAIL", "Caravan rescue, retry, choices, cosmetic and save=%s" % str(caravan_ok))
+
 	# Earned tier resonance is offensive only, derived from the existing clear
 	# flags, capped to the current encounter and reset when leaving.
 	var resonance_clears: Dictionary = Game.dungeon_clears.duplicate(true)

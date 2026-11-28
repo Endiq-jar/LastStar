@@ -27,6 +27,7 @@ const PROPS := preload("res://scripts/interior_props.gd")
 const PATROL_MEMORIAL := preload("res://scripts/patrol_memorial.gd")
 const LOST_WANDER := preload("res://scripts/lost_wander.gd")
 const VILLAGE_DEFENSE := preload("res://scripts/village_defense.gd")
+const STRANDED_CARAVAN := preload("res://scripts/stranded_caravan.gd")
 const STONE_SHADER := preload("res://shaders/village_stone.gdshader")
 const VILLAGE_GROUND_SIZE := DATA.PAVING_HALF_SIZE * 2.0
 static var _ground_mesh: PlaneMesh
@@ -209,6 +210,17 @@ func _sync_items_for_site(site: Dictionary, root: Node3D) -> void:
 			wander.queue_free()
 
 	if id == "frostmere":
+		var caravan := root.get_node_or_null("StrandedCaravan")
+		var caravan_needed := int(Game.guard_story.get("caravan_stage", 0)) == 2
+		if caravan_needed and caravan == null:
+			var caravan_pos: Vector2 = center + Vector2(40, 5)
+			var caravan_marker := STRANDED_CARAVAN.new()
+			caravan_marker.name = "StrandedCaravan"
+			caravan_marker.position = Vector3(caravan_pos.x, float(_world.call("_height", caravan_pos.x, caravan_pos.y)), caravan_pos.y)
+			root.add_child(caravan_marker)
+		elif not caravan_needed and caravan != null:
+			root.remove_child(caravan)
+			caravan.queue_free()
 		var watch := root.get_node_or_null("VillageWatch")
 		var needed := int(Game.guard_story.get("watch_stage", 0)) == 1
 		if needed and watch == null:

@@ -237,6 +237,10 @@ func story_ending() -> String:
 			conclusion += " Veya preserves the Wander's message in a public archive, with the families' names withheld until they consent."
 		else:
 			conclusion += " Veya brings the Wander's message to the families first, leaving publication to them."
+	if int(guard_story.get("caravan_stage", 0)) == 4:
+		match str(guard_story.get("caravan_choice", "")):
+			"shelters": conclusion += " Zara's caravan network keeps shared shelters stocked along the pass, open to travellers whether or not they can pay."
+			"guides": conclusion += " Zara and Bryn arrange paired guides between settlements, with a place in each caravan for travellers who cannot pay."
 	if int(guard_story.get("watch_stage", 0)) == 3:
 		if str(guard_story.get("watch_choice", "")) == "patrol":
 			conclusion += " Frostmere's watch shares patrols across the pass, so no guide is left alone."
@@ -446,7 +450,7 @@ var owned_cosmetics: Array = []
 var equipped_cosmetic := ""
 var owned_blueprints: Array = []
 const WEAPONS := preload("res://scripts/weapon_catalog.gd")
-const COSMETIC_NAMES := {"star_pin": "Star hairpin", "moon_pin": "Moon hairpin"}
+const COSMETIC_NAMES := {"star_pin": "Star hairpin", "moon_pin": "Moon hairpin", "caravan_pin": "Caravan hairpin"}
 const BLUEPRINT_ID := "research_0_1_0_0_0"
 const OUTFIT_NAMES := ["Original", "Moonlit blue", "Rose dusk", "Forest traveller", "Sunrise traveller"]
 var camera_sensitivity := 1.0
@@ -1133,6 +1137,51 @@ func wander_story_objective() -> String:
 		2: return "Examine the lost Wander east of Evergloom's center."
 		3: return "Bring the lost Wander to Veya in Lunareth."
 		4: return "Completed · Echo Resonance learned."
+	return ""
+
+
+# Cross-region caravan rescue. New keys coexist with older saves and do not
+# alter the original settlement quest states or Hollow progression.
+func begin_caravan_story() -> bool:
+	if int(guard_story.get("caravan_stage", 0)) != 0 or not region_chart_unlocked("suncrest"): return false
+	guard_story["caravan_stage"] = 1
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func trace_caravan() -> bool:
+	if int(guard_story.get("caravan_stage", 0)) != 1 or not region_chart_unlocked("frostmere"): return false
+	guard_story["caravan_stage"] = 2
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func rescue_caravan() -> bool:
+	if int(guard_story.get("caravan_stage", 0)) != 2: return false
+	guard_story["caravan_stage"] = 3
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func finish_caravan_story(choice: String) -> bool:
+	if int(guard_story.get("caravan_stage", 0)) != 3 or not ["shelters", "guides"].has(choice): return false
+	guard_story["caravan_stage"] = 4
+	guard_story["caravan_choice"] = choice
+	if not owned_cosmetics.has("caravan_pin"): owned_cosmetics.append("caravan_pin")
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func caravan_story_objective() -> String:
+	match int(guard_story.get("caravan_stage", 0)):
+		1: return "Complete Bryn's main quest in Frostmere and ask about the missing caravan."
+		2: return "Search the caravan packs east of Frostmere's center and defeat the attackers. If interrupted, return to try again."
+		3: return "Return to Zara in Suncrest and choose how to protect future travellers."
+		4: return "Completed · Caravan hairpin added to Wardrobe."
 	return ""
 
 

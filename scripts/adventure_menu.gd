@@ -345,6 +345,8 @@ func _quests() -> void:
 		_line("Main · A Memory in the Hollow: %s" % memory_status)
 	var ilyra_objective: String = Game.ilyra_arc_objective()
 	if not ilyra_objective.is_empty(): _line("Companion · The Names We Carry: " + ilyra_objective)
+	var caravan_objective: String = Game.caravan_story_objective()
+	if not caravan_objective.is_empty(): _line("Side · The Last Caravan: " + caravan_objective)
 	var watch_objective: String = Game.watch_story_objective()
 	if not watch_objective.is_empty(): _line("Side · A Watch for Everyone: " + watch_objective)
 	var wander_objective: String = Game.wander_story_objective()
@@ -813,6 +815,26 @@ func _settlement_dialogue() -> void:
 		if leader_status in ["available", "active"] and not local_hook.is_empty(): _line(local_hook)
 		if leader_status == "found" and payoff.size() == 2: _line(str(payoff[0]))
 		if leader_status == "done" and payoff.size() == 2: _line(str(payoff[1]))
+		if dialogue_site_id == "suncrest":
+			match int(Game.guard_story.get("caravan_stage", 0)):
+				0:
+					if leader_status == "done":
+						_line("Zara: A caravan carrying medicine missed its report from the mountain pass. Its guides took a family who could not pay, and I fear my merchants will blame them for the delay. Find the travellers before we decide what happened.")
+						_action("Help Zara · The Last Caravan", _begin_caravan_story)
+				1, 2: _line("Zara: Bryn knows the mountain routes. Ask in Frostmere and bring everyone home if you can.")
+				3:
+					_line("Zara: The travellers are safe. They sheltered rather than abandon the family, but the pass remains dangerous. We can stock free shelters along the route, or train paired guides with space for people who cannot pay. Which should we promise first?")
+					_action("Stock shared shelters · earn Caravan hairpin", _finish_caravan_story.bind("shelters"))
+					_action("Train paired guides · earn Caravan hairpin", _finish_caravan_story.bind("guides"))
+				4:
+					_line("Zara: The shelters are stocked for anyone on the road. The merchants agreed to publish what they contribute." if str(Game.guard_story.get("caravan_choice", "")) == "shelters" else "Zara: Bryn's paired guides travel with every caravan now. No one is turned away for lack of a fare.")
+		if dialogue_site_id == "frostmere" and int(Game.guard_story.get("caravan_stage", 0)) == 1:
+			if leader_status == "done":
+				_line("Bryn: I saw the caravan take shelter east of the village. Hollow scouts followed their tracks; the family stayed with the guides. Please clear the route while I prepare a welcome here.")
+				_action("Follow Bryn's directions", _trace_caravan)
+			else: _line("Bryn: Recover my trail record first, and I can trace the caravan safely.")
+		if dialogue_site_id == "frostmere" and int(Game.guard_story.get("caravan_stage", 0)) == 4:
+			_line("Bryn: The shelters are open to mountain travellers as well as merchants." if str(Game.guard_story.get("caravan_choice", "")) == "shelters" else "Bryn: My guides share the route in pairs, and the caravan carries neighbours without a fare.")
 		if dialogue_site_id == "frostmere":
 			match int(Game.guard_story.get("watch_stage", 0)):
 				0:
@@ -1062,6 +1084,21 @@ func _finish_homecoming() -> void:
 		_tab = "Epilogue"
 	else:
 		_status = "Hear the witnesses, resolve the Keeper's memory and return to Ashvale first."
+	_refresh()
+
+
+func _begin_caravan_story() -> void:
+	_status = "The Last Caravan added to your journal." if Game.begin_caravan_story() else "Complete Zara's main quest first."
+	_refresh()
+
+
+func _trace_caravan() -> void:
+	_status = "Search east of Frostmere's center." if Game.trace_caravan() else "Complete Bryn's main quest first."
+	_refresh()
+
+
+func _finish_caravan_story(choice: String) -> void:
+	_status = "The travellers' plan is recorded. The Caravan hairpin is in Wardrobe." if Game.finish_caravan_story(choice) else "Find the caravan first."
 	_refresh()
 
 
