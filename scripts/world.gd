@@ -83,6 +83,7 @@ func _ready() -> void:
 	_spawn_player()
 	_spawn_story_contact()
 	_spawn_settlements()
+	_spawn_neri_companion()
 	_spawn_ashvale_hollow()
 	_spawn_memory_vault()
 	_spawn_suncrest_roost()
@@ -1199,6 +1200,14 @@ func _spawn_settlements() -> void:
 	manager.set_script(load("res://scripts/settlement_stream.gd"))
 	add_child(manager)
 	manager.call("setup", self, get_node("Player"))
+
+
+func _spawn_neri_companion() -> void:
+	var companion := Node3D.new()
+	companion.name = "CompanionNeri"
+	companion.set_script(load("res://scripts/neri_companion.gd"))
+	companion.position = get_node("Player").position
+	add_child(companion)
 
 
 func _spawn_story_contact() -> void:

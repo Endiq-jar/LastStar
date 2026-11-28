@@ -647,6 +647,7 @@ func _dialogue() -> void:
 			_line("My Gift can mend wounds, but I could not save the patrol that vanished into the Hollow. I still carry their unanswered report.")
 			if bool(story.get("ilyra_following", false)):
 				_line("Ilyra accompanies you and heals you during nearby fights when your health is low.")
+				if bool(story.get("neri_following", false)): _line("Ilyra: Neri's warning gives me time to raise a ward. We can watch each other's backs.")
 				_action("Ask Ilyra to return to Ashvale", _set_ilyra_following.bind(false))
 			else:
 				_action("Ask Ilyra to travel with you", _set_ilyra_following.bind(true))
@@ -803,6 +804,13 @@ func _settlement_dialogue() -> void:
 					_action("Finish the warning plan · learn Harbor Light", _finish_harbor_story)
 				3:
 					_line("Neri: The crews are practising warnings from boat to boat. They can all raise the alarm." if str(Game.guard_story.get("harbor_choice", "")) == "shared" else "Neri: The harbour station keeps an open warning log, and two watches check each signal. The crews can challenge us if we get it wrong.")
+					_line("Neri: My Gift can replenish your Light in combat. If Ilyra is travelling with us, we can also raise a small ward together.")
+					if bool(Game.guard_story.get("neri_following", false)):
+						if bool(Game.guard_story.get("ilyra_following", false)):
+							_line("Neri: Ilyra taught me to brace before the wave. I taught her how the crews pass a warning from boat to boat. Together we have time to protect each other.")
+						_action("Ask Neri to return to Tidefall", _set_neri_following.bind(false))
+					else:
+						_action("Invite Neri to travel with you", _set_neri_following.bind(true))
 		if dialogue_site_id == "glassheaven" and int(Game.guard_story.get("harbor_stage", 0)) == 1:
 			if leader_status != "done" or not Game.story_memory_owned("memory_11") or not Game.story_memory_owned("memory_12"):
 				_line("Prism: Finish my main quest, then bring the accounts from the Drowned Bell near Tidefall and the Prism of Voices near here. We need both before designing the warning.")
@@ -962,6 +970,12 @@ func _buy_sunrise_outfit() -> void:
 
 func _toggle_weapons() -> void:
 	_show_weapons = not _show_weapons
+	_refresh()
+
+
+func _set_neri_following(following: bool) -> void:
+	_status = "Neri joins your journey." if following else "Neri returns to Tidefall."
+	if not Game.set_neri_following(following): _status = "Complete A Bell Between Shores first."
 	_refresh()
 
 

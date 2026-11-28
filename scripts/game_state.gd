@@ -1037,6 +1037,14 @@ func wander_story_objective() -> String:
 	return ""
 
 
+func set_neri_following(following: bool) -> bool:
+	if int(guard_story.get("harbor_stage", 0)) != 3: return false
+	guard_story["neri_following"] = following
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
 func set_ilyra_following(following: bool) -> bool:
 	if not bool(guard_story.get("seal_done", false)):
 		return false

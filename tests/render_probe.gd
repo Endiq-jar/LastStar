@@ -1441,6 +1441,65 @@ func _run() -> void:
 	if settlement_manager != null: settlement_manager.call("_update_stream")
 	_log("INFO" if lost_ok else "FAIL", "lost Wander investigation, streaming, choices, spell and persistence=%s" % str(lost_ok))
 
+	# Neri is one character, not a duplicate resident: she joins after her
+	# quest, talks through the same dialogue, supports combat and returns home.
+	var neri_story_before: Dictionary = Game.guard_story.duplicate(true)
+	var neri_energy_before: float = Game.energy
+	var neri_shield_before: float = Game.shield_points
+	var neri_player := world.get_node_or_null("Player") as CharacterBody3D
+	var neri_player_before := neri_player.global_position
+	var neri := world.get_node_or_null("CompanionNeri") as Node3D
+	Game.guard_story = {}
+	Game.collection_changed.emit()
+	var neri_ok := neri != null and not Game.set_neri_following(true)
+	Game.guard_story["harbor_stage"] = 3
+	if neri != null and settlement_manager != null:
+		var neri_sites: Array = settlement_manager.get("_sites")
+		var tide_center: Vector2 = neri_sites[3]["resolved"]
+		neri_player.global_position = Vector3(tide_center.x, float(world.call("_height", tide_center.x, tide_center.y)) + 0.2, tide_center.y)
+		settlement_manager.call("_update_stream")
+		var neri_loaded: Dictionary = settlement_manager.get("_loaded")
+		var tide_root := neri_loaded.get("tidefall") as Node3D
+		neri_ok = neri_ok and tide_root != null and tide_root.has_node("Resident_00")
+		neri_ok = neri_ok and Game.set_neri_following(true) and neri.visible and neri.is_in_group("story_npc") and not tide_root.has_node("Resident_00")
+		neri.call("_process", 0.1)
+		neri_ok = neri_ok and neri.global_position.distance_to(neri_player.global_position) < 4.0
+		var neri_hud := world.get_node("HUD")
+		neri_ok = neri_ok and str(neri_hud.call("_npc_name", neri)) == "Neri"
+		neri_hud.call("_open_npc_dialogue", neri)
+		neri_ok = neri_ok and menu.visible and str(menu.get("dialogue_site_id")) == "tidefall"
+		menu.call("close_menu")
+		Game.guard_story = {}
+		Game.load_collection()
+		neri_ok = neri_ok and bool(Game.guard_story.get("neri_following", false))
+		neri_player.global_position = Vector3(0, 800, 0)
+		var neri_scout = load("res://scripts/hollow_sentry.gd").new()
+		world.add_child(neri_scout)
+		neri_scout.global_position = Vector3(2, 800, 0)
+		Game.energy = 0.0
+		Game.shield_points = 0.0
+		Game.guard_story["ilyra_following"] = false
+		neri.set("_support_cooldown", 0.0)
+		neri.call("_process", 0.1)
+		neri_ok = neri_ok and Game.energy == 14.0 and Game.shield_points == 0.0 and float(neri.get("_support_cooldown")) > 0.0
+		Game.energy = 0.0
+		Game.guard_story["ilyra_following"] = true
+		neri.set("_support_cooldown", 0.0)
+		neri.call("_process", 0.1)
+		neri_ok = neri_ok and Game.energy == 14.0 and Game.shield_points == 35.0
+		neri_scout.queue_free()
+		neri_ok = neri_ok and Game.set_neri_following(false) and not neri.visible and tide_root.has_node("Resident_00")
+	else:
+		neri_ok = false
+	neri_player.global_position = neri_player_before
+	Game.guard_story = neri_story_before
+	Game.energy = neri_energy_before
+	Game.shield_points = neri_shield_before
+	Game.save_collection()
+	Game.collection_changed.emit()
+	if settlement_manager != null: settlement_manager.call("_update_stream")
+	_log("INFO" if neri_ok else "FAIL", "Neri companion, dialogue identity, support synergy and save=%s" % str(neri_ok))
+
 	# Fixed tiers scale regional encounters and the Keeper without a setting.
 	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_039"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_040"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_059"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_060"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_079"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_080"), 1.0)
 	var challenge_fixture := Node3D.new()

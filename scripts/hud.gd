@@ -631,7 +631,7 @@ func _nearest_story_npc(actor: Node3D) -> Node3D:
 
 
 func _npc_name(npc: Node3D) -> String:
-	if npc.get_script() != null and npc.get_script().resource_path == "res://scripts/settler.gd":
+	if npc.get_script() != null and npc.get_script().resource_path in ["res://scripts/settler.gd", "res://scripts/neri_companion.gd"]:
 		var resident: Dictionary = SETTLEMENTS.resident(str(npc.get("site_id")), int(npc.get("resident_index")))
 		return str(resident.get("name", "resident"))
 	return "Ilyra"
@@ -641,7 +641,7 @@ func _open_npc_dialogue(npc: Node3D) -> void:
 	if npc == null or not is_instance_valid(npc) or npc.is_queued_for_deletion(): return
 	var id := ""
 	var index := 0
-	if npc.get_script() != null and npc.get_script().resource_path == "res://scripts/settler.gd":
+	if npc.get_script() != null and npc.get_script().resource_path in ["res://scripts/settler.gd", "res://scripts/neri_companion.gd"]:
 		id = str(npc.get("site_id"))
 		index = int(npc.get("resident_index"))
 	_adventure_menu.set("dialogue_site_id", id)

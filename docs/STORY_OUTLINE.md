@@ -249,3 +249,14 @@ dialogue and the ending. Either path teaches Echo Resonance, a short-range
 line-of-sight damage and slow spell; bosses resist the slow. Existing clears
 count and no new main-story gates are introduced. This is one additional side
 quest, not the complete companion or side-quest scope of the original brief.
+
+## Neri as a companion
+
+Completing A Bell Between Shores lets players invite Neri to travel or send her
+home. Her existing Tidefall resident is replaced while she follows and restored
+when dismissed, retaining the same dialogue and quests. In nearby combat, her
+Gift restores Light on a cooldown; when Ilyra is also following, their combined
+support additionally grants a small ward. Both characters acknowledge each
+other in dialogue. Her recruitment is saved and remains optional. Her model is
+still the existing procedural resident and she has no bespoke animations; other
+planned companions and relationships are not represented by this addition.
