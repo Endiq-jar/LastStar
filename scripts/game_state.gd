@@ -200,6 +200,11 @@ func story_ending() -> String:
 			conclusion += " Ilyra keeps the patrol's names at the memorial, with room for their families to correct the record."
 		else:
 			conclusion += " Ilyra delivers the patrol's letters to their families, who decide what to share."
+	if int(guard_story.get("wander_story_stage", 0)) == 4:
+		if str(guard_story.get("wander_story_choice", "")) == "public":
+			conclusion += " Veya preserves the Wander's message in a public archive, with the families' names withheld until they consent."
+		else:
+			conclusion += " Veya brings the Wander's message to the families first, leaving publication to them."
 	if renewal_count() == STORY_CHRONICLE.RENEWAL_VOICES.size():
 		conclusion += " At the heart of the Seal, seven witnesses offer their light freely; the promise is renewed together."
 	return conclusion
@@ -984,6 +989,51 @@ func harbor_story_objective() -> String:
 		1: return "Recover The Drowned Bell near Tidefall and A Prism of Voices near Glassheaven, then complete Prism's main quest and speak to Prism."
 		2: return "Return to Neri in Tidefall with the warning plan."
 		3: return "Completed · Harbor Light learned."
+	return ""
+
+
+# A lost Wander investigation. Existing leader and memory clears are honored;
+# the story does not add a new gate to the main progression.
+func begin_wander_story() -> bool:
+	if int(guard_story.get("wander_story_stage", 0)) != 0 or not region_chart_unlocked("lunareth"): return false
+	guard_story["wander_story_stage"] = 1
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func trace_lost_wander() -> bool:
+	if int(guard_story.get("wander_story_stage", 0)) != 1 or not region_chart_unlocked("evergloom") or not story_memory_owned("memory_09") or not story_memory_owned("memory_22"): return false
+	guard_story["wander_story_stage"] = 2
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func recover_lost_wander() -> bool:
+	if int(guard_story.get("wander_story_stage", 0)) != 2: return false
+	guard_story["wander_story_stage"] = 3
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func finish_wander_story(choice: String) -> bool:
+	if int(guard_story.get("wander_story_stage", 0)) != 3 or not ["public", "families"].has(choice) or wander == null: return false
+	guard_story["wander_story_stage"] = 4
+	guard_story["wander_story_choice"] = choice
+	wander.learn("echo_resonance")
+	save_wander()
+	collection_changed.emit()
+	return true
+
+
+func wander_story_objective() -> String:
+	match int(guard_story.get("wander_story_stage", 0)):
+		1: return "Recover The Wander's Mark near Lunareth and The Twilight Witness near Duskhaven. Complete Rook's main quest and speak to Rook in Evergloom."
+		2: return "Examine the lost Wander east of Evergloom's center."
+		3: return "Bring the lost Wander to Veya in Lunareth."
+		4: return "Completed · Echo Resonance learned."
 	return ""
 
 

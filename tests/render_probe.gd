@@ -1375,6 +1375,72 @@ func _run() -> void:
 	Game.collection_changed.emit()
 	_log("INFO" if harbor_ok else "FAIL", "cross-region harbor quest, choices, spell and persistence=%s" % str(harbor_ok))
 
+	# A lost Wander: exercise streaming, the actual interaction, both choices,
+	# persistent progress and the spell's damage/slow on a real scout.
+	var lost_story: Dictionary = Game.guard_story.duplicate(true)
+	var lost_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+	var lost_quests: Dictionary = Game.settlement_quests.duplicate(true)
+	var lost_levels: Dictionary = Game.wander.levels.duplicate(true)
+	var lost_actor := world.get_node_or_null("Player") as CharacterBody3D
+	var lost_position: Vector3 = lost_actor.global_position
+	Game.guard_story = {}
+	Game.dungeon_clears = {}
+	Game.settlement_quests = {}
+	Game.wander.levels.erase("echo_resonance")
+	var lost_ok := not Game.begin_wander_story() and not Game.trace_lost_wander() and not Game.recover_lost_wander()
+	Game.settlement_quests["lunareth:main"] = "done"
+	lost_ok = lost_ok and Game.begin_wander_story() and not Game.begin_wander_story()
+	Game.dungeon_clears["memory_09"] = true
+	Game.dungeon_clears["memory_22"] = true
+	lost_ok = lost_ok and not Game.trace_lost_wander()
+	Game.settlement_quests["evergloom:main"] = "done"
+	lost_ok = lost_ok and Game.trace_lost_wander()
+	if settlement_manager != null:
+		var lost_sites: Array = settlement_manager.get("_sites")
+		var lost_center: Vector2 = lost_sites[12]["resolved"]
+		lost_actor.global_position = Vector3(lost_center.x, float(world.call("_height", lost_center.x, lost_center.y)) + 0.2, lost_center.y)
+		settlement_manager.call("_update_stream")
+		var loaded_sites: Dictionary = settlement_manager.get("_loaded")
+		var lost_root := loaded_sites.get("evergloom") as Node3D
+		var lost_book: Node = lost_root.get_node_or_null("LostWander") if lost_root != null else null
+		if lost_book != null:
+			lost_actor.global_position = lost_book.global_position + Vector3(0, 0.2, 0)
+			lost_ok = bool(lost_book.call("try_interact", lost_actor)) and lost_ok
+			lost_ok = lost_ok and int(Game.guard_story.get("wander_story_stage", 0)) == 3 and not Game.recover_lost_wander()
+		else:
+			lost_ok = false
+	else:
+		lost_ok = false
+	Game.save_collection()
+	Game.guard_story = {}
+	Game.load_collection()
+	lost_ok = lost_ok and int(Game.guard_story.get("wander_story_stage", 0)) == 3 and not Game.finish_wander_story("invalid")
+	lost_ok = lost_ok and Game.finish_wander_story("public") and not Game.finish_wander_story("families") and Game.wander.known("echo_resonance")
+	Game.guard_story["keeper_defeated"] = true
+	var lost_public_ending: String = Game.story_ending()
+	Game.guard_story["wander_story_stage"] = 3
+	lost_ok = lost_ok and Game.finish_wander_story("families") and lost_public_ending != Game.story_ending()
+	Game.guard_story = {}
+	Game.load_collection()
+	lost_ok = lost_ok and str(Game.guard_story.get("wander_story_choice", "")) == "families" and Game.wander_levels.has("echo_resonance")
+	lost_actor.global_position = Vector3(0, 800, 0)
+	var lost_scout = load("res://scripts/hollow_sentry.gd").new()
+	world.add_child(lost_scout)
+	lost_scout.global_position = Vector3(2, 800, 0)
+	await get_tree().physics_frame
+	lost_actor.call("_on_spell_cast", "echo_resonance", Game.wander.spell("echo_resonance"))
+	lost_ok = lost_ok and float(lost_scout.get("hp")) < 260.0 and float(lost_scout.get("_slow_remaining")) > 0.0
+	lost_scout.queue_free()
+	lost_actor.global_position = lost_position
+	Game.guard_story = lost_story
+	Game.dungeon_clears = lost_clears
+	Game.settlement_quests = lost_quests
+	Game.wander.levels = lost_levels
+	Game.save_wander()
+	Game.collection_changed.emit()
+	if settlement_manager != null: settlement_manager.call("_update_stream")
+	_log("INFO" if lost_ok else "FAIL", "lost Wander investigation, streaming, choices, spell and persistence=%s" % str(lost_ok))
+
 	# Fixed tiers scale regional encounters and the Keeper without a setting.
 	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_039"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_040"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_059"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_060"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_079"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_080"), 1.0)
 	var challenge_fixture := Node3D.new()

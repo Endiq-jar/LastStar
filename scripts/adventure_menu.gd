@@ -344,6 +344,8 @@ func _quests() -> void:
 		_line("Main · A Memory in the Hollow: %s" % memory_status)
 	var ilyra_objective: String = Game.ilyra_arc_objective()
 	if not ilyra_objective.is_empty(): _line("Companion · The Names We Carry: " + ilyra_objective)
+	var wander_objective: String = Game.wander_story_objective()
+	if not wander_objective.is_empty(): _line("Side · The Wander That Waited: " + wander_objective)
 	var harbor_objective: String = Game.harbor_story_objective()
 	if not harbor_objective.is_empty(): _line("Side · A Bell Between Shores: " + harbor_objective)
 	_line("STORY PATH", 18, UI.ACCENT)
@@ -762,6 +764,28 @@ func _settlement_dialogue() -> void:
 		if leader_status in ["available", "active"] and not local_hook.is_empty(): _line(local_hook)
 		if leader_status == "found" and payoff.size() == 2: _line(str(payoff[0]))
 		if leader_status == "done" and payoff.size() == 2: _line(str(payoff[1]))
+		if dialogue_site_id == "lunareth":
+			match int(Game.guard_story.get("wander_story_stage", 0)):
+				0:
+					if leader_status == "done":
+						_line("Veya: A Wander was lost on the Evergloom road, carrying messages entrusted to it by several people. I will not copy them without learning what their owners wanted. Will you find it?")
+						_action("Help Veya · The Wander That Waited", _begin_wander_story)
+				1:
+					_line("Veya: The Wander's Mark and the Twilight Witness may explain its writing. Find those memories and ask Rook in Evergloom; they know the abandoned road.")
+				2:
+					_line("Veya: Rook found its trail. Search east of Evergloom's center and bring the Wander back without copying its pages.")
+				3:
+					_line("Veya: Its owners asked to choose who heard them. We can preserve the message publicly with their names withheld, or take it to their families first. Both routes protect their choice.")
+					_action("Archive the anonymous message", _finish_wander_story.bind("public"))
+					_action("Take the message to the families first", _finish_wander_story.bind("families"))
+				4:
+					_line("Veya: The anonymous message is in the archive; the families decide whether their names follow." if str(Game.guard_story.get("wander_story_choice", "")) == "public" else "Veya: The families have the message. They will decide whether it belongs in the archive.")
+		if dialogue_site_id == "evergloom" and int(Game.guard_story.get("wander_story_stage", 0)) == 1:
+			if leader_status == "done" and Game.story_memory_owned("memory_09") and Game.story_memory_owned("memory_22"):
+				_line("Rook: The survey shows a courier sheltered east of here. The Wander's mark matches the witness's copy. The courier hid the book rather than let the voices be erased.")
+				_action("Follow Rook's trail", _trace_lost_wander)
+			else:
+				_line("Rook: Complete my survey and recover the Wander's Mark and the Twilight Witness. With both records I can trace the courier's route.")
 		if dialogue_site_id == "tidefall":
 			match int(Game.guard_story.get("harbor_stage", 0)):
 				0:
@@ -938,6 +962,21 @@ func _buy_sunrise_outfit() -> void:
 
 func _toggle_weapons() -> void:
 	_show_weapons = not _show_weapons
+	_refresh()
+
+
+func _begin_wander_story() -> void:
+	_status = "The Wander That Waited added to your journal." if Game.begin_wander_story() else "Complete Veya's main quest first."
+	_refresh()
+
+
+func _trace_lost_wander() -> void:
+	_status = "Rook traced the courier. Search east of Evergloom's center." if Game.trace_lost_wander() else "Recover both memories and complete Rook's main quest first."
+	_refresh()
+
+
+func _finish_wander_story(choice: String) -> void:
+	_status = "Message entrusted. Echo Resonance learned; assign it in the spellbook." if Game.finish_wander_story(choice) else "Recover the lost Wander first."
 	_refresh()
 
 

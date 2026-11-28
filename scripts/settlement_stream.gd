@@ -25,6 +25,7 @@ const ITEM := preload("res://scripts/settlement_item.gd")
 const HOUSE := preload("res://scripts/village_house.gd")
 const PROPS := preload("res://scripts/interior_props.gd")
 const PATROL_MEMORIAL := preload("res://scripts/patrol_memorial.gd")
+const LOST_WANDER := preload("res://scripts/lost_wander.gd")
 const STONE_SHADER := preload("res://shaders/village_stone.gdshader")
 const VILLAGE_GROUND_SIZE := DATA.PAVING_HALF_SIZE * 2.0
 static var _ground_mesh: PlaneMesh
@@ -173,6 +174,19 @@ func _sync_items_for_site(site: Dictionary, root: Node3D) -> void:
 		elif not needed and memorial != null:
 			root.remove_child(memorial)
 			memorial.queue_free()
+
+	if id == "evergloom":
+		var wander := root.get_node_or_null("LostWander")
+		var needed := int(Game.guard_story.get("wander_story_stage", 0)) == 2
+		if needed and wander == null:
+			var pos: Vector2 = center + Vector2(34, -9)
+			var marker := LOST_WANDER.new()
+			marker.name = "LostWander"
+			marker.position = Vector3(pos.x, float(_world.call("_height", pos.x, pos.y)), pos.y)
+			root.add_child(marker)
+		elif not needed and wander != null:
+			root.remove_child(wander)
+			wander.queue_free()
 
 
 func _add_village_ground(root: Node3D, center: Vector2) -> void:

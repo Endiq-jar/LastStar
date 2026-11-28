@@ -238,3 +238,14 @@ be heard in any order, survive leaving and re-entering, and add a renewal passag
 to the journal ending after all seven are heard. Older completed saves can return
 to the arena. This does not gate the existing ending or change boss rewards, and
 uses recorded voices rather than claiming that the NPCs physically appear.
+
+## The Wander That Waited
+
+Veya's optional investigation connects the Wander's Mark and Twilight Witness
+memories with Rook's Evergloom survey. The player follows Rook's lead to an
+interactable lost Wander and decides whether to preserve its anonymous message
+publicly or bring it to the families first. The choice persists in Veya's later
+dialogue and the ending. Either path teaches Echo Resonance, a short-range
+line-of-sight damage and slow spell; bosses resist the slow. Existing clears
+count and no new main-story gates are introduced. This is one additional side
+quest, not the complete companion or side-quest scope of the original brief.
