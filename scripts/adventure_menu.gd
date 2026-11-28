@@ -344,6 +344,8 @@ func _quests() -> void:
 		_line("Main · A Memory in the Hollow: %s" % memory_status)
 	var ilyra_objective: String = Game.ilyra_arc_objective()
 	if not ilyra_objective.is_empty(): _line("Companion · The Names We Carry: " + ilyra_objective)
+	var watch_objective: String = Game.watch_story_objective()
+	if not watch_objective.is_empty(): _line("Side · A Watch for Everyone: " + watch_objective)
 	var wander_objective: String = Game.wander_story_objective()
 	if not wander_objective.is_empty(): _line("Side · The Wander That Waited: " + wander_objective)
 	var harbor_objective: String = Game.harbor_story_objective()
@@ -765,6 +767,20 @@ func _settlement_dialogue() -> void:
 		if leader_status in ["available", "active"] and not local_hook.is_empty(): _line(local_hook)
 		if leader_status == "found" and payoff.size() == 2: _line(str(payoff[0]))
 		if leader_status == "done" and payoff.size() == 2: _line(str(payoff[1]))
+		if dialogue_site_id == "frostmere":
+			match int(Game.guard_story.get("watch_stage", 0)):
+				0:
+					if leader_status == "done":
+						_line("Bryn: My brother stayed at the rear of the old pass while the rest of us fled. I kept telling myself one brave guide was enough. Now scouts are approaching Frostmere, and I will not leave another guide alone. Will you stand the watch with us?")
+						_action("Help Bryn · A Watch for Everyone", _begin_watch_story)
+				1:
+					_line("Bryn: Signal the watch north of the village center, then drive off both attackers. If you have to retreat, the watch can be signalled again.")
+				2:
+					_line("Bryn: We held because the watch warned us together. My brother never got a chance to return. Help me decide what we practise next: shared patrols on the pass, or evacuation drills with a guide for every family.")
+					_action("Organise shared patrols · learn Watchfire", _finish_watch_story.bind("patrol"))
+					_action("Practise guided evacuations · learn Watchfire", _finish_watch_story.bind("evacuation"))
+				3:
+					_line("Bryn: The pass patrols now travel in pairs and report to the village. No one has to hold the rear alone." if str(Game.guard_story.get("watch_choice", "")) == "patrol" else "Bryn: Every family knows where to meet a guide. We practise leaving together, not just holding the wall.")
 		if dialogue_site_id == "lunareth":
 			match int(Game.guard_story.get("wander_story_stage", 0)):
 				0:
@@ -970,6 +986,16 @@ func _buy_sunrise_outfit() -> void:
 
 func _toggle_weapons() -> void:
 	_show_weapons = not _show_weapons
+	_refresh()
+
+
+func _begin_watch_story() -> void:
+	_status = "A Watch for Everyone added to your journal." if Game.begin_watch_story() else "Complete Bryn's main quest first."
+	_refresh()
+
+
+func _finish_watch_story(choice: String) -> void:
+	_status = "The watch plan is recorded. Watchfire is learned." if Game.finish_watch_story(choice) else "Defend the watch first."
 	_refresh()
 
 

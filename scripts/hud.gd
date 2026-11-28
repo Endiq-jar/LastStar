@@ -852,6 +852,8 @@ func _refresh_quest_box() -> void:
 	if bool(story.get("memory_accepted", false)):
 		var memory_status := "Completed" if bool(story.get("memory_done", false)) else ("Return the fragment to Ilyra" if bool(story.get("memory_found", false)) else "Defeat the Warden and search its chest")
 		lines.append("Ilyra · A Memory in the Hollow\n%s" % memory_status)
+	var watch_objective: String = Game.watch_story_objective()
+	if not watch_objective.is_empty(): lines.append("Bryn · A Watch for Everyone\n" + watch_objective)
 	var wander_objective: String = Game.wander_story_objective()
 	if not wander_objective.is_empty(): lines.append("Veya · The Wander That Waited\n" + wander_objective)
 	var harbor_objective: String = Game.harbor_story_objective()

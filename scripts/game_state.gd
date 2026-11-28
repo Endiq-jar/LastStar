@@ -205,6 +205,11 @@ func story_ending() -> String:
 			conclusion += " Veya preserves the Wander's message in a public archive, with the families' names withheld until they consent."
 		else:
 			conclusion += " Veya brings the Wander's message to the families first, leaving publication to them."
+	if int(guard_story.get("watch_stage", 0)) == 3:
+		if str(guard_story.get("watch_choice", "")) == "patrol":
+			conclusion += " Frostmere's watch shares patrols across the pass, so no guide is left alone."
+		else:
+			conclusion += " Frostmere's families practise evacuation together, with a guide assigned to every group."
 	if renewal_count() == STORY_CHRONICLE.RENEWAL_VOICES.size():
 		conclusion += " At the heart of the Seal, seven witnesses offer their light freely; the promise is renewed together."
 	return conclusion
@@ -1034,6 +1039,41 @@ func wander_story_objective() -> String:
 		2: return "Examine the lost Wander east of Evergloom's center."
 		3: return "Bring the lost Wander to Veya in Lunareth."
 		4: return "Completed · Echo Resonance learned."
+	return ""
+
+
+# Frostmere's optional defense is independent of the 105 Hollow clear flags.
+func begin_watch_story() -> bool:
+	if int(guard_story.get("watch_stage", 0)) != 0 or not region_chart_unlocked("frostmere"): return false
+	guard_story["watch_stage"] = 1
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func complete_watch_defense() -> bool:
+	if int(guard_story.get("watch_stage", 0)) != 1: return false
+	guard_story["watch_stage"] = 2
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func finish_watch_story(choice: String) -> bool:
+	if int(guard_story.get("watch_stage", 0)) != 2 or not ["patrol", "evacuation"].has(choice) or wander == null: return false
+	guard_story["watch_stage"] = 3
+	guard_story["watch_choice"] = choice
+	wander.learn("watchfire")
+	save_wander()
+	collection_changed.emit()
+	return true
+
+
+func watch_story_objective() -> String:
+	match int(guard_story.get("watch_stage", 0)):
+		1: return "Signal the watch north of Frostmere's center and defeat both attackers. If interrupted, signal it again."
+		2: return "Return to Bryn in Frostmere."
+		3: return "Completed · Watchfire learned."
 	return ""
 
 

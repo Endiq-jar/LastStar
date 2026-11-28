@@ -260,3 +260,14 @@ support additionally grants a small ward. Both characters acknowledge each
 other in dialogue. Her recruitment is saved and remains optional. Her model is
 still the existing procedural resident and she has no bespoke animations; other
 planned companions and relationships are not represented by this addition.
+
+## A Watch for Everyone
+
+After Bryn's Frostmere leader quest, a watch marker starts a real two-attacker
+settlement defense. If the player is defeated or leaves the streamed settlement,
+the unfinished wave resets and can be signalled again. On victory Bryn asks
+whether to organise shared patrols or guided evacuations; the choice changes
+later dialogue and the ending. Either resolution teaches Watchfire, a shield and
+healing spell. Progress uses new keys in the existing story dictionary and does
+not change the 105 Hollow roster or the original finale gate. The encounter uses
+the existing scout enemies, not bespoke models or animations.

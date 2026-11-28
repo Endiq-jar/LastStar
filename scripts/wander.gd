@@ -148,6 +148,12 @@ const CATALOGUE := {
 		"cooldown": 12.0, "power": 0.0, "radius": 0.0, "range": 0.0,
 		"desc": "Recover stamina for dodging and sprinting.", "starter": false,
 	},
+	"watchfire": {
+		"name": "Watchfire", "category": "Defensive", "element": 1,
+		"color": Color(1.0, 0.68, 0.35), "icon": "ember", "cost": 24.0,
+		"cooldown": 14.0, "power": 0.0, "radius": 0.0, "range": 0.0,
+		"desc": "Restore a little health and raise a modest shield. Mastery improves both.", "starter": false,
+	},
 	"echo_resonance": {
 		"name": "Echo Resonance", "category": "Arcane", "element": 2,
 		"color": Color(0.72, 0.78, 1.0), "icon": "arcane", "cost": 25.0,

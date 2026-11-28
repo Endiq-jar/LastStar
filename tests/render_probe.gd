@@ -1500,6 +1500,80 @@ func _run() -> void:
 	if settlement_manager != null: settlement_manager.call("_update_stream")
 	_log("INFO" if neri_ok else "FAIL", "Neri companion, dialogue identity, support synergy and save=%s" % str(neri_ok))
 
+	# Frostmere defense uses a real streamed encounter and retries after respawn.
+	var watch_story_before: Dictionary = Game.guard_story.duplicate(true)
+	var watch_quests_before: Dictionary = Game.settlement_quests.duplicate(true)
+	var watch_levels_before: Dictionary = Game.wander.levels.duplicate(true)
+	var watch_actor := world.get_node_or_null("Player") as CharacterBody3D
+	var watch_position_before := watch_actor.global_position
+	var watch_hp_before: float = Game.current_hp()
+	var watch_shield_before: float = Game.shield_points
+	Game.guard_story = {}
+	Game.settlement_quests = {}
+	Game.wander.levels.erase("watchfire")
+	var watch_ok := not Game.begin_watch_story() and not Game.finish_watch_story("patrol")
+	Game.settlement_quests["frostmere:main"] = "done"
+	watch_ok = watch_ok and Game.begin_watch_story() and not Game.begin_watch_story()
+	if settlement_manager != null:
+		var watch_sites: Array = settlement_manager.get("_sites")
+		var watch_center: Vector2 = watch_sites[5]["resolved"]
+		watch_actor.global_position = Vector3(watch_center.x, float(world.call("_height", watch_center.x, watch_center.y)) + 0.2, watch_center.y)
+		settlement_manager.call("_update_stream")
+		var watch_loaded: Dictionary = settlement_manager.get("_loaded")
+		var watch_root := watch_loaded.get("frostmere") as Node3D
+		var watch: Node = watch_root.get_node_or_null("VillageWatch") if watch_root != null else null
+		if watch != null:
+			watch_actor.global_position = (watch as Node3D).global_position + Vector3(0, 0.2, 0)
+			watch_ok = bool(watch.call("try_interact", watch_actor)) and watch_ok
+			watch_ok = watch_ok and int(watch.get("_remaining")) == 2 and bool(watch.get("_active"))
+			# Repeated interaction cannot spawn an additional wave.
+			watch_ok = bool(watch.call("try_interact", watch_actor)) and watch_ok
+			var first_wave: Array = []
+			for child in watch.get_children():
+				if child is CharacterBody3D: first_wave.append(child)
+			watch_ok = watch_ok and first_wave.size() == 2
+			Game.respawned.emit()
+			watch_ok = watch_ok and not bool(watch.get("_active")) and int(Game.guard_story.get("watch_stage", 0)) == 1
+			await get_tree().process_frame
+			watch_actor.global_position = (watch as Node3D).global_position + Vector3(0, 0.2, 0)
+			watch_ok = bool(watch.call("try_interact", watch_actor)) and watch_ok
+			var retry_wave: Array = []
+			for child in watch.get_children():
+				if child is CharacterBody3D and not child.is_queued_for_deletion(): retry_wave.append(child)
+			watch_ok = watch_ok and retry_wave.size() == 2
+			for foe in retry_wave: foe.call("take_hit", 10000.0, 0, Vector3.ZERO)
+			watch_ok = watch_ok and int(Game.guard_story.get("watch_stage", 0)) == 2 and not watch_root.has_node("VillageWatch")
+		else:
+			watch_ok = false
+	else:
+		watch_ok = false
+	Game.guard_story = {}
+	Game.load_collection()
+	watch_ok = watch_ok and int(Game.guard_story.get("watch_stage", 0)) == 2 and not Game.finish_watch_story("bad")
+	watch_ok = watch_ok and Game.finish_watch_story("patrol") and not Game.finish_watch_story("patrol") and Game.wander.known("watchfire")
+	Game.guard_story["keeper_defeated"] = true
+	var patrol_ending: String = Game.story_ending()
+	Game.guard_story["watch_stage"] = 2
+	watch_ok = watch_ok and Game.finish_watch_story("evacuation") and Game.story_ending() != patrol_ending
+	Game.guard_story = {}
+	Game.load_collection()
+	watch_ok = watch_ok and str(Game.guard_story.get("watch_choice", "")) == "evacuation" and Game.wander_levels.has("watchfire")
+	Game.set_hp(Game.max_hp() * 0.5)
+	Game.shield_points = 0.0
+	var watch_hp_cast: float = Game.current_hp()
+	watch_actor.call("_on_spell_cast", "watchfire", Game.wander.spell("watchfire"))
+	watch_ok = watch_ok and Game.current_hp() > watch_hp_cast and Game.shield_points > 0.0
+	watch_actor.global_position = watch_position_before
+	Game.guard_story = watch_story_before
+	Game.settlement_quests = watch_quests_before
+	Game.wander.levels = watch_levels_before
+	Game.set_hp(watch_hp_before)
+	Game.shield_points = watch_shield_before
+	Game.save_wander()
+	Game.collection_changed.emit()
+	if settlement_manager != null: settlement_manager.call("_update_stream")
+	_log("INFO" if watch_ok else "FAIL", "Frostmere defense, retry, choices, spell and save=%s" % str(watch_ok))
+
 	# Fixed tiers scale regional encounters and the Keeper without a setting.
 	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_039"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_040"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_059"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_060"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_079"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_080"), 1.0)
 	var challenge_fixture := Node3D.new()
