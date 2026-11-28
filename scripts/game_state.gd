@@ -167,6 +167,7 @@ var resonance_source := ""
 const STORY_DUNGEONS := preload("res://scripts/story_dungeons.gd")
 const STORY_CHRONICLE := preload("res://scripts/story_chronicle.gd")
 const STORY_JOURNEY := preload("res://scripts/story_journey.gd")
+const REGIONAL_SIDE_STORIES := preload("res://scripts/regional_side_stories.gd")
 const OPTIONAL_DUNGEONS := preload("res://scripts/optional_dungeons.gd")
 const STORY_MEMORY_GOAL := 25
 const MEMORY_SPELLS := {"memory_10": "tide_remedy", "memory_15": "winter_resolve", "memory_22": "dusk_seal"}
@@ -1201,6 +1202,14 @@ func set_outfit_style(index: int) -> void:
 	save_collection()
 	collection_changed.emit()
 	character_changed.emit(party_index)
+
+
+func settlement_quest_title(site_id: String, kind: String, index: int) -> String:
+	if kind == "side" and index == 0:
+		var story: Dictionary = REGIONAL_SIDE_STORIES.STORIES.get(site_id, {})
+		if not story.is_empty(): return str(story["title"])
+	var resident: Dictionary = SETTLEMENT_DATA.resident(site_id, index)
+	return str(resident.get(kind, "Quest"))
 
 
 func settlement_reward_text(kind: String, index: int, site_id: String) -> String:

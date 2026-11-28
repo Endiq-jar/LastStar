@@ -297,3 +297,12 @@ The conclusion reflects the opening answer and recorded story decisions, opens
 a readable ending card and can be revisited from the Story screen. The
 existing ending and original 100-Hollow gate remain unchanged; this is not a
 cinematic, and the regional Hollow arenas and many resident quests remain shared.
+
+## Regional leader side stories
+
+Each of the fourteen settlement leaders' existing side quests now has a unique
+title, motive, recovered-item discovery, resolution and post-Keeper follow-up.
+They use the same physical items, quest IDs, statuses and rewards as before, so
+old in-progress and completed saves continue at the appropriate stage. These
+are authored narrative layers over existing retrieval quests, not fourteen new
+combat encounters or the full set of bespoke side quests in the original brief.

@@ -1256,6 +1256,25 @@ func _run() -> void:
 			for child in ending_body.get_children():
 				if child is Label and child.text == ending_line: ending_found = true
 			chronicle_ok = chronicle_ok and not ending_line.is_empty() and ending_found
+		# Every leader's existing side quest has its own staged story. Test the
+		# real dialogue for all stages and ensure later payoffs do not leak early.
+		chronicle_ok = chronicle_ok and Game.REGIONAL_SIDE_STORIES.STORIES.size() == 14
+		for side_story_site in SETTLEMENTS.SITES:
+			var side_story_id := str(side_story_site["id"])
+			var side_data: Dictionary = Game.REGIONAL_SIDE_STORIES.STORIES.get(side_story_id, {})
+			chronicle_ok = chronicle_ok and not side_data.is_empty() and Game.settlement_quest_title(side_story_id, "side", 0) == str(side_data.get("title", ""))
+			menu.set("dialogue_site_id", side_story_id)
+			menu.set("dialogue_resident_index", 0)
+			for side_stage in ["available", "active", "found", "done"]:
+				Game.settlement_quests[side_story_id + ":side"] = side_stage
+				menu.call("open_menu", "Dialogue")
+				var side_story_body := menu.get("_body") as VBoxContainer
+				var side_stage_found := false
+				var side_after_found := false
+				for side_child in side_story_body.get_children():
+					if side_child is Label and side_child.text == str(side_data.get(side_stage, "")): side_stage_found = true
+					if side_child is Label and side_child.text == str(side_data.get("after", "")): side_after_found = true
+				chronicle_ok = chronicle_ok and side_stage_found and side_after_found == (side_stage == "done")
 		menu.call("close_menu")
 		menu.set("dialogue_site_id", "")
 		menu.set("dialogue_resident_index", 0)

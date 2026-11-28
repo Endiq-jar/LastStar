@@ -440,7 +440,7 @@ func _quests() -> void:
 					continue
 				any_quest = true
 				var detail := "Find nearby" if state == "active" else ("Return to resident" if state == "found" else "Complete")
-				_line("%s · %s · %s · %s: %s" % [site["name"], resident["name"], kind.capitalize(), resident[kind], detail])
+				_line("%s · %s · %s · %s: %s" % [site["name"], resident["name"], kind.capitalize(), Game.settlement_quest_title(str(site["id"]), kind, index), detail])
 	if not any_quest:
 		_line("Speak with residents in settlements to discover local quests.")
 	_line("REGION NOTES", 18, UI.ACCENT)
@@ -901,6 +901,18 @@ func _settlement_dialogue() -> void:
 		var status: String = Game.settlement_quest_status(dialogue_site_id, kind, dialogue_resident_index)
 		var title := "Main" if kind == "main" else "Side"
 		var item: String = str(resident[kind])
+		var side_story: Dictionary = Game.REGIONAL_SIDE_STORIES.STORIES.get(dialogue_site_id, {}) if kind == "side" and dialogue_resident_index == 0 else {}
+		if not side_story.is_empty():
+			_line("SIDE · " + str(side_story["title"]), 17, UI.ACCENT)
+			_line(str(side_story.get(status, "")))
+			if status == "available":
+				_line("Look for the labelled %s near the settlement. Reward: %s." % [item, Game.settlement_reward_text(kind, dialogue_resident_index, dialogue_site_id)])
+				_action("Accept side quest · " + str(side_story["title"]), _accept_settlement.bind(kind))
+			elif status == "found":
+				_action("Return %s · reward %s" % [item, Game.settlement_reward_text(kind, dialogue_resident_index, dialogue_site_id)], _complete_settlement.bind(kind))
+			elif status == "done" and bool(Game.guard_story.get("keeper_defeated", false)):
+				_line(str(side_story["after"]))
+			continue
 		match status:
 			"available":
 				_line("%s quest: Could you find my %s? Look for my labelled glowing item near this settlement. Reward: %s." % [title, item, Game.settlement_reward_text(kind, dialogue_resident_index, dialogue_site_id)])

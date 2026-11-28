@@ -873,5 +873,5 @@ func _refresh_quest_box() -> void:
 					continue
 				var resident: Dictionary = SETTLEMENTS.resident(site["id"], index)
 				var detail: String = "Find nearby" if state == "active" else ("Return to resident" if state == "found" else "Completed")
-				lines.append("%s · %s · %s\n%s: %s" % [site["name"], resident["name"], kind.capitalize(), resident[kind], detail])
+				lines.append("%s · %s · %s\n%s: %s" % [site["name"], resident["name"], kind.capitalize(), Game.settlement_quest_title(str(site["id"]), kind, index), detail])
 	_quest_list.text = "\n\n".join(lines) if not lines.is_empty() else "No quests accepted yet. Talk to residents to find quests."
