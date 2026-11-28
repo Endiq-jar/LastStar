@@ -28,6 +28,7 @@ const PATROL_MEMORIAL := preload("res://scripts/patrol_memorial.gd")
 const LOST_WANDER := preload("res://scripts/lost_wander.gd")
 const VILLAGE_DEFENSE := preload("res://scripts/village_defense.gd")
 const STRANDED_CARAVAN := preload("res://scripts/stranded_caravan.gd")
+const SHOP := preload("res://scripts/settlement_shop.gd")
 const ORCHARD_ECHO := preload("res://scripts/orchard_echo.gd")
 const ORCHARD_LEGACY := preload("res://scripts/orchard_legacy.gd")
 const CARAVAN_SURVIVOR := preload("res://scripts/caravan_survivor.gd")
@@ -94,6 +95,14 @@ func _build_site(site: Dictionary) -> Node3D:
 	add_child(root)
 	var center: Vector2 = site["resolved"]
 	_add_village_ground(root, center)
+	# A paved, accessible corner keeps the stall away from houses, residents,
+	# quest objects and village entrances; no steps or ramps are introduced.
+	var shop_pos := center + Vector2(40, 40)
+	var shop := SHOP.new()
+	shop.name = "SettlementShop"
+	shop.site_id = str(site["id"])
+	shop.position = Vector3(shop_pos.x, float(_world.call("_height", shop_pos.x, shop_pos.y)), shop_pos.y)
+	root.add_child(shop)
 	var house_slot := 0
 	var site_index := 0
 	for index in range(DATA.SITES.size()):

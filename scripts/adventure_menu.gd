@@ -8,6 +8,7 @@ const HOME_TABS := ["Wardrobe", "Profile", "Settings", "Shop"]
 const GAME_TABS := ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story"]
 var home_mode := false
 var dialogue_site_id := ""
+var shop_site_id := ""
 var dialogue_resident_index := 0
 const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
 
@@ -135,7 +136,14 @@ func open_menu(tab: String = "Character") -> void:
 	_close_button.grab_focus()
 
 
+func open_settlement_shop(site_id: String) -> void:
+	if Game.SETTLEMENT_SHOPS.by_id(site_id).is_empty(): return
+	shop_site_id = site_id
+	open_menu("Shop")
+
+
 func close_menu() -> void:
+	shop_site_id = ""
 	_binding_action = ""
 	visible = false
 	if not home_mode:
@@ -146,6 +154,7 @@ func close_menu() -> void:
 
 
 func _select(tab: String) -> void:
+	if tab != "Shop": shop_site_id = ""
 	_tab = tab
 	_status = ""
 	_refresh()
@@ -497,7 +506,19 @@ func _upgrade(index: int) -> void:
 
 
 func _shop() -> void:
-	_line("THE WANDERER'S SHOP", 23, UI.ACCENT)
+	var local_shop: Dictionary = Game.SETTLEMENT_SHOPS.by_id(shop_site_id)
+	if local_shop.is_empty():
+		_line("THE WANDERER'S SHOP", 23, UI.ACCENT)
+	else:
+		_line(str(local_shop["name"]).to_upper(), 23, UI.ACCENT)
+		_line("%s: Welcome to %s. Browse our local stock or trade treasures you already carry." % [local_shop["merchant"], SETTLEMENTS.by_id(shop_site_id)["name"]])
+		var local_item := str(local_shop["item"])
+		_action("Buy %s · %d Ane" % [local_item, Game.SETTLEMENT_SHOPS.BUY_PRICE], _buy_local_collectible, Game.coins >= Game.SETTLEMENT_SHOPS.BUY_PRICE and Game.inventory_used() < Game.inventory_capacity())
+		_line("Sell treasures · %d Ane each" % Game.SETTLEMENT_SHOPS.SELL_PRICE, 16, UI.ACCENT)
+		for item in Game.WISH_ITEMS:
+			var count := int(Game.collectibles.get(item, 0))
+			_action("Sell %s · owned %d" % [item, count], _sell_local_collectible.bind(item), count > 0)
+		_line("TRAVELLER SUPPLIES", 18, UI.ACCENT)
 	_line("Offline supplies only. Ane are earned by playing.")
 	_action("Healing potion   ·   25 Ane", _buy_potion, Game.coins >= 25 and Game.inventory_used() < Game.inventory_capacity())
 	_line("Potions require an empty inventory slot.")
@@ -506,6 +527,16 @@ func _shop() -> void:
 	for i in range(1, Game.BACKPACK_NAMES.size()):
 		var owned: bool = Game.owned_backpacks.has(i)
 		_action("%s  ·  +%d slots  ·  %s" % [Game.BACKPACK_NAMES[i], Game.BACKPACK_BONUS[i], "Owned" if owned else "%d Ane" % Game.BACKPACK_PRICES[i]], _buy_backpack.bind(i), not owned and Game.coins >= Game.BACKPACK_PRICES[i])
+
+
+func _buy_local_collectible() -> void:
+	_status = "Treasure added to your inventory." if Game.buy_settlement_collectible(shop_site_id) else "Not enough Ane or inventory is full."
+	_refresh()
+
+
+func _sell_local_collectible(item: String) -> void:
+	_status = "Sold %s for %d Ane." % [item, Game.SETTLEMENT_SHOPS.SELL_PRICE] if Game.sell_settlement_collectible(shop_site_id, item) else "That treasure is not in your inventory."
+	_refresh()
 
 
 func _wardrobe() -> void:

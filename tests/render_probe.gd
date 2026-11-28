@@ -858,6 +858,78 @@ func _run() -> void:
 					var quest_offset: Vector2 = site_data.quest_offset(resident_index, quest_kind)
 					flat_villages_ok = flat_villages_ok and maxf(absf(quest_offset.x), absf(quest_offset.y)) < site_data.PAVING_HALF_SIZE
 	_log("INFO" if flat_villages_ok else "FAIL", "All 14 settlements have level dry paved ground and level house approaches=%s" % str(flat_villages_ok))
+	# Every streamed settlement constructs the same interactable shop with a
+	# real merchant, stock and collision. Transactions use the existing save.
+	var shop_ok := settlement_manager != null and menu != null and Game.SETTLEMENT_SHOPS.SHOPS.size() == 14
+	var shop_coins_before: int = Game.coins
+	var shop_potions_before: int = Game.potions
+	var shop_items_before: Dictionary = Game.collectibles.duplicate(true)
+	var shop_pack_before: int = Game.equipped_backpack
+	var shop_player := world.get_node_or_null("Player") as CharacterBody3D
+	var shop_position_before := shop_player.global_position
+	var first_shop_mesh: Mesh = null
+	if settlement_manager != null:
+		var shop_sites: Array = settlement_manager.get("_sites")
+		for shop_site in shop_sites:
+			var shop_id := str(shop_site["id"])
+			var shop_definition: Dictionary = Game.SETTLEMENT_SHOPS.by_id(shop_id)
+			shop_ok = shop_ok and not shop_definition.is_empty() and Game.WISH_ITEMS.has(shop_definition.get("item", ""))
+			var shop_sample: Node3D = settlement_manager.call("_build_site", shop_site)
+			var built_shop := shop_sample.get_node_or_null("SettlementShop") as Node3D
+			if built_shop != null:
+				var shop_visual := built_shop.get_node_or_null("MarketStall") as MeshInstance3D
+				shop_ok = shop_ok and built_shop.is_in_group("story_interaction") and str(built_shop.get("site_id")) == shop_id and shop_visual != null and shop_visual.mesh != null
+				if shop_visual != null:
+					if first_shop_mesh == null: first_shop_mesh = shop_visual.mesh
+					else: shop_ok = shop_ok and first_shop_mesh == shop_visual.mesh
+				shop_ok = shop_ok and built_shop.find_children("*", "CollisionShape3D", true, false).size() == 1
+			else: shop_ok = false
+			shop_sample.free()
+		var ash_shop_loaded: Dictionary = settlement_manager.get("_loaded")
+		var ash_shop_root := ash_shop_loaded.get("ashvale") as Node3D
+		var ash_shop := ash_shop_root.get_node_or_null("SettlementShop") as Node3D if ash_shop_root != null else null
+		if ash_shop != null and menu != null:
+			Game.coins = 100
+			Game.potions = 0
+			Game.collectibles = {}
+			Game.equipped_backpack = 0
+			shop_player.global_position = ash_shop.global_position + Vector3(0, 0.2, -2.5)
+			var shop_target: Dictionary = world.get_node("HUD").call("_nearest_story_interaction", shop_player)
+			shop_ok = shop_ok and shop_target.get("object") == ash_shop
+			shop_ok = bool(ash_shop.call("try_interact", shop_player)) and shop_ok
+			shop_ok = shop_ok and menu.visible and Game.is_paused and str(menu.get("shop_site_id")) == "ashvale"
+			var shop_body := menu.get("_body") as VBoxContainer
+			var local_offer_found := false
+			for shop_child in shop_body.get_children():
+				if shop_child is Button and "Buy Starflower" in shop_child.text and not shop_child.disabled: local_offer_found = true
+			shop_ok = shop_ok and local_offer_found
+			menu.call("_buy_local_collectible")
+			shop_ok = shop_ok and Game.coins == 55 and int(Game.collectibles.get("Starflower", 0)) == 1
+			Game.collectibles = {}
+			Game.coins = 0
+			Game.load_collection()
+			shop_ok = shop_ok and Game.coins == 55 and int(Game.collectibles.get("Starflower", 0)) == 1
+			menu.call("_sell_local_collectible", "Starflower")
+			shop_ok = shop_ok and Game.coins == 70 and not Game.collectibles.has("Starflower") and not Game.sell_settlement_collectible("ashvale", "Starflower")
+			shop_ok = shop_ok and not Game.sell_settlement_collectible("bad", "Moonstone") and not Game.buy_settlement_collectible("bad")
+			Game.coins = 44
+			shop_ok = shop_ok and not Game.buy_settlement_collectible("ashvale") and Game.coins == 44
+			Game.coins = 100
+			Game.potions = Game.inventory_capacity()
+			shop_ok = shop_ok and not Game.buy_settlement_collectible("ashvale") and Game.coins == 100
+			menu.call("close_menu")
+			shop_ok = shop_ok and str(menu.get("shop_site_id")) == "" and not Game.is_paused
+		else: shop_ok = false
+	else: shop_ok = false
+	shop_player.global_position = shop_position_before
+	Game.coins = shop_coins_before
+	Game.potions = shop_potions_before
+	Game.collectibles = shop_items_before
+	Game.equipped_backpack = shop_pack_before
+	Game.save_collection()
+	Game.collection_changed.emit()
+	_log("INFO" if shop_ok else "FAIL", "14 settlement shops, shared geometry, offline trade, capacity and save=%s" % str(shop_ok))
+
 	# Compare the spatial index with a full ordered scan, including negative
 	# coordinates, cell boundaries, and every village's blend edge.
 	var village_index_ok := terrain_node != null

@@ -348,3 +348,13 @@ teach Rootward, a shield that briefly slows nearby scouts in sight. Quest flags
 are additive, preserve existing Hollow IDs, and save partial investigation
 progress. The small quest objects are procedural and are not bespoke character
 models or a new dungeon encounter.
+
+## Settlement markets
+
+Every settlement streams an accessible shop stall with its own name, shopkeeper
+and local collectible stock. Interact with the counter to open the offline shop.
+The existing potion, backpack and wardrobe stock remains available; each market
+also sells one type of collectible for 45 Ane and buys existing collectibles for
+15 Ane each. Purchases respect the existing inventory capacity and all trades
+use the existing saved Ane and collectible fields. Market geometry is shared;
+there are no accounts, real-money purchases or new save-format requirements.

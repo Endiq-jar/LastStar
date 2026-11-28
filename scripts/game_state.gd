@@ -143,6 +143,7 @@ var touch_active: bool = false
 ## Offline collection persists independently of a single expedition.
 const COLLECTION_FILE := "user://collection.cfg"
 const WISH_ITEMS := ["Moonstone", "Starflower", "Sunshard", "Stormglass"]
+const SETTLEMENT_SHOPS := preload("res://scripts/settlement_shops.gd")
 var coins := 150
 var starlight := 30
 var potions := 2
@@ -1465,6 +1466,30 @@ func recover_drop(id: String) -> bool:
 	else:
 		return false
 	dropped_items.erase(id)
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+# These transactions operate on the original saved inventory and Ane balance.
+# Sale price is below the purchase price, preventing currency duplication.
+func buy_settlement_collectible(site_id: String) -> bool:
+	var shop: Dictionary = SETTLEMENT_SHOPS.by_id(site_id)
+	if shop.is_empty() or coins < SETTLEMENT_SHOPS.BUY_PRICE or inventory_used() >= inventory_capacity(): return false
+	var item := str(shop.get("item", ""))
+	if not WISH_ITEMS.has(item): return false
+	coins -= SETTLEMENT_SHOPS.BUY_PRICE
+	collectibles[item] = int(collectibles.get(item, 0)) + 1
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func sell_settlement_collectible(site_id: String, item: String) -> bool:
+	if SETTLEMENT_SHOPS.by_id(site_id).is_empty() or not WISH_ITEMS.has(item) or int(collectibles.get(item, 0)) <= 0: return false
+	collectibles[item] = int(collectibles[item]) - 1
+	if int(collectibles[item]) == 0: collectibles.erase(item)
+	coins += SETTLEMENT_SHOPS.SELL_PRICE
 	save_collection()
 	collection_changed.emit()
 	return true
