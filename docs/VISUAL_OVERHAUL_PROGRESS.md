@@ -22,6 +22,8 @@ cobblestone texture rather than a regular procedural square grid. The paved
 footprint remains a single flat plane with the existing flat terrain collision.
 Hollows and the Last Seal use a temporary cool, dark environment and fog, one
 shadowless player-following lantern for visibility, and low-cost instanced bone,
-stain and scratch dressing. The outdoor lighting resource is restored on exit,
+stain and scratch dressing. The Last Seal's long block walls and floor also use
+an AI-generated 512px weathered stone texture projected at world scale; a small
+material fill helps keep the dark corridor legible. The outdoor lighting resource is restored on exit,
 Hollow respawn or unload. Combat geometry, enemy scaling and rewards are unchanged.
 CI screenshots/probes are not a substitute for visual review or device testing.

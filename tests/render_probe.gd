@@ -2596,6 +2596,13 @@ func _run() -> void:
 		finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and depths != null and depths.global_position.y < 0 and (finale.get("_gates") as Array).size() == 10
 		if depths != null:
 			finale_ok = finale_ok and depths.has_node("HollowBones") and depths.has_node("HollowStains") and hollow_player.has_node("HollowLantern") and not (world.get_node("Sun") as DirectionalLight3D).visible
+			var seal_stone_found := false
+			for seal_mesh in depths.find_children("*", "MeshInstance3D", true, false):
+				if seal_mesh.material_override is ShaderMaterial and (seal_mesh.material_override as ShaderMaterial).shader.resource_path == "res://shaders/hollow_stone.gdshader":
+					var seal_texture := (seal_mesh.material_override as ShaderMaterial).get_shader_parameter("stone_texture") as Texture2D
+					seal_stone_found = seal_texture != null and seal_texture.get_width() == 512 and seal_texture.get_height() == 512
+					break
+			finale_ok = finale_ok and seal_stone_found
 			if DisplayServer.get_name() != "headless": await _capture_ui(out_dir, "game_last_seal", null)
 		if depths != null:
 			var finale_echoes: Array = finale.get("_story_echoes")

@@ -3,6 +3,9 @@ extends Node3D
 ## defenders are defeated; dying or leaving resets the current expedition.
 const DOOR := preload("res://assets/dungeon/wall_doorway.glb")
 const HORROR_DRESSING := preload("res://scripts/hollow_dressing.gd")
+const HOLLOW_STONE_SHADER := preload("res://shaders/hollow_stone.gdshader")
+const HOLLOW_STONE_TEXTURE := preload("res://assets/dungeon/hollow_stone.png")
+static var _stone_material: ShaderMaterial
 const TORCH := preload("res://assets/dungeon/torch_lit.gltf.glb")
 const SENTRY := preload("res://scripts/hollow_sentry.gd")
 const BOSS := preload("res://scripts/hollow_warden.gd")
@@ -301,10 +304,18 @@ func _block(parent: Node3D, at: Vector3, size: Vector3, color: Color, angle: flo
 	var mesh := BoxMesh.new()
 	mesh.size = size
 	visual.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 1.0
-	visual.material_override = material
+	if is_equal_approx(size.x, 11.5):
+		# Guard gates retain their distinct red visual language.
+		var gate_material := StandardMaterial3D.new()
+		gate_material.albedo_color = color
+		gate_material.roughness = 1.0
+		visual.material_override = gate_material
+	else:
+		if _stone_material == null:
+			_stone_material = ShaderMaterial.new()
+			_stone_material.shader = HOLLOW_STONE_SHADER
+			_stone_material.set_shader_parameter("stone_texture", HOLLOW_STONE_TEXTURE)
+		visual.material_override = _stone_material
 	body.add_child(visual)
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
