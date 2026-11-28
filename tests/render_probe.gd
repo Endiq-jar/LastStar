@@ -1656,8 +1656,8 @@ func _run() -> void:
 		menu.call("open_menu", "Dialogue")
 		var journey_body := menu.get("_body") as VBoxContainer
 		var homecoming_action := false
-		for item in journey_body.get_children():
-			if item is Button and "complete the epilogue" in item.text: homecoming_action = true
+		for journey_child in journey_body.get_children():
+			if journey_child is Button and "complete the epilogue" in journey_child.text: homecoming_action = true
 		journey_ok = journey_ok and homecoming_action
 		menu.call("_finish_homecoming")
 		menu.call("close_menu")
