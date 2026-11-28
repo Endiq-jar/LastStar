@@ -166,6 +166,7 @@ var resonance_source := ""
 # them automatically and repeat victories can never duplicate an item.
 const STORY_DUNGEONS := preload("res://scripts/story_dungeons.gd")
 const STORY_CHRONICLE := preload("res://scripts/story_chronicle.gd")
+const STORY_JOURNEY := preload("res://scripts/story_journey.gd")
 const OPTIONAL_DUNGEONS := preload("res://scripts/optional_dungeons.gd")
 const STORY_MEMORY_GOAL := 25
 const MEMORY_SPELLS := {"memory_10": "tide_remedy", "memory_15": "winter_resolve", "memory_22": "dusk_seal"}
@@ -196,6 +197,28 @@ func story_connections() -> Array:
 	return found
 
 
+# Act order is journal guidance only. Existing clear flags are authoritative,
+# so old saves and memories recovered out of order are credited automatically.
+func journey_acts() -> Array:
+	var result: Array = []
+	var unlocked := true
+	for definition in STORY_JOURNEY.ACTS:
+		var total := 0
+		for quest in definition["quests"]:
+			if story_memory_owned(str(quest["id"])): total += 1
+		result.append({"definition": definition, "unlocked": unlocked, "done": total, "total": definition["quests"].size()})
+		unlocked = unlocked and total == definition["quests"].size()
+	return result
+
+
+func journey_next_quest() -> Dictionary:
+	for act in journey_acts():
+		if not bool(act["unlocked"]): break
+		for quest in act["definition"]["quests"]:
+			if not story_memory_owned(str(quest["id"])): return quest
+	return {}
+
+
 func story_ending() -> String:
 	if not bool(guard_story.get("keeper_defeated", false)): return ""
 	var conclusion: String = STORY_CHRONICLE.ending(str(guard_story.get("memory_choice", "")), str(guard_story.get("keeper_resolution", "")))
@@ -216,6 +239,11 @@ func story_ending() -> String:
 			conclusion += " Frostmere's families practise evacuation together, with a guide assigned to every group."
 	if renewal_count() == STORY_CHRONICLE.RENEWAL_VOICES.size():
 		conclusion += " At the heart of the Seal, seven witnesses offer their light freely; the promise is renewed together."
+	if bool(guard_story.get("homecoming_done", false)):
+		if str(guard_story.get("answer", "")) == "duty":
+			conclusion += " Back in Ashvale, Ilyra remembers your promise to protect the valley. The people now share that watch with you."
+		else:
+			conclusion += " Back in Ashvale, Ilyra remembers your search for answers. The people now keep the questions open together."
 	return conclusion
 
 
@@ -241,6 +269,37 @@ func renewal_count() -> int:
 	for index in range(STORY_CHRONICLE.RENEWAL_VOICES.size()):
 		if (renewal_mask() & (1 << index)) != 0: total += 1
 	return total
+
+
+func homecoming_objective() -> String:
+	if not bool(guard_story.get("keeper_defeated", false)): return ""
+	if bool(guard_story.get("homecoming_done", false)): return "Completed · the promise carried home."
+	if str(guard_story.get("keeper_resolution", "")).is_empty(): return "Return to the Last Seal and decide what to do with the Keeper's memory."
+	if renewal_count() < STORY_CHRONICLE.RENEWAL_VOICES.size(): return "Hear the seven witnesses at the Last Seal (%d / 7)." % renewal_count()
+	return "Return to Ashvale and speak to Ilyra to carry the promise home."
+
+
+func homecoming_in_ashvale() -> bool:
+	var actor := get_tree().get_first_node_in_group("player") as Node3D
+	if actor == null or in_final_dungeon: return false
+	var world := actor.get_parent()
+	var manager: Node = world.get_node_or_null("Settlements") if world != null else null
+	if manager == null: return false
+	var sites: Array = manager.get("_sites")
+	if sites.is_empty(): return false
+	var center: Vector2 = sites[0]["resolved"]
+	var point := Vector2(actor.global_position.x, actor.global_position.z)
+	var ground := float(world.call("_height", point.x, point.y))
+	return point.distance_to(center) <= SETTLEMENT_DATA.PAVING_HALF_SIZE and absf(actor.global_position.y - ground) < 8.0
+
+
+func finish_homecoming() -> bool:
+	if not bool(guard_story.get("keeper_defeated", false)) or str(guard_story.get("keeper_resolution", "")).is_empty() or renewal_count() != STORY_CHRONICLE.RENEWAL_VOICES.size() or bool(guard_story.get("homecoming_done", false)) or not homecoming_in_ashvale(): return false
+	guard_story["homecoming_done"] = true
+	starlight += 150
+	save_collection()
+	collection_changed.emit()
+	return true
 
 
 func resolve_keeper_memory(choice: String) -> bool:

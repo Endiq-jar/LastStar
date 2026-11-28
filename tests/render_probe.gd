@@ -1611,6 +1611,71 @@ func _run() -> void:
 	Game.dungeon_clears = resonance_clears
 	_log("INFO" if resonance_ok else "FAIL", "earned Hollow resonance, tier caps, damage and cleanup=%s" % str(resonance_ok))
 
+	# All 25 existing memory flags form a coherent, non-gating five-act path.
+	# The homecoming can be completed once in Ashvale, including older saves.
+	var journey_story: Dictionary = Game.guard_story.duplicate(true)
+	var journey_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+	var journey_ashvale: bool = Game.ashvale_hollow_cleared
+	var journey_light: int = Game.starlight
+	var journey_actor := world.get_node_or_null("Player") as CharacterBody3D
+	var journey_position := journey_actor.global_position
+	Game.guard_story = {}
+	Game.dungeon_clears = {}
+	Game.ashvale_hollow_cleared = false
+	var journey_ok := Game.STORY_JOURNEY.ACTS.size() == 5 and not Game.finish_homecoming()
+	var journey_ids := {}
+	for definition in Game.STORY_JOURNEY.ACTS:
+		journey_ok = journey_ok and definition["quests"].size() == 5 and not str(definition["intro"]).is_empty() and not str(definition["conclusion"]).is_empty()
+		for quest in definition["quests"]:
+			var quest_id := str(quest["id"])
+			journey_ok = journey_ok and not journey_ids.has(quest_id) and not str(quest["brief"]).is_empty()
+			journey_ids[quest_id] = true
+	for memory in Game.all_story_memories(): journey_ok = journey_ok and journey_ids.has(str(memory["id"]))
+	journey_ok = journey_ok and journey_ids.size() == 25 and str(Game.journey_next_quest().get("id", "")) == "ashvale"
+	Game.dungeon_clears["memory_25"] = true
+	var initial_acts: Array = Game.journey_acts()
+	journey_ok = journey_ok and bool(initial_acts[0]["unlocked"]) and not bool(initial_acts[1]["unlocked"]) and int(initial_acts[4]["done"]) == 1
+	Game.ashvale_hollow_cleared = true
+	for quest in Game.STORY_JOURNEY.ACTS[0]["quests"]:
+		if str(quest["id"]) != "ashvale": Game.dungeon_clears[str(quest["id"])] = true
+	journey_ok = journey_ok and bool(Game.journey_acts()[1]["unlocked"]) and str(Game.journey_next_quest().get("id", "")) == "memory_08"
+	for memory in Game.all_story_memories():
+		if str(memory["id"]) != "ashvale": Game.dungeon_clears[str(memory["id"])] = true
+	journey_ok = journey_ok and Game.journey_next_quest().is_empty() and bool(Game.journey_acts()[4]["unlocked"])
+	Game.guard_story["keeper_defeated"] = true
+	journey_ok = journey_ok and not Game.finish_homecoming()
+	Game.guard_story["keeper_resolution"] = "witness"
+	Game.guard_story["renewal_mask"] = 127
+	journey_actor.global_position = Vector3(0, 800, 0)
+	journey_ok = journey_ok and not Game.finish_homecoming()
+	if settlement_manager != null and menu != null:
+		var journey_sites: Array = settlement_manager.get("_sites")
+		var journey_center: Vector2 = journey_sites[0]["resolved"]
+		journey_actor.global_position = Vector3(journey_center.x, float(world.call("_height", journey_center.x, journey_center.y)) + 0.2, journey_center.y)
+		menu.set("dialogue_site_id", "")
+		menu.call("open_menu", "Dialogue")
+		var journey_body := menu.get("_body") as VBoxContainer
+		var homecoming_action := false
+		for item in journey_body.get_children():
+			if item is Button and "complete the epilogue" in item.text: homecoming_action = true
+		journey_ok = journey_ok and homecoming_action
+		menu.call("_finish_homecoming")
+		menu.call("close_menu")
+		journey_ok = journey_ok and bool(Game.guard_story.get("homecoming_done", false)) and Game.starlight == journey_light + 150 and not Game.finish_homecoming()
+		Game.guard_story = {}
+		Game.load_collection()
+		journey_ok = journey_ok and bool(Game.guard_story.get("homecoming_done", false)) and "Back in Ashvale" in Game.story_ending()
+	else:
+		journey_ok = false
+	journey_actor.global_position = journey_position
+	Game.guard_story = journey_story
+	Game.dungeon_clears = journey_clears
+	Game.ashvale_hollow_cleared = journey_ashvale
+	Game.starlight = journey_light
+	Game.save_collection()
+	Game.collection_changed.emit()
+	_log("INFO" if journey_ok else "FAIL", "25-mission journey, out-of-order clears, homecoming and save=%s" % str(journey_ok))
+
 	# Fixed tiers scale regional encounters and the Keeper without a setting.
 	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_039"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_040"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_059"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_060"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_079"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_080"), 1.0)
 	var challenge_fixture := Node3D.new()

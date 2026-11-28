@@ -1,10 +1,11 @@
 # Last Star — story outline
 
-This is a direction for the story, not a list of completed quests or dungeons.
-The playable story covers Ilyra's quests, 25 Hollow memories and the Last
-Seal. Twenty-two of the memory Hollows share a reusable arena and creature
-families; they are not bespoke levels. The broader story and companion arcs
-remain substantially shorter than the original design brief.
+The playable main narrative follows Ilyra, 25 Hollow memories, the Last Seal
+and a return to Ashvale. Its five-act journal uses existing memory encounters as
+its 25 objectives, rather than adding 25 separate bespoke quest systems.
+Twenty-two of the memory Hollows share modular rooms and creature families;
+they are not bespoke levels. The broader side-quest and companion scope remains
+shorter than the original design brief.
 
 ## Story chronicle update
 
@@ -76,9 +77,9 @@ rather than simply give the player more power.
 Beneath Aetheris, a vast underground dungeon descends toward the heart of the
 Seals. At its end the Keeper, the strongest boss, confronts the player in a
 multi-phase battle. The Keeper is defeated, the people renew the Seals together and Elaris
-remembers its light. The ending is a short journal conclusion rather than a
-cinematic or a branching finale. The full narrative and companion arcs remain
-unfinished.
+remembers its light. The ending is a choice-aware journal conclusion and playable homecoming rather
+than a cinematic or a branching level. Broader companion and side-quest arcs
+remain unfinished.
 
 
 ### First five named memory Hollows
@@ -283,3 +284,15 @@ the original 100-Hollow finale gate are unchanged. It reduces the otherwise
 extreme time needed to defeat late-tier enemies, but their attacks remain
 potentially lethal in one hit. These values have not had a complete manual
 playthrough or device performance verification.
+
+## Main journey and homecoming
+
+The journal now groups all 25 existing story memories into five authored acts,
+with a premise, a distinct objective for every memory and a conclusion when
+each act is recovered. Acts suggest a reading order but do not block exploration:
+out-of-order and old-save clears count immediately. After the Keeper's memory
+is resolved and the seven optional witness lights are heard, players can return
+to Ilyra in Ashvale for a playable homecoming and a one-time 150-starlight reward.
+The conclusion reflects the opening answer and recorded story decisions. The
+existing ending and original 100-Hollow gate remain unchanged; this is not a
+cinematic, and the regional Hollow arenas and many resident quests remain shared.

@@ -360,6 +360,22 @@ func _quests() -> void:
 	_line("Total Hollows cleared: %d / 105. Original Hollows cleared for the finale: %d / 100. Side quests grant equipment and spell blueprints." % [Game.dungeon_count(), Game.original_hollow_clear_count()])
 	if bool(story.get("keeper_defeated", false)):
 		_line("Epilogue · Seven Witnesses: %d / 7 lights offered at the Last Seal. Return to its heart to hear the recorded promises; this is optional and does not change rewards." % Game.renewal_count())
+	_line("THE MAIN JOURNEY · 25 MEMORIES", 18, UI.ACCENT)
+	_line("The journal suggests a reading order, not a required route. Memories found early are already credited. Complete each settlement leader's main quest for written directions.")
+	for act in Game.journey_acts():
+		var definition: Dictionary = act["definition"]
+		if not bool(act["unlocked"]):
+			_line("Later chapter · %d / %d memories already recovered" % [act["done"], act["total"]])
+			continue
+		_line("%s · %d / %d" % [definition["title"], act["done"], act["total"]], 17, UI.ACCENT)
+		_line(str(definition["intro"]))
+		for quest in definition["quests"]:
+			var id := str(quest["id"])
+			var status := "Recovered" if Game.story_memory_owned(id) else "Investigate"
+			_line("%s · %s" % [status, quest["brief"]])
+		if int(act["done"]) == int(act["total"]): _line(str(definition["conclusion"]))
+	var homecoming: String = Game.homecoming_objective()
+	if not homecoming.is_empty(): _line("Epilogue · The Promise Carried Home: " + homecoming)
 	_line("ASHVALE HOLLOW", 18, UI.ACCENT)
 	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Accept Ilyra's A Memory in the Hollow, then find the entrance near Ashvale. Dodge the Warden's warning circles.")
 	_line("MEMORY VAULT", 18, UI.ACCENT)
@@ -621,6 +637,22 @@ func _dialogue() -> void:
 		return
 	_line("STAR GUARD ILYRA", 25, UI.ACCENT)
 	var story := Game.guard_story
+	if bool(story.get("keeper_defeated", false)):
+		_line("THE PROMISE CARRIED HOME", 18, UI.ACCENT)
+		if bool(story.get("homecoming_done", false)):
+			_line("Ilyra: The lamps are lit, and no one has to tend them alone. Whatever comes next, we will remember together.")
+		elif str(story.get("keeper_resolution", "")).is_empty():
+			_line("Ilyra: The Keeper's memory still waits at the Last Seal. Decide what to do with their testimony, then come home.")
+		elif Game.renewal_count() < Game.STORY_CHRONICLE.RENEWAL_VOICES.size():
+			_line("Ilyra: The witnesses left seven promises at the Seal. Hear them when you are ready, then come back to me.")
+		elif not Game.homecoming_in_ashvale():
+			_line("Ilyra: We have heard every promise. Let us return to Ashvale and tell the families what we found.")
+		else:
+			_line("Ilyra: I came to you with a missing patrol and a lamp going dark. We found more than answers. We found people willing to share the work of keeping the light.")
+			if str(story.get("keeper_resolution", "")) == "witness": _line("Ilyra: The Keeper's voice can stand beside the witnesses, but it will never speak for them.")
+			else: _line("Ilyra: The Keeper's privacy is theirs; the witnesses' stories remain their own. Neither has to erase the other.")
+			_action("Carry the promise home · complete the epilogue", _finish_homecoming)
+
 	if not bool(story.get("seal_accepted", false)):
 		_line("Last night an Ashvale lamp went out. This morning its keeper could not remember who lit it. The same thing happened to my patrol's names. If the light is taking memories with it, we are running out of time.")
 		_line("A star sigil may tell us why the Seven Seals are weakening. What brings you here, traveller?")
@@ -987,6 +1019,11 @@ func _buy_sunrise_outfit() -> void:
 
 func _toggle_weapons() -> void:
 	_show_weapons = not _show_weapons
+	_refresh()
+
+
+func _finish_homecoming() -> void:
+	_status = "The promise is carried home. You received 150 starlight." if Game.finish_homecoming() else "Hear the witnesses, resolve the Keeper's memory and return to Ashvale first."
 	_refresh()
 
 
