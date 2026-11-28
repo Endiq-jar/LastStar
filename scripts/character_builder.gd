@@ -229,6 +229,7 @@ static func build(host: Node3D, data: Dictionary) -> Dictionary:
 		var pin_color := Color(0.65, 0.82, 0.98)
 		if Game.equipped_cosmetic == "star_pin": pin_color = Color(0.95, 0.76, 0.30)
 		elif Game.equipped_cosmetic == "caravan_pin": pin_color = Color(0.92, 0.42, 0.20)
+		elif Game.equipped_cosmetic == "bellwarden_pin": pin_color = Color(0.66, 0.53, 0.31)
 		var pin_mat := _toon(pin_color)
 		var ornament := _no_shadow(_add(head, pin, pin_mat, Vector3(0.13, 0.08, -0.12), "RewardHairpin"))
 		ornament.rotation_degrees = Vector3(75, 0, 20)

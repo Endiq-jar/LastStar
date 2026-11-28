@@ -238,6 +238,8 @@ func story_ending() -> String:
 			conclusion += " Veya preserves the Wander's message in a public archive, with the families' names withheld until they consent."
 		else:
 			conclusion += " Veya brings the Wander's message to the families first, leaving publication to them."
+	if bool(guard_story.get("bellwarden_done", false)):
+		conclusion += " Ravenhold remembers the defender who waited at the gate, and Tamsin promises that no rear guard will be left uncounted."
 	if int(guard_story.get("caravan_stage", 0)) == 4:
 		match str(guard_story.get("caravan_choice", "")):
 			"shelters": conclusion += " Zara's caravan network keeps shared shelters stocked along the pass, open to travellers whether or not they can pay."
@@ -455,7 +457,7 @@ var owned_cosmetics: Array = []
 var equipped_cosmetic := ""
 var owned_blueprints: Array = []
 const WEAPONS := preload("res://scripts/weapon_catalog.gd")
-const COSMETIC_NAMES := {"star_pin": "Star hairpin", "moon_pin": "Moon hairpin", "caravan_pin": "Caravan hairpin"}
+const COSMETIC_NAMES := {"star_pin": "Star hairpin", "moon_pin": "Moon hairpin", "caravan_pin": "Caravan hairpin", "bellwarden_pin": "Bellwarden hairpin"}
 const BLUEPRINT_ID := "research_0_1_0_0_0"
 const OUTFIT_NAMES := ["Original", "Moonlit blue", "Rose dusk", "Forest traveller", "Sunrise traveller"]
 var camera_sensitivity := 1.0
@@ -1143,6 +1145,18 @@ func wander_story_objective() -> String:
 		3: return "Bring the lost Wander to Veya in Lunareth."
 		4: return "Completed · Echo Resonance learned."
 	return ""
+
+
+# The hidden Bellwarden is independent of the 105 Hollow completion flags.
+# Existing memory_20 clears qualify, and its reward is granted only once.
+func complete_bellwarden() -> bool:
+	if not story_memory_owned("memory_20") or bool(guard_story.get("bellwarden_done", false)): return false
+	guard_story["bellwarden_done"] = true
+	if not owned_cosmetics.has("bellwarden_pin"): owned_cosmetics.append("bellwarden_pin")
+	starlight += 120
+	save_collection()
+	collection_changed.emit()
+	return true
 
 
 # The Orchard witnesses can be heard in any order, including across reloads.

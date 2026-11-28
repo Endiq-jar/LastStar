@@ -2600,6 +2600,85 @@ func _run() -> void:
 		Game.save_collection()
 	_log("INFO" if memories_ok else "FAIL", "22 streamed memory Hollows, fights, unique rewards and save=%s" % str(memories_ok))
 
+	# A cleared Fortress Wall can be revisited on old saves to discover the
+	# optional Bellwarden; retreat must not award or strand the challenge.
+	var bell_story_before: Dictionary = Game.guard_story.duplicate(true)
+	var bell_clears_before: Dictionary = Game.dungeon_clears.duplicate(true)
+	var bell_cosmetics_before: Array = Game.owned_cosmetics.duplicate()
+	var bell_equipped_before: String = Game.equipped_cosmetic
+	var bell_light_before: int = Game.starlight
+	var bell_position_before := hollow_player.global_position
+	Game.guard_story = {}
+	Game.dungeon_clears = {}
+	Game.owned_cosmetics.erase("bellwarden_pin")
+	var bell_ok := not Game.complete_bellwarden()
+	Game.dungeon_clears["memory_20"] = true
+	var bell_original_count: int = Game.dungeon_count()
+	var bell_hollow = load("res://scripts/ashvale_hollow.gd").new()
+	world.add_child(bell_hollow)
+	bell_hollow.call("setup", world, hollow_player, Vector2(100, 100), "memory_20")
+	hollow_player.global_position = bell_hollow.get("entrance") + Vector3(0, 0.2, 0)
+	bell_ok = bool(bell_hollow.call("try_interact", hollow_player)) and bell_ok and bool(bell_hollow.get("inside"))
+	var bell_chamber := bell_hollow.get("chamber") as Node3D
+	var bell_shrine := bell_chamber.get_node_or_null("CrackedBell") as Node3D if bell_chamber != null else null
+	if bell_shrine != null:
+		hollow_player.global_position = bell_shrine.global_position + Vector3(0, 0.2, 0)
+		bell_ok = bool(bell_shrine.call("try_interact", hollow_player)) and bell_ok
+		var bell_first := bell_shrine.get("_guardian") as CharacterBody3D
+		bell_ok = bell_ok and bell_first != null and is_equal_approx(float(bell_first.get("_power_multiplier")), 3.0)
+		bell_ok = bool(bell_shrine.call("try_interact", hollow_player)) and bell_ok and bell_shrine.get("_guardian") == bell_first
+		bell_hollow.call("_leave")
+		bell_ok = bell_ok and not bool(Game.guard_story.get("bellwarden_done", false)) and Game.starlight == bell_light_before
+		await get_tree().process_frame
+		hollow_player.global_position = bell_hollow.get("entrance") + Vector3(0, 0.2, 0)
+		bell_ok = bool(bell_hollow.call("try_interact", hollow_player)) and bell_ok
+		bell_chamber = bell_hollow.get("chamber") as Node3D
+		bell_shrine = bell_chamber.get_node_or_null("CrackedBell") as Node3D
+		if bell_shrine != null:
+			hollow_player.global_position = bell_shrine.global_position + Vector3(0, 0.2, 0)
+			bell_ok = bool(bell_shrine.call("try_interact", hollow_player)) and bell_ok
+			var bell_guardian := bell_shrine.get("_guardian") as CharacterBody3D
+			if bell_guardian != null:
+				var bell_health := float(bell_guardian.get("max_hp"))
+				bell_ok = bell_ok and bell_health > 1550.0 and str(bell_guardian.get("attack_profile")) == "ring"
+				bell_guardian.call("take_hit", bell_health * 0.6, 0, Vector3.ZERO)
+				bell_ok = bell_ok and int(bell_guardian.get("phase")) == 2
+				bell_guardian.call("take_hit", bell_health, 0, Vector3.ZERO)
+				bell_ok = bell_ok and bool(Game.guard_story.get("bellwarden_done", false)) and Game.starlight == bell_light_before + 120 and Game.owned_cosmetics.has("bellwarden_pin") and Game.dungeon_count() == bell_original_count
+				bell_ok = bell_ok and not Game.complete_bellwarden() and Game.starlight == bell_light_before + 120 and Game.equip_reward_cosmetic("bellwarden_pin")
+				Game.guard_story = {}
+				Game.owned_cosmetics = []
+				Game.load_collection()
+				bell_ok = bell_ok and bool(Game.guard_story.get("bellwarden_done", false)) and Game.owned_cosmetics.has("bellwarden_pin") and Game.equipped_cosmetic == "bellwarden_pin"
+				Game.guard_story["keeper_defeated"] = true
+				bell_ok = bell_ok and "Ravenhold remembers" in Game.story_ending()
+				if menu != null:
+					menu.set("dialogue_site_id", "ravenhold")
+					menu.set("dialogue_resident_index", 0)
+					menu.call("open_menu", "Dialogue")
+					var bell_dialogue := menu.get("_body") as VBoxContainer
+					var bell_payoff_found := false
+					for child in bell_dialogue.get_children():
+						if child is Label and "added their account" in child.text: bell_payoff_found = true
+					bell_ok = bell_ok and bell_payoff_found
+					menu.call("close_menu")
+					menu.set("dialogue_site_id", "")
+				else: bell_ok = false
+			else: bell_ok = false
+		else: bell_ok = false
+	else: bell_ok = false
+	if bool(bell_hollow.get("inside")): bell_hollow.call("_leave")
+	bell_hollow.queue_free()
+	hollow_player.global_position = bell_position_before
+	Game.guard_story = bell_story_before
+	Game.dungeon_clears = bell_clears_before
+	Game.owned_cosmetics = bell_cosmetics_before
+	Game.equipped_cosmetic = bell_equipped_before
+	Game.starlight = bell_light_before
+	Game.save_collection()
+	Game.collection_changed.emit()
+	_log("INFO" if bell_ok else "FAIL", "Bellwarden optional boss, retry, narrative, reward and save=%s" % str(bell_ok))
+
 	# Optional Hollows have stable independent IDs and a compact streamed roster.
 	var optional_ok := false
 	var verified_optional_clears: Dictionary = {}

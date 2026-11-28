@@ -848,6 +848,11 @@ func _settlement_dialogue() -> void:
 		if leader_status in ["available", "active"] and not local_hook.is_empty(): _line(local_hook)
 		if leader_status == "found" and payoff.size() == 2: _line(str(payoff[0]))
 		if leader_status == "done" and payoff.size() == 2: _line(str(payoff[1]))
+		if dialogue_site_id == "ravenhold" and Game.story_memory_owned("memory_20"):
+			if bool(Game.guard_story.get("bellwarden_done", false)):
+				_line("Tamsin: The bell belonged to the defender who stayed behind at the gate. I have added their account to our watch roll. From now on, a patrol reports the rear guard's return as well as the road ahead.")
+			else:
+				_line("Tamsin: The fortress account mentions a cracked bell behind the last wall. We never learned who kept it ringing after the refugees passed. There may be more to find deep inside that Hollow.")
 		if dialogue_site_id == "orchard":
 			match int(Game.guard_story.get("orchard_story_stage", 0)):
 				0:

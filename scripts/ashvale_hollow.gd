@@ -2,6 +2,7 @@ extends Node3D
 ## Two compact optional Hollows, each streamed only while inside.
 const TRAP := preload("res://scripts/story_hollow_trap.gd")
 const HORROR_DRESSING := preload("res://scripts/hollow_dressing.gd")
+const BELLWARDEN_SHRINE := preload("res://scripts/bellwarden_shrine.gd")
 const OPTIONAL_DESIGNS := preload("res://scripts/optional_hollow_designs.gd")
 const DESIGNS := preload("res://scripts/story_hollow_designs.gd")
 const OPTIONAL := preload("res://scripts/optional_dungeons.gd")
@@ -185,6 +186,7 @@ func _enter() -> void:
 			Game.toast.emit("%s: defeat guards, recall both echoes and avoid %s in the deeper chamber." % [_design["theme"], _design["hazard"]])
 	else:
 		_add_chest()
+		_add_bellwarden_shrine()
 		Game.toast.emit("This Hollow is cleared. Leave when ready.")
 
 
@@ -418,6 +420,15 @@ func _on_defeated() -> void:
 		Game.save_collection()
 		Game.collection_changed.emit()
 	_add_chest()
+	_add_bellwarden_shrine()
+
+
+func _add_bellwarden_shrine() -> void:
+	if dungeon_id != "memory_20" or not _is_cleared() or not is_instance_valid(chamber) or chamber.has_node("CrackedBell"): return
+	var shrine := BELLWARDEN_SHRINE.new()
+	shrine.name = "CrackedBell"
+	shrine.position = Vector3(float(_design["side"]) * (18.0 + float(_design["depth"]) - 4.0), 0, 0)
+	chamber.add_child(shrine)
 
 
 func _add_chest() -> void:

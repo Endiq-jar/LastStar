@@ -358,3 +358,15 @@ also sells one type of collectible for 45 Ane and buys existing collectibles for
 15 Ane each. Purchases respect the existing inventory capacity and all trades
 use the existing saved Ane and collectible fields. Market geometry is shared;
 there are no accounts, real-money purchases or new save-format requirements.
+
+## The Bellwarden
+
+After clearing The Fortress Wall (memory 20), its deepest chamber contains an
+optional cracked bell. Interacting with it summons the Bellwarden, a stronger
+two-phase guardian with the existing telegraphed ring/slash combat. Leaving or
+dying resets the unfinished encounter; an old memory-20 clear can revisit the
+Hollow and access it. Victory grants 120 starlight and an equippable Bellwarden
+hairpin once, without changing the 105-Hollow count or finale gate. Tamsin's
+Ravenhold dialogue and the written ending remember the lost rear guard. This is
+a distinct optional encounter using an existing animated guardian and room, not
+a new custom boss model or bespoke level.
