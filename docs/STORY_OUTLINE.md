@@ -317,3 +317,7 @@ interrupts the scout. Large guardians resist that support. Dialogue reflects
 her personal history and her cooperation with Neri. Recruitment persists in
 old-compatible story data. Her appearance and animation still use the shared
 resident assets rather than a bespoke character model.
+
+The ending also recalls the completed harbour quest's actual decision: either
+boat-to-boat warnings or the accountable harbour station. The decision is read
+from the existing saved choice; unfinished harbour stories add no outcome.

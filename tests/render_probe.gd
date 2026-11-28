@@ -1361,6 +1361,18 @@ func _run() -> void:
 	Game.guard_story = {}
 	Game.load_collection()
 	harbor_ok = harbor_ok and int(Game.guard_story.get("harbor_stage", 0)) == 3 and Game.wander_levels.has("harbor_light")
+	# The player's plan must remain visible in the actual ending after reload,
+	# not merely in the immediate quest conversation.
+	Game.guard_story["keeper_defeated"] = true
+	var harbor_shared_ending: String = Game.story_ending()
+	harbor_ok = harbor_ok and "boat to boat" in harbor_shared_ending
+	Game.guard_story["harbor_choice"] = "station"
+	var harbor_station_ending: String = Game.story_ending()
+	harbor_ok = harbor_ok and "open warning log" in harbor_station_ending and harbor_shared_ending != harbor_station_ending
+	Game.save_collection()
+	Game.guard_story = {}
+	Game.load_collection()
+	harbor_ok = harbor_ok and Game.story_ending() == harbor_station_ending
 	var harbor_actor := world.get_node_or_null("Player") as Node3D
 	if harbor_actor != null:
 		Game.stamina = 0.0

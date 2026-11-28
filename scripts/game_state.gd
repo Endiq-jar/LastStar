@@ -228,6 +228,10 @@ func story_ending() -> String:
 			conclusion += " Ilyra keeps the patrol's names at the memorial, with room for their families to correct the record."
 		else:
 			conclusion += " Ilyra delivers the patrol's letters to their families, who decide what to share."
+	if int(guard_story.get("harbor_stage", 0)) == 3:
+		match str(guard_story.get("harbor_choice", "")):
+			"shared": conclusion += " Neri's crews pass warnings from boat to boat, giving every vessel a voice in the alarm."
+			"station": conclusion += " Neri's harbour station keeps an open warning log, checked by two watches and accountable to the crews."
 	if int(guard_story.get("wander_story_stage", 0)) == 4:
 		if str(guard_story.get("wander_story_choice", "")) == "public":
 			conclusion += " Veya preserves the Wander's message in a public archive, with the families' names withheld until they consent."
