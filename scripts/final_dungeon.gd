@@ -2,6 +2,7 @@ extends Node3D
 ## The descent is built only while entered. Each guarded gate locks until its
 ## defenders are defeated; dying or leaving resets the current expedition.
 const DOOR := preload("res://assets/dungeon/wall_doorway.glb")
+const HORROR_DRESSING := preload("res://scripts/hollow_dressing.gd")
 const TORCH := preload("res://assets/dungeon/torch_lit.gltf.glb")
 const SENTRY := preload("res://scripts/hollow_sentry.gd")
 const BOSS := preload("res://scripts/hollow_warden.gd")
@@ -81,6 +82,8 @@ func _enter() -> void:
 	if inside or not is_instance_valid(player): return
 	return_point = player.global_position
 	inside = true
+	var atmosphere_world := player.get_parent()
+	if atmosphere_world != null and atmosphere_world.has_method("begin_dungeon_atmosphere"): atmosphere_world.call("begin_dungeon_atmosphere", self, player)
 	Game.in_final_dungeon = true
 	Game.enter_hollow_resonance("last_seal")
 	sector = 0
@@ -93,6 +96,11 @@ func _enter() -> void:
 	chamber.name = "LastSealDepths"
 	get_parent().add_child(chamber)
 	chamber.global_position = Vector3(entrance.x, START_DEPTH, entrance.z)
+	var dressing_locations: Array[Vector3] = []
+	for depth_index in range(SECTORS):
+		for fraction in [0.25, 0.75]:
+			dressing_locations.append(Vector3(-4.5 if fraction < 0.5 else 4.5, -DESCENT_PER_SECTOR * (float(depth_index) + fraction), -SECTOR_LENGTH * (float(depth_index) + fraction)))
+	HORROR_DRESSING.add_to(chamber, dressing_locations)
 	var angle := -atan2(DESCENT_PER_SECTOR, SECTOR_LENGTH)
 	var length := sqrt(SECTOR_LENGTH * SECTOR_LENGTH + DESCENT_PER_SECTOR * DESCENT_PER_SECTOR)
 	for i in range(SECTORS):
@@ -308,6 +316,8 @@ func _block(parent: Node3D, at: Vector3, size: Vector3, color: Color, angle: flo
 
 func _leave() -> void:
 	if not inside: return
+	var atmosphere_world := player.get_parent() if is_instance_valid(player) else null
+	if atmosphere_world != null and atmosphere_world.has_method("end_dungeon_atmosphere"): atmosphere_world.call("end_dungeon_atmosphere", self)
 	inside = false
 	Game.in_final_dungeon = false
 	Game.leave_hollow_resonance("last_seal")
@@ -336,5 +346,7 @@ func _on_respawn() -> void:
 
 func _exit_tree() -> void:
 	if inside:
+		var atmosphere_world := player.get_parent() if is_instance_valid(player) else null
+		if atmosphere_world != null and atmosphere_world.has_method("end_dungeon_atmosphere"): atmosphere_world.call("end_dungeon_atmosphere", self)
 		Game.in_final_dungeon = false
 		Game.leave_hollow_resonance("last_seal")

@@ -14,3 +14,14 @@ This is a planning estimate for the requested visual/performance overhaul, **not
 | **Total** | **100** | **19** | **Approximately 19% of this overhaul**, by these provisional weights. |
 
 These credits are intentionally conservative and should not be interpreted as a literal measurement. Previously completed game systems are outside this table.
+
+### Dungeon atmosphere and village paving
+
+The village paving material now samples a 512×512 hand-painted-style irregular
+cobblestone texture rather than a regular procedural square grid. The paved
+footprint remains a single flat plane with the existing flat terrain collision.
+Hollows and the Last Seal use a temporary cool, dark environment and fog, one
+shadowless player-following lantern for visibility, and low-cost instanced bone,
+stain and scratch dressing. The outdoor lighting resource is restored on exit,
+Hollow respawn or unload. Combat geometry, enemy scaling and rewards are unchanged.
+CI screenshots/probes are not a substitute for visual review or device testing.

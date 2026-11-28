@@ -20,3 +20,9 @@ simplifications of the included original roof. Generated with glTF Transform
 0.05 respectively. They preserve the material texture and node placement; the
 full original remains in use nearby. Visual transitions and distant silhouettes
 still need manual review.
+
+`stone_paving.png` is an AI-generated, hand-painted-style cobblestone albedo,
+created for this project and resized to 512×512 for the shared village material.
+It was inspired by the appearance of old irregular paving; no image-search
+reference or third-party stock texture is included. It is sampled by a single
+flat plane per settlement and does not alter terrain collision or village grades.

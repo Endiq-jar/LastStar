@@ -964,6 +964,9 @@ func _run() -> void:
 			resident_ok = residents.size() == 20 and houses.size() == 3
 			var paving := settlement.get_node_or_null("StonePaving") as MeshInstance3D
 			resident_ok = resident_ok and paving != null and paving.mesh is PlaneMesh and paving.material_override is ShaderMaterial
+			if paving != null and paving.material_override is ShaderMaterial:
+				var paving_texture := (paving.material_override as ShaderMaterial).get_shader_parameter("paving_texture") as Texture2D
+				resident_ok = resident_ok and paving_texture != null and paving_texture.get_width() == 512 and paving_texture.get_height() == 512
 			if paving != null and paving.mesh is PlaneMesh:
 				resident_ok = resident_ok and (paving.mesh as PlaneMesh).size == Vector2.ONE * site_data.PAVING_HALF_SIZE * 2.0
 			for village_house in houses:
@@ -2036,9 +2039,17 @@ func _run() -> void:
 		Game.guard_story = {"seal_done": true}
 		story_companion_ok = Game.set_ilyra_following(true) and Game.accept_hollow_memory() and not Game.accept_hollow_memory() and not Game.resolve_hollow_memory("share")
 		Game.ashvale_hollow_cleared = false
+		var outdoor_environment: Environment = world.get_node("WorldEnvironment").environment
+		var daylight := world.get_node("Sun") as DirectionalLight3D
 		var entrance: Vector3 = hollow.get("entrance")
 		hollow_player.global_position = entrance + Vector3(0, 0.2, 0)
 		hollow_ok = hollow.call("try_interact", hollow_player) and bool(hollow.get("inside"))
+		var dark_environment: Environment = world.get_node("WorldEnvironment").environment
+		var dark_chamber := hollow.get("chamber") as Node3D
+		hollow_ok = hollow_ok and dark_environment != outdoor_environment and dark_environment.ambient_light_energy < outdoor_environment.ambient_light_energy and dark_environment.fog_enabled and not daylight.visible and hollow_player.has_node("HollowLantern")
+		hollow_ok = hollow_ok and dark_chamber != null and dark_chamber.has_node("HollowBones") and dark_chamber.has_node("HollowStains") and dark_chamber.has_node("HollowClawMarks")
+		world.call("_update_time_of_day")
+		hollow_ok = hollow_ok and not daylight.visible and world.get_node("WorldEnvironment").environment == dark_environment
 		await get_tree().process_frame
 		await get_tree().physics_frame
 		if DisplayServer.get_name() != "headless":
@@ -2095,6 +2106,12 @@ func _run() -> void:
 		var exit_point: Vector3 = hollow.get("_exit_point")
 		hollow_player.global_position = exit_point
 		hollow_ok = hollow.call("try_interact", hollow_player) and not bool(hollow.get("inside")) and hollow_ok
+		hollow_ok = hollow_ok and world.get_node("WorldEnvironment").environment == outdoor_environment and daylight.visible and not hollow_player.has_node("HollowLantern")
+		# Death/respawn cleanup also restores the daylight rig.
+		hollow_player.global_position = entrance + Vector3(0, 0.2, 0)
+		hollow_ok = bool(hollow.call("try_interact", hollow_player)) and hollow_ok
+		hollow.call("_on_respawn")
+		hollow_ok = hollow_ok and not bool(hollow.get("inside")) and world.get_node("WorldEnvironment").environment == outdoor_environment and daylight.visible and not hollow_player.has_node("HollowLantern")
 		hollow_player.global_position = original_pos
 		hollow_player.velocity = Vector3.ZERO
 		Game.set_hp(original_hp)
@@ -2578,6 +2595,9 @@ func _run() -> void:
 		finale_ok = finale_ok and Game.resonance_source == "last_seal" and Game.hollow_resonance == 3000.0
 		finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and depths != null and depths.global_position.y < 0 and (finale.get("_gates") as Array).size() == 10
 		if depths != null:
+			finale_ok = finale_ok and depths.has_node("HollowBones") and depths.has_node("HollowStains") and hollow_player.has_node("HollowLantern") and not (world.get_node("Sun") as DirectionalLight3D).visible
+			if DisplayServer.get_name() != "headless": await _capture_ui(out_dir, "game_last_seal", null)
+		if depths != null:
 			var finale_echoes: Array = finale.get("_story_echoes")
 			finale_ok = finale_ok and finale_echoes.size() == 3
 			var echo_hud := world.get_node("HUD")
@@ -2684,6 +2704,7 @@ func _run() -> void:
 				finale_ok = false
 			hollow_player.global_position = finale.get("_arena_exit")
 			finale_ok = bool(finale.call("try_interact", hollow_player)) and not Game.in_final_dungeon and finale_ok
+			finale_ok = finale_ok and (world.get_node("Sun") as DirectionalLight3D).visible and not hollow_player.has_node("HollowLantern")
 		hollow_player.global_position = finale_pos
 		Game.guard_story = finale_story
 		Game.dungeon_clears = finale_clears

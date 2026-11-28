@@ -54,6 +54,12 @@ var _grass_field: Node3D
 var _culler: Node
 var _render_check_countdown := -1
 var _render_checked := false
+# A dungeon owns the atmospheric override until its exit, death, or unload.
+# Keep the original Environment resource intact for exact outdoor restoration.
+var _dungeon_atmosphere_owner := 0
+var _outdoor_environment: Environment
+var _dungeon_lantern: OmniLight3D
+
 
 
 func _ready() -> void:
@@ -541,7 +547,54 @@ func _set_beauty_time(t: float) -> void:
 	_update_time_of_day()
 
 
+func begin_dungeon_atmosphere(owner: Node, actor: Node3D) -> void:
+	if not is_instance_valid(owner) or not is_instance_valid(actor) or environment == null or environment.environment == null: return
+	if _dungeon_atmosphere_owner != 0: return
+	_dungeon_atmosphere_owner = owner.get_instance_id()
+	_outdoor_environment = environment.environment
+	var dungeon_env := _outdoor_environment.duplicate() as Environment
+	dungeon_env.background_mode = Environment.BG_COLOR
+	dungeon_env.background_color = Color(0.025, 0.025, 0.045)
+	dungeon_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	dungeon_env.ambient_light_color = Color(0.34, 0.37, 0.48)
+	dungeon_env.ambient_light_energy = 0.42
+	dungeon_env.fog_enabled = true
+	dungeon_env.fog_light_color = Color(0.08, 0.09, 0.13)
+	dungeon_env.fog_density = 0.0
+	dungeon_env.fog_depth_begin = 18.0
+	dungeon_env.fog_depth_end = 75.0
+	dungeon_env.fog_depth_curve = 1.1
+	dungeon_env.fog_aerial_perspective = 0.0
+	dungeon_env.fog_sky_affect = 0.0
+	environment.environment = dungeon_env
+	sun.visible = false
+	# One shadowless moving light keeps attacks and floor readable on low tiers;
+	# it avoids a large number of overlapping dynamic lights in the long finale.
+	_dungeon_lantern = OmniLight3D.new()
+	_dungeon_lantern.name = "HollowLantern"
+	_dungeon_lantern.light_color = Color(0.64, 0.72, 1.0)
+	_dungeon_lantern.light_energy = 0.8
+	_dungeon_lantern.omni_range = 14.0
+	_dungeon_lantern.shadow_enabled = false
+	_dungeon_lantern.position = Vector3(0, 2.3, 0)
+	actor.add_child(_dungeon_lantern)
+
+
+func end_dungeon_atmosphere(owner: Node) -> void:
+	if not is_instance_valid(owner) or _dungeon_atmosphere_owner != owner.get_instance_id(): return
+	_dungeon_atmosphere_owner = 0
+	if is_instance_valid(_dungeon_lantern):
+		_dungeon_lantern.get_parent().remove_child(_dungeon_lantern)
+		_dungeon_lantern.queue_free()
+	_dungeon_lantern = null
+	if is_instance_valid(environment) and _outdoor_environment != null:
+		environment.environment = _outdoor_environment
+	_outdoor_environment = null
+	if is_instance_valid(sun) and is_instance_valid(environment): _update_time_of_day()
+
+
 func _update_time_of_day() -> void:
+	if _dungeon_atmosphere_owner != 0: return
 	## A graded cycle: dawn -> warm morning -> noon -> golden afternoon -> dusk.
 	##
 	## The old version only lerped the sun colour and ambient energy, so the

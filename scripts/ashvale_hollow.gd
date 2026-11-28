@@ -1,6 +1,7 @@
 extends Node3D
 ## Two compact optional Hollows, each streamed only while inside.
 const TRAP := preload("res://scripts/story_hollow_trap.gd")
+const HORROR_DRESSING := preload("res://scripts/hollow_dressing.gd")
 const OPTIONAL_DESIGNS := preload("res://scripts/optional_hollow_designs.gd")
 const DESIGNS := preload("res://scripts/story_hollow_designs.gd")
 const OPTIONAL := preload("res://scripts/optional_dungeons.gd")
@@ -103,6 +104,8 @@ func _enter() -> void:
 	if inside or not is_instance_valid(player): return
 	return_point = player.global_position
 	inside = true
+	var atmosphere_world := player.get_parent()
+	if atmosphere_world != null and atmosphere_world.has_method("begin_dungeon_atmosphere"): atmosphere_world.call("begin_dungeon_atmosphere", self, player)
 	Game.enter_hollow_resonance(dungeon_id)
 	_runes_found = [false, false]
 	_rune_nodes.clear()
@@ -110,6 +113,7 @@ func _enter() -> void:
 	chamber.name = "HollowChamber"
 	get_parent().add_child(chamber)
 	chamber.global_position = Vector3(entrance.x, ALTITUDE, entrance.z)
+	HORROR_DRESSING.add_to(chamber, [Vector3(-7, 0, -7), Vector3(7, 0, -7), Vector3(-7, 0, 6), Vector3(7, 0, 5)])
 	for x in range(-2, 3):
 		for z in range(-2, 3):
 			var tile := FLOOR.instantiate() as Node3D
@@ -434,6 +438,8 @@ func _add_chest() -> void:
 
 func _leave() -> void:
 	if not inside: return
+	var atmosphere_world := player.get_parent() if is_instance_valid(player) else null
+	if atmosphere_world != null and atmosphere_world.has_method("end_dungeon_atmosphere"): atmosphere_world.call("end_dungeon_atmosphere", self)
 	inside = false
 	Game.leave_hollow_resonance(dungeon_id)
 	player.global_position = return_point + Vector3(0, 0.3, 0)
@@ -446,6 +452,8 @@ func _leave() -> void:
 
 func _on_respawn() -> void:
 	if inside:
+		var atmosphere_world := player.get_parent() if is_instance_valid(player) else null
+		if atmosphere_world != null and atmosphere_world.has_method("end_dungeon_atmosphere"): atmosphere_world.call("end_dungeon_atmosphere", self)
 		inside = false
 		Game.leave_hollow_resonance(dungeon_id)
 		if is_instance_valid(chamber): chamber.queue_free()
@@ -455,4 +463,7 @@ func _on_respawn() -> void:
 
 
 func _exit_tree() -> void:
-	if inside: Game.leave_hollow_resonance(dungeon_id)
+	if inside:
+		var atmosphere_world := player.get_parent() if is_instance_valid(player) else null
+		if atmosphere_world != null and atmosphere_world.has_method("end_dungeon_atmosphere"): atmosphere_world.call("end_dungeon_atmosphere", self)
+		Game.leave_hollow_resonance(dungeon_id)

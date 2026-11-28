@@ -30,6 +30,7 @@ const VILLAGE_DEFENSE := preload("res://scripts/village_defense.gd")
 const STRANDED_CARAVAN := preload("res://scripts/stranded_caravan.gd")
 const CARAVAN_SURVIVOR := preload("res://scripts/caravan_survivor.gd")
 const STONE_SHADER := preload("res://shaders/village_stone.gdshader")
+const STONE_TEXTURE := preload("res://assets/village/stone_paving.png")
 const VILLAGE_GROUND_SIZE := DATA.PAVING_HALF_SIZE * 2.0
 static var _ground_mesh: PlaneMesh
 static var _ground_material: ShaderMaterial
@@ -260,6 +261,7 @@ func _add_village_ground(root: Node3D, center: Vector2) -> void:
 	if _ground_material == null:
 		_ground_material = ShaderMaterial.new()
 		_ground_material.shader = STONE_SHADER
+		_ground_material.set_shader_parameter("paving_texture", STONE_TEXTURE)
 	var ground := MeshInstance3D.new()
 	ground.name = "StonePaving"
 	ground.mesh = _ground_mesh
