@@ -1574,6 +1574,43 @@ func _run() -> void:
 	if settlement_manager != null: settlement_manager.call("_update_stream")
 	_log("INFO" if watch_ok else "FAIL", "Frostmere defense, retry, choices, spell and save=%s" % str(watch_ok))
 
+	# Earned tier resonance is offensive only, derived from the existing clear
+	# flags, capped to the current encounter and reset when leaving.
+	var resonance_clears: Dictionary = Game.dungeon_clears.duplicate(true)
+	var resonance_player := world.get_node_or_null("Player") as CharacterBody3D
+	var resonance_position := resonance_player.global_position
+	Game.dungeon_clears = {}
+	var resonance_ok := Game.earned_hollow_resonance("optional_000") == 1.0 and Game.earned_hollow_resonance("memory_04") == 1.0
+	for number in range(4, 24): Game.dungeon_clears["memory_%02d" % number] = true
+	resonance_ok = resonance_ok and Game.earned_hollow_resonance("optional_000") == 10.0
+	for number in range(20): Game.dungeon_clears["optional_%03d" % number] = true
+	resonance_ok = resonance_ok and Game.earned_hollow_resonance("optional_020") == 200.0 and Game.earned_hollow_resonance("optional_000") == 10.0
+	for number in range(20, 40): Game.dungeon_clears["optional_%03d" % number] = true
+	resonance_ok = resonance_ok and Game.earned_hollow_resonance("optional_040") == 2000.0
+	for number in range(40, 60): Game.dungeon_clears["optional_%03d" % number] = true
+	resonance_ok = resonance_ok and Game.earned_hollow_resonance("optional_060") == 3000.0 and Game.earned_hollow_resonance("last_seal") == 3000.0 and Game.earned_hollow_resonance("ashvale") == 1.0
+	resonance_player.global_position = Vector3(0, 800, 0)
+	var resonance_scout = load("res://scripts/hollow_sentry.gd").new()
+	resonance_scout._power_multiplier = 100.0
+	world.add_child(resonance_scout)
+	resonance_scout.global_position = Vector3(2, 800, 0)
+	await get_tree().physics_frame
+	var hp_start: float = resonance_scout.hp
+	resonance_player.call("_on_spell_cast", "echo_resonance", Game.wander.spell("echo_resonance"))
+	var ordinary_damage: float = hp_start - resonance_scout.hp
+	Game.enter_hollow_resonance("optional_000")
+	resonance_player.call("_on_spell_cast", "echo_resonance", Game.wander.spell("echo_resonance"))
+	var boosted_damage: float = hp_start - ordinary_damage - resonance_scout.hp
+	resonance_ok = resonance_ok and ordinary_damage > 0.0 and is_equal_approx(boosted_damage / ordinary_damage, 10.0)
+	Game.leave_hollow_resonance("different_id")
+	resonance_ok = resonance_ok and Game.hollow_resonance == 10.0
+	Game.leave_hollow_resonance("optional_000")
+	resonance_ok = resonance_ok and Game.hollow_resonance == 1.0 and Game.resonance_source.is_empty()
+	resonance_scout.queue_free()
+	resonance_player.global_position = resonance_position
+	Game.dungeon_clears = resonance_clears
+	_log("INFO" if resonance_ok else "FAIL", "earned Hollow resonance, tier caps, damage and cleanup=%s" % str(resonance_ok))
+
 	# Fixed tiers scale regional encounters and the Keeper without a setting.
 	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_039"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_040"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_059"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_060"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_079"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_080"), 1.0)
 	var challenge_fixture := Node3D.new()
@@ -2162,6 +2199,7 @@ func _run() -> void:
 				optional_ok = false
 				continue
 			optional_ok = optional_dungeon.call("try_interact", hollow_player) and optional_ok
+			optional_ok = optional_ok and Game.resonance_source == optional_chosen and is_equal_approx(Game.hollow_resonance, Game.earned_hollow_resonance(optional_chosen))
 			var optional_guards: Array = []
 			for optional_enemy in get_tree().get_nodes_in_group("enemy"):
 				if optional_enemy.get_parent() == optional_dungeon.get("chamber") and not optional_enemy.is_queued_for_deletion(): optional_guards.append(optional_enemy)
@@ -2208,6 +2246,7 @@ func _run() -> void:
 				optional_ok = false
 			hollow_player.global_position = optional_dungeon.get("_exit_point")
 			optional_ok = optional_dungeon.call("try_interact", hollow_player) and optional_ok
+			optional_ok = optional_ok and Game.hollow_resonance == 1.0 and Game.resonance_source.is_empty()
 			await get_tree().process_frame
 		Game.dungeon_clears = {}
 		Game.load_collection()
@@ -2261,6 +2300,7 @@ func _run() -> void:
 		for new_index in range(75, 80): Game.dungeon_clears["optional_%03d" % new_index] = true
 		finale_ok = finale_ok and Game.original_hollow_clear_count() == 100 and Game.dungeon_count() == 105 and finale.call("try_interact", hollow_player)
 		var depths := finale.get("chamber") as Node3D
+		finale_ok = finale_ok and Game.resonance_source == "last_seal" and Game.hollow_resonance == 3000.0
 		finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and depths != null and depths.global_position.y < 0 and (finale.get("_gates") as Array).size() == 10
 		if depths != null:
 			var finale_echoes: Array = finale.get("_story_echoes")
@@ -2296,7 +2336,8 @@ func _run() -> void:
 				if level == 0:
 					Game._on_party_down()
 					var checkpoint_pos: Vector3 = finale.get("_checkpoint")
-					finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and hollow_player.global_position.distance_to(checkpoint_pos) < 0.1 and int(finale.get("sector")) == 1
+					finale_ok = finale_ok and Game.resonance_source == "last_seal" and Game.hollow_resonance == 3000.0
+		finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and hollow_player.global_position.distance_to(checkpoint_pos) < 0.1 and int(finale.get("sector")) == 1
 			var keeper := finale.get("boss") as Node3D
 			if keeper != null:
 				finale_ok = finale_ok and bool(keeper.get("is_keeper")) and is_equal_approx(float(keeper.get("max_hp")), 67500000.0)
@@ -2337,6 +2378,7 @@ func _run() -> void:
 				finale_ok = false
 			hollow_player.global_position = finale.get("_arena_exit")
 			finale_ok = finale.call("try_interact", hollow_player) and not Game.in_final_dungeon and finale_ok
+			finale_ok = finale_ok and Game.resonance_source.is_empty() and Game.hollow_resonance == 1.0
 			# An already-completed save without the newer decision can return and
 			# choose without fighting again or receiving the boss reward twice.
 			Game.guard_story.erase("keeper_resolution")

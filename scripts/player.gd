@@ -831,7 +831,7 @@ func _do_attack(heavy: bool = false) -> void:
 	_combo_reset = 1.1
 
 	var data: Dictionary = Game.character()
-	var power: float = Game.attack_power() * (2.0 if heavy else (1.25 if _attack_combo == 2 else 1.0))
+	var power: float = Game.attack_power() * Game.hollow_resonance * (2.0 if heavy else (1.25 if _attack_combo == 2 else 1.0))
 	var forward := get_forward()
 	var hit_center: Vector3 = global_position + forward * 1.45 + Vector3(0, 0.95, 0)
 
@@ -875,7 +875,7 @@ func _do_skill() -> void:
 			continue
 		var d: float = (enemy as Node3D).global_position.distance_to(pos)
 		if d < 5.2 and enemy.has_method("take_hit"):
-			enemy.take_hit(float(data["attack"]) * 2.4, element_id, forward)
+			enemy.take_hit(float(data["attack"]) * 2.4 * Game.hollow_resonance, element_id, forward)
 
 	var r := _rig_part("arm_l")
 	r.rotation.x = -2.6
@@ -896,7 +896,7 @@ func _do_burst() -> void:
 			continue
 		var d: float = (enemy as Node3D).global_position.distance_to(global_position)
 		if d < 11.0 and enemy.has_method("take_hit"):
-			enemy.take_hit(float(data["attack"]) * 3.2, element_id, Vector3.ZERO)
+			enemy.take_hit(float(data["attack"]) * 3.2 * Game.hollow_resonance, element_id, Vector3.ZERO)
 	Game.toast.emit("%s!" % data["burst_name"])
 
 
@@ -912,7 +912,7 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 	var mastery := 1.0
 	if wander != null:
 		mastery = 1.0 + float(wander.level_of(id) - 1) * 0.06
-	power *= mastery
+	power *= mastery * Game.hollow_resonance
 	var element := int(data.get("element", 0))
 	var color: Color = data.get("color", Game.character()["color"])
 	var radius := float(data.get("radius", 0.0))
@@ -1058,7 +1058,7 @@ func _plunge_impact() -> void:
 		if not is_instance_valid(enemy):
 			continue
 		if (enemy as Node3D).global_position.distance_to(pos) < 6.5 and enemy.has_method("take_hit"):
-			enemy.take_hit(Game.attack_power() * 1.6, element_id, Vector3.ZERO)
+			enemy.take_hit(Game.attack_power() * 1.6 * Game.hollow_resonance, element_id, Vector3.ZERO)
 
 
 func take_damage(amount: float, from: Vector3) -> void:

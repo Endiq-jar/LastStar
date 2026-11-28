@@ -103,6 +103,7 @@ func _enter() -> void:
 	if inside or not is_instance_valid(player): return
 	return_point = player.global_position
 	inside = true
+	Game.enter_hollow_resonance(dungeon_id)
 	_runes_found = [false, false]
 	_rune_nodes.clear()
 	chamber = Node3D.new()
@@ -434,6 +435,7 @@ func _add_chest() -> void:
 func _leave() -> void:
 	if not inside: return
 	inside = false
+	Game.leave_hollow_resonance(dungeon_id)
 	player.global_position = return_point + Vector3(0, 0.3, 0)
 	player.velocity = Vector3.ZERO
 	if is_instance_valid(chamber): chamber.queue_free()
@@ -445,7 +447,12 @@ func _leave() -> void:
 func _on_respawn() -> void:
 	if inside:
 		inside = false
+		Game.leave_hollow_resonance(dungeon_id)
 		if is_instance_valid(chamber): chamber.queue_free()
 		chamber = null
 		boss = null
 		Game.toast.emit("You escaped the Hollow. Prepare and try again.")
+
+
+func _exit_tree() -> void:
+	if inside: Game.leave_hollow_resonance(dungeon_id)

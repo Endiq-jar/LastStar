@@ -271,3 +271,15 @@ later dialogue and the ending. Either resolution teaches Watchfire, a shield and
 healing spell. Progress uses new keys in the existing story dictionary and does
 not change the 105 Hollow roster or the original finale gate. The encounter uses
 the existing scout enemies, not bespoke models or animations.
+
+## Fixed-tier Hollow resonance
+
+Clearing each required group of twenty now earns offensive resonance for the
+next eligible Hollow tier: 10×, 200×, 2,000×, then 3,000×. The Last Seal uses
+the final value. This is derived from existing clear flags, capped to the
+current encounter and removed when leaving or escaping; it does not apply in
+the overworld. Enemy health, enemy and trial damage, group requirements, and
+the original 100-Hollow finale gate are unchanged. It reduces the otherwise
+extreme time needed to defeat late-tier enemies, but their attacks remain
+potentially lethal in one hit. These values have not had a complete manual
+playthrough or device performance verification.

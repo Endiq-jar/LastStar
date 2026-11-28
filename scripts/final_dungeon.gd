@@ -82,6 +82,7 @@ func _enter() -> void:
 	return_point = player.global_position
 	inside = true
 	Game.in_final_dungeon = true
+	Game.enter_hollow_resonance("last_seal")
 	sector = 0
 	_remaining = 0
 	_gates.clear()
@@ -309,6 +310,7 @@ func _leave() -> void:
 	if not inside: return
 	inside = false
 	Game.in_final_dungeon = false
+	Game.leave_hollow_resonance("last_seal")
 	player.global_position = return_point + Vector3(0, 0.3, 0)
 	player.velocity = Vector3.ZERO
 	if is_instance_valid(chamber): chamber.queue_free()
@@ -330,3 +332,9 @@ func _on_respawn() -> void:
 	if is_instance_valid(boss) and not boss.is_queued_for_deletion():
 		boss.call("reset_encounter")
 	Game.toast.emit("Returned to the last open gate. The Keeper recovers between attempts.")
+
+
+func _exit_tree() -> void:
+	if inside:
+		Game.in_final_dungeon = false
+		Game.leave_hollow_resonance("last_seal")

@@ -356,6 +356,7 @@ func _quests() -> void:
 	_line("Second tier: %d / 20 cleared. The following 20 are 25× stronger again (500× the first tier). These values have not been balanced for a normal playthrough." % Game.second_tier_clear_count())
 	_line("Third tier: %d / 20 cleared. The next 20 are 15× stronger again (7,500× the first tier)." % Game.third_tier_clear_count())
 	_line("Fourth tier: %d / 20 cleared. The next 20 are 2× stronger again (15,000× the first tier)." % Game.fourth_tier_clear_count())
+	_line("Hollow resonance: completing each group of 20 grants an offensive multiplier in the next appropriate tier: 10×, 200×, 2,000× and 3,000×. It does not apply outdoors or reduce enemy damage. The Last Seal uses the final attunement. These values still need playtesting.")
 	_line("Total Hollows cleared: %d / 105. Original Hollows cleared for the finale: %d / 100. Side quests grant equipment and spell blueprints." % [Game.dungeon_count(), Game.original_hollow_clear_count()])
 	if bool(story.get("keeper_defeated", false)):
 		_line("Epilogue · Seven Witnesses: %d / 7 lights offered at the Last Seal. Return to its heart to hear the recorded promises; this is optional and does not change rewards." % Game.renewal_count())

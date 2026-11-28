@@ -158,6 +158,10 @@ var ashvale_hollow_cleared := false
 var dungeon_clears: Dictionary = {}
 # Runtime-only flag: the underground finale uses its own floors and cleanup.
 var in_final_dungeon := false
+# Runtime only: the reward for clearing each fixed tier applies exclusively
+# within an appropriate Hollow, never in the open world or ordinary encounters.
+var hollow_resonance := 1.0
+var resonance_source := ""
 # Story memories are derived from unique dungeon clears, so old saves receive
 # them automatically and repeat victories can never duplicate an item.
 const STORY_DUNGEONS := preload("res://scripts/story_dungeons.gd")
@@ -325,6 +329,29 @@ func hollow_power_multiplier(id: String) -> float:
 	return 1.0
 
 
+# Earned offensive attunement addresses the extreme HP of the fixed tiers.
+# Enemy health/damage and the required clear counts remain unchanged. Cache it
+# on entry, not on every hit, and do not persist this transient combat context.
+func earned_hollow_resonance(id: String) -> float:
+	var tier := 5 if id == "last_seal" else hollow_tier(id)
+	if tier >= 5 and fourth_tier_clear_count() >= 20: return 3000.0
+	if tier >= 4 and third_tier_clear_count() >= 20: return 2000.0
+	if tier >= 3 and second_tier_clear_count() >= 20: return 200.0
+	if tier >= 2 and first_tier_clear_count() >= 20: return 10.0
+	return 1.0
+
+
+func enter_hollow_resonance(id: String) -> void:
+	resonance_source = id
+	hollow_resonance = earned_hollow_resonance(id)
+
+
+func leave_hollow_resonance(id: String) -> void:
+	if resonance_source != id: return
+	resonance_source = ""
+	hollow_resonance = 1.0
+
+
 func can_enter_hollow(id: String, site_id: String, cleared: bool) -> bool:
 	# Previously cleared dungeons remain revisit-able on older saves.
 	if cleared: return true
@@ -380,6 +407,9 @@ func _ready() -> void:
 
 
 func reset_run() -> void:
+	resonance_source = ""
+	hollow_resonance = 1.0
+	in_final_dungeon = false
 	party_index = 0
 	health.clear()
 	for c in PARTY:
