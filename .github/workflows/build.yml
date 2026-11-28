@@ -241,6 +241,14 @@ jobs:
           if grep -qE "^PROBE_RESULT: PASS" /tmp/structure.log; then
             echo "Structural checks passed."
           else
+            # Preserve runtime exceptions and the last completed checks in
+            # annotations even if the watchdog emitted a PROBE_RESULT.
+            grep -E "SCRIPT ERROR|Parse Error|Invalid (access|call|set)|at:.*res://" /tmp/structure.log | tail -30 | while IFS= read -r line; do
+              echo "::error title=Probe runtime::$line"
+            done || true
+            grep -E "^PROBE_INFO" /tmp/structure.log | tail -10 | while IFS= read -r line; do
+              echo "::notice title=Last completed probe::$line"
+            done || true
             grep -E "^PROBE_FAIL" /tmp/structure.log | while IFS= read -r line; do
               echo "::error::$line"
             done
