@@ -1167,6 +1167,14 @@ func watch_story_objective() -> String:
 	return ""
 
 
+func set_veya_following(following: bool) -> bool:
+	if int(guard_story.get("wander_story_stage", 0)) != 4: return false
+	guard_story["veya_following"] = following
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
 func set_neri_following(following: bool) -> bool:
 	if int(guard_story.get("harbor_stage", 0)) != 3: return false
 	guard_story["neri_following"] = following

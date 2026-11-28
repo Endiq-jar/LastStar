@@ -84,6 +84,7 @@ func _ready() -> void:
 	_spawn_story_contact()
 	_spawn_settlements()
 	_spawn_neri_companion()
+	_spawn_veya_companion()
 	_spawn_ashvale_hollow()
 	_spawn_memory_vault()
 	_spawn_suncrest_roost()
@@ -1206,6 +1207,14 @@ func _spawn_neri_companion() -> void:
 	var companion := Node3D.new()
 	companion.name = "CompanionNeri"
 	companion.set_script(load("res://scripts/neri_companion.gd"))
+	companion.position = get_node("Player").position
+	add_child(companion)
+
+
+func _spawn_veya_companion() -> void:
+	var companion := Node3D.new()
+	companion.name = "CompanionVeya"
+	companion.set_script(load("res://scripts/veya_companion.gd"))
 	companion.position = get_node("Player").position
 	add_child(companion)
 

@@ -101,7 +101,7 @@ func _build_site(site: Dictionary) -> Node3D:
 		house.scale = Vector3(1.5, 1.0, 1.5)
 		root.add_child(house)
 	for index in range(DATA.RESIDENT_COUNT):
-		if str(site["id"]) == "tidefall" and index == 0 and _neri_travelling(): continue
+		if index == 0 and _leader_travelling(str(site["id"])): continue
 		var pos := _resident_position(center, index)
 		var npc := NPC.new()
 		npc.name = "Resident_%02d" % index
@@ -139,19 +139,21 @@ func _sync_items() -> void:
 			_sync_items_for_site(site, _loaded[id])
 
 
-func _neri_travelling() -> bool:
-	return bool(Game.guard_story.get("neri_following", false)) and int(Game.guard_story.get("harbor_stage", 0)) == 3
+func _leader_travelling(id: String) -> bool:
+	if id == "tidefall": return bool(Game.guard_story.get("neri_following", false)) and int(Game.guard_story.get("harbor_stage", 0)) == 3
+	if id == "lunareth": return bool(Game.guard_story.get("veya_following", false)) and int(Game.guard_story.get("wander_story_stage", 0)) == 4
+	return false
 
 
 func _sync_items_for_site(site: Dictionary, root: Node3D) -> void:
 	var id: String = site["id"]
 	var center: Vector2 = site["resolved"]
-	if id == "tidefall":
-		var neri := root.get_node_or_null("Resident_00")
-		if _neri_travelling() and neri != null:
-			root.remove_child(neri)
-			neri.queue_free()
-		elif not _neri_travelling() and neri == null:
+	if id in ["tidefall", "lunareth"]:
+		var leader := root.get_node_or_null("Resident_00")
+		if _leader_travelling(id) and leader != null:
+			root.remove_child(leader)
+			leader.queue_free()
+		elif not _leader_travelling(id) and leader == null:
 			var resident := NPC.new()
 			resident.name = "Resident_00"
 			resident.site_id = id

@@ -306,3 +306,14 @@ They use the same physical items, quest IDs, statuses and rewards as before, so
 old in-progress and completed saves continue at the appropriate stage. These
 are authored narrative layers over existing retrieval quests, not fourteen new
 combat encounters or the full set of bespoke side quests in the original brief.
+
+## Veya as a companion
+
+After The Wander That Waited, Veya can travel with the player or return to
+Lunareth. Her existing resident is removed while she follows and restored on
+dismissal, so her quests remain accessible without a duplicate. Her Gift slows
+one nearby scout in line of sight on a cooldown; with Neri following, it also
+interrupts the scout. Large guardians resist that support. Dialogue reflects
+her personal history and her cooperation with Neri. Recruitment persists in
+old-compatible story data. Her appearance and animation still use the shared
+resident assets rather than a bespoke character model.

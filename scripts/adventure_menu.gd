@@ -843,6 +843,13 @@ func _settlement_dialogue() -> void:
 					_action("Take the message to the families first", _finish_wander_story.bind("families"))
 				4:
 					_line("Veya: The anonymous message is in the archive; the families decide whether their names follow." if str(Game.guard_story.get("wander_story_choice", "")) == "public" else "Veya: The families have the message. They will decide whether it belongs in the archive.")
+					_line("Veya: I once corrected a colleague's account until it matched mine. They stopped bringing me their questions. The lost Wander reminded me why listening must come before certainty.")
+					_line("Veya: My Gift can slow nearby scouts. When Neri travels with us, her warning helps me interrupt one of their attacks. Large guardians resist the effect.")
+					if bool(Game.guard_story.get("veya_following", false)):
+						if bool(Game.guard_story.get("neri_following", false)): _line("Veya: Neri hears danger before I can read its pattern. She gives me the moment I need to answer it.")
+						_action("Ask Veya to return to Lunareth", _set_veya_following.bind(false))
+					else:
+						_action("Invite Veya to travel with you", _set_veya_following.bind(true))
 		if dialogue_site_id == "evergloom" and int(Game.guard_story.get("wander_story_stage", 0)) == 1:
 			if leader_status == "done" and Game.story_memory_owned("memory_09") and Game.story_memory_owned("memory_22"):
 				_line("Rook: The survey shows a courier sheltered east of here. The Wander's mark matches the witness's copy. The courier hid the book rather than let the voices be erased.")
@@ -870,6 +877,7 @@ func _settlement_dialogue() -> void:
 					if bool(Game.guard_story.get("neri_following", false)):
 						if bool(Game.guard_story.get("ilyra_following", false)):
 							_line("Neri: Ilyra taught me to brace before the wave. I taught her how the crews pass a warning from boat to boat. Together we have time to protect each other.")
+						if bool(Game.guard_story.get("veya_following", false)): _line("Neri: I call the warning, Veya catches the rhythm. We can break a scout's attack before it reaches the crew.")
 						_action("Ask Neri to return to Tidefall", _set_neri_following.bind(false))
 					else:
 						_action("Invite Neri to travel with you", _set_neri_following.bind(true))
@@ -1064,6 +1072,12 @@ func _begin_watch_story() -> void:
 
 func _finish_watch_story(choice: String) -> void:
 	_status = "The watch plan is recorded. Watchfire is learned." if Game.finish_watch_story(choice) else "Defend the watch first."
+	_refresh()
+
+
+func _set_veya_following(following: bool) -> void:
+	_status = "Veya joins your journey." if following else "Veya returns to Lunareth."
+	if not Game.set_veya_following(following): _status = "Complete The Wander That Waited first."
 	_refresh()
 
 

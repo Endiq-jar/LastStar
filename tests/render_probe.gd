@@ -1519,6 +1519,61 @@ func _run() -> void:
 	if settlement_manager != null: settlement_manager.call("_update_stream")
 	_log("INFO" if neri_ok else "FAIL", "Neri companion, dialogue identity, support synergy and save=%s" % str(neri_ok))
 
+	# Veya shares her existing leader identity, follows only after her personal
+	# story and combines her slow with Neri's warning without duplicate NPCs.
+	var veya_story_before: Dictionary = Game.guard_story.duplicate(true)
+	var veya_actor := world.get_node_or_null("Player") as CharacterBody3D
+	var veya_position_before := veya_actor.global_position
+	var veya := world.get_node_or_null("CompanionVeya") as Node3D
+	Game.guard_story = {}
+	Game.collection_changed.emit()
+	var veya_ok := veya != null and not Game.set_veya_following(true)
+	Game.guard_story["wander_story_stage"] = 4
+	if veya != null and settlement_manager != null:
+		var veya_sites: Array = settlement_manager.get("_sites")
+		var veya_center: Vector2 = veya_sites[2]["resolved"]
+		veya_actor.global_position = Vector3(veya_center.x, float(world.call("_height", veya_center.x, veya_center.y)) + 0.2, veya_center.y)
+		settlement_manager.call("_update_stream")
+		var veya_loaded: Dictionary = settlement_manager.get("_loaded")
+		var veya_root := veya_loaded.get("lunareth") as Node3D
+		veya_ok = veya_ok and veya_root != null and veya_root.has_node("Resident_00")
+		veya_ok = veya_ok and Game.set_veya_following(true) and veya.visible and veya.is_in_group("story_npc") and not veya_root.has_node("Resident_00")
+		veya.call("_process", 0.1)
+		veya_ok = veya_ok and veya.global_position.distance_to(veya_actor.global_position) < 4.0
+		var veya_hud := world.get_node("HUD")
+		veya_ok = veya_ok and str(veya_hud.call("_npc_name", veya)) == "Veya"
+		veya_hud.call("_open_npc_dialogue", veya)
+		veya_ok = veya_ok and menu.visible and str(menu.get("dialogue_site_id")) == "lunareth"
+		menu.call("close_menu")
+		Game.guard_story = {}
+		Game.load_collection()
+		veya_ok = veya_ok and bool(Game.guard_story.get("veya_following", false))
+		veya_actor.global_position = Vector3(0, 800, 0)
+		var veya_scout = load("res://scripts/hollow_sentry.gd").new()
+		world.add_child(veya_scout)
+		veya_scout.global_position = Vector3(2, 800, 0)
+		await get_tree().physics_frame
+		veya.set("_support_cooldown", 0.0)
+		veya.call("_process", 0.1)
+		veya_ok = veya_ok and float(veya_scout.get("_slow_remaining")) > 0.0 and float(veya.get("_support_cooldown")) > 0.0
+		Game.guard_story["harbor_stage"] = 3
+		Game.set_neri_following(true)
+		veya_scout.set("_state", "warning")
+		veya_scout.set("_timer", 0.1)
+		veya.set("_support_cooldown", 0.0)
+		veya.call("_process", 0.1)
+		veya_ok = veya_ok and str(veya_scout.get("_state")) == "rest" and float(veya_scout.get("_timer")) >= 1.2
+		veya_scout.queue_free()
+		veya_ok = veya_ok and Game.set_veya_following(false) and not veya.visible and veya_root.has_node("Resident_00")
+	else:
+		veya_ok = false
+	veya_actor.global_position = veya_position_before
+	Game.guard_story = veya_story_before
+	Game.save_collection()
+	Game.collection_changed.emit()
+	if settlement_manager != null: settlement_manager.call("_update_stream")
+	_log("INFO" if veya_ok else "FAIL", "Veya companion, dialogue identity, Neri synergy and save=%s" % str(veya_ok))
+
 	# Frostmere defense uses a real streamed encounter and retries after respawn.
 	var watch_story_before: Dictionary = Game.guard_story.duplicate(true)
 	var watch_quests_before: Dictionary = Game.settlement_quests.duplicate(true)
