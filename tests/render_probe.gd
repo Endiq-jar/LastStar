@@ -1628,8 +1628,9 @@ func _run() -> void:
 			watch_ok = watch_ok and first_wave.size() == 2
 			Game.respawned.emit()
 			watch_ok = watch_ok and not bool(watch.get("_active")) and int(Game.guard_story.get("watch_stage", 0)) == 1
-			await get_tree().process_frame
+			# Return from the respawn checkpoint before the streamer updates.
 			watch_actor.global_position = (watch as Node3D).global_position + Vector3(0, 0.2, 0)
+			await get_tree().process_frame
 			watch_ok = bool(watch.call("try_interact", watch_actor)) and watch_ok
 			var retry_wave: Array = []
 			for child in watch.get_children():
@@ -1703,8 +1704,9 @@ func _run() -> void:
 			caravan_ok = caravan_ok and caravan_first_wave.size() == 2
 			Game.respawned.emit()
 			caravan_ok = caravan_ok and not bool(caravan.get("_active")) and int(Game.guard_story.get("caravan_stage", 0)) == 2
-			await get_tree().process_frame
+			# Return from the respawn checkpoint before the streamer updates.
 			caravan_actor.global_position = caravan.global_position + Vector3(0, 0.2, 0)
+			await get_tree().process_frame
 			caravan_ok = bool(caravan.call("try_interact", caravan_actor)) and caravan_ok
 			var caravan_retry: Array = []
 			for child in caravan.get_children():
