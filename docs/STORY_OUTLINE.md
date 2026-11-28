@@ -214,3 +214,7 @@ uses existing clear flags, so earlier saves reveal the same connections. Ilyra
 also reacts to the final two records before the Last Seal. These additions are
 not bespoke levels or cinematics, and the broader companion and side-quest
 brief remains unfinished.
+
+Each settlement leader also has a distinct post-Keeper conversation describing
+what their community does with the recovered history. These are dialogue
+conclusions, not new settlement events or additional side-quest chains.

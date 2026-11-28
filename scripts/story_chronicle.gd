@@ -79,6 +79,25 @@ const REGIONAL_PAYOFFS := {
 	"aetheris": ["The inscription names a shield, a passage, and a promise. Seren can compare it with the guarded record.", "Seren: The Last Seal was meant to be tended, not owned. I will open the archive to witnesses. When you are ready, follow the passage beneath Aetheris."]
 }
 
+# Every settlement has its own post-finale work; no additional clear flags.
+const REGIONAL_EPILOGUES := {
+	"ashvale": "Mira: The lamps stayed lit last night. I have set a place at the hearth for every family who wants to speak, and for those who need more time.",
+	"capital": "Ren: The Guard's new orders put evacuation before classified records. I signed them, and I have asked the families to hold us to them.",
+	"lunareth": "Veya: We are teaching the apprentices to keep conflicting accounts together. A question in the margin is safer than a truth no one may challenge.",
+	"tidefall": "Neri: The crews carry the new warning signals between harbours. No boat is expected to face a breach without the others knowing.",
+	"glassheaven": "Prism: I made a listening crystal with room for new voices. A record should be something people can answer, not just admire.",
+	"frostmere": "Bryn: We reopened the pass and marked a return trail. This time the guide at the rear gets a way home too.",
+	"suncrest": "Zara: The caravans carry supplies and copies of the Seal instructions. If a road closes, another settlement will still know the way.",
+	"orchard": "Orin: The children planted the old seeds beside new ones. We let them choose the names on the markers; the orchard belongs to the living too.",
+	"ravenhold": "Tamsin: We repaired the wall, but the watch now trains for retreat as well as defence. No order will make a sacrifice look like the only plan.",
+	"duskhaven": "Nox: The damaged testimony and its copy are both in the archive. Visitors can see where a hand tried to erase the difference.",
+	"deep": "Delve: The repair passage is open to teams from the surface and the Deep. We built it for maintenance, and now we can finally use it that way.",
+	"starfall": "Aster: The star still falls across our sky each season. We have begun a new register, with space for every observer who wants to sign.",
+	"evergloom": "Rook: Some families want to return; others do not. We are clearing the road and recording both choices instead of declaring the town saved for them.",
+	"aetheris": "Seren: The Seals are tended by a circle of witnesses from across Elaris. Their work is ordinary, patient, and open to question. That is how a promise lasts."
+}
+
+
 const KEEPER_PHASES := [
 	"The Keeper: I watched a world go dark. I will not let it happen again.",
 	"The Keeper: Trust did not save the people at the wall. My Seals did.",

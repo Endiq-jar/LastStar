@@ -1248,6 +1248,14 @@ func _run() -> void:
 				for dialogue_child in dialogue_body.get_children():
 					if dialogue_child is Label and dialogue_child.text == expected_line: found_line = true
 				chronicle_ok = chronicle_ok and found_line
+			Game.settlement_quests[leader_id + ":main"] = "done"
+			menu.call("open_menu", "Dialogue")
+			var ending_body := menu.get("_body") as VBoxContainer
+			var ending_line := str(Game.STORY_CHRONICLE.REGIONAL_EPILOGUES.get(leader_id, ""))
+			var ending_found := false
+			for child in ending_body.get_children():
+				if child is Label and child.text == ending_line: ending_found = true
+			chronicle_ok = chronicle_ok and not ending_line.is_empty() and ending_found
 		menu.call("close_menu")
 		menu.set("dialogue_site_id", "")
 		menu.set("dialogue_resident_index", 0)

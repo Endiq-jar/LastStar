@@ -769,6 +769,8 @@ func _settlement_dialogue() -> void:
 				_line("Ren: Recover my Seal report first. I need to know I can trust you with the patrol's sealed order.")
 		if leader_status != "done": _line("Complete my main quest to receive a written guide to this region's Hollows.")
 		elif bool(Game.guard_story.get("keeper_defeated", false)):
+			var epilogue: String = str(Game.STORY_CHRONICLE.REGIONAL_EPILOGUES.get(dialogue_site_id, ""))
+			if not epilogue.is_empty(): _line(epilogue)
 			var resolution := str(Game.guard_story.get("keeper_resolution", ""))
 			if resolution == "witness": _line("The Keeper's testimony will stand beside ours, not replace it.")
 			elif resolution == "private": _line("We will share our own histories, even while the Keeper's memory remains private.")
