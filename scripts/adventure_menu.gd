@@ -3,7 +3,7 @@ extends Control
 
 signal closed
 const UI := preload("res://scripts/ui_style.gd")
-const TABS := ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story", "Wardrobe", "Dialogue", "Finale"]
+const TABS := ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story", "Wardrobe", "Dialogue", "Finale", "Epilogue"]
 const HOME_TABS := ["Wardrobe", "Profile", "Settings", "Shop"]
 const GAME_TABS := ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story"]
 var home_mode := false
@@ -210,6 +210,7 @@ func _refresh() -> void:
 		"Wardrobe": _wardrobe()
 		"Dialogue": _dialogue()
 		"Finale": _finale_dialogue()
+		"Epilogue": _epilogue()
 	if _status != "":
 		_line(_status, 16, UI.ACCENT)
 
@@ -741,6 +742,18 @@ func _dialogue() -> void:
 				_line("Defeat the Warden in Ashvale Hollow, then interact with the chest to recover the fragment. You can leave and try again.")
 
 
+func _epilogue() -> void:
+	_line("THE LAST STAR", 30, UI.ACCENT)
+	if not bool(Game.guard_story.get("homecoming_done", false)):
+		_line("The promise has not yet been carried home.")
+		return
+	_line("When the world lost its light, one star remembered. It was never meant to shine alone.", 20)
+	_line(Game.story_ending())
+	_line("THE PROMISE CONTINUES", 22, UI.ACCENT)
+	_line("Elaris is still yours to explore. Your companions, unfinished quests and cleared Hollows remain available.")
+	_action("Return to the journey", close_menu)
+
+
 func _finale_dialogue() -> void:
 	_line("THE KEEPER'S MEMORY", 25, UI.ACCENT)
 	if not bool(Game.guard_story.get("keeper_defeated", false)):
@@ -929,6 +942,7 @@ func _story() -> void:
 	_line("Seek the memories in Ashvale Hollow, the Memory Vault and Suncrest Roost. Recover all 25 memories and clear the other 75 Hollows to open the Last Seal.")
 	if bool(Game.guard_story.get("keeper_defeated", false)):
 		_line(Game.story_ending())
+		if bool(Game.guard_story.get("homecoming_done", false)): _action("Read the completed epilogue", _select.bind("Epilogue"))
 	if Game.wander != null:
 		_line("WANDER RESEARCH", 18, UI.ACCENT)
 		if not bool(Game.guard_story.get("seal_done", false)):
@@ -1023,7 +1037,11 @@ func _toggle_weapons() -> void:
 
 
 func _finish_homecoming() -> void:
-	_status = "The promise is carried home. You received 150 starlight." if Game.finish_homecoming() else "Hear the witnesses, resolve the Keeper's memory and return to Ashvale first."
+	if Game.finish_homecoming():
+		_status = "The promise is carried home. You received 150 starlight."
+		_tab = "Epilogue"
+	else:
+		_status = "Hear the witnesses, resolve the Keeper's memory and return to Ashvale first."
 	_refresh()
 
 

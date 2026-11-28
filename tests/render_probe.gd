@@ -1660,6 +1660,12 @@ func _run() -> void:
 			if journey_child is Button and "complete the epilogue" in journey_child.text: homecoming_action = true
 		journey_ok = journey_ok and homecoming_action
 		menu.call("_finish_homecoming")
+		journey_ok = journey_ok and str(menu.get("_tab")) == "Epilogue" and menu.visible
+		var epilogue_body := menu.get("_body") as VBoxContainer
+		var title_found := false
+		for epilogue_child in epilogue_body.get_children():
+			if epilogue_child is Label and epilogue_child.text == "THE LAST STAR": title_found = true
+		journey_ok = journey_ok and title_found
 		menu.call("close_menu")
 		journey_ok = journey_ok and bool(Game.guard_story.get("homecoming_done", false)) and Game.starlight == journey_light + 150 and not Game.finish_homecoming()
 		Game.guard_story = {}

@@ -293,6 +293,7 @@ each act is recovered. Acts suggest a reading order but do not block exploration
 out-of-order and old-save clears count immediately. After the Keeper's memory
 is resolved and the seven optional witness lights are heard, players can return
 to Ilyra in Ashvale for a playable homecoming and a one-time 150-starlight reward.
-The conclusion reflects the opening answer and recorded story decisions. The
+The conclusion reflects the opening answer and recorded story decisions, opens
+a readable ending card and can be revisited from the Story screen. The
 existing ending and original 100-Hollow gate remain unchanged; this is not a
 cinematic, and the regional Hollow arenas and many resident quests remain shared.
