@@ -1540,14 +1540,17 @@ func _run() -> void:
 		veya_ok = veya_ok and Game.set_veya_following(true) and veya.visible and veya.is_in_group("story_npc") and not veya_root.has_node("Resident_00")
 		veya.call("_process", 0.1)
 		veya_ok = veya_ok and veya.global_position.distance_to(veya_actor.global_position) < 4.0
+		_log("INFO", "Veya recruitment check=%s visibility=%s distance=%.2f" % [str(veya_ok), str(veya.visible), veya.global_position.distance_to(veya_actor.global_position)])
 		var veya_hud := world.get_node("HUD")
 		veya_ok = veya_ok and str(veya_hud.call("_npc_name", veya)) == "Veya"
 		veya_hud.call("_open_npc_dialogue", veya)
 		veya_ok = veya_ok and menu.visible and str(menu.get("dialogue_site_id")) == "lunareth"
+		_log("INFO", "Veya dialogue check=%s site=%s" % [str(veya_ok), str(menu.get("dialogue_site_id"))])
 		menu.call("close_menu")
 		Game.guard_story = {}
 		Game.load_collection()
 		veya_ok = veya_ok and bool(Game.guard_story.get("veya_following", false))
+		_log("INFO", "Veya save check=%s following=%s" % [str(veya_ok), str(Game.guard_story.get("veya_following", false))])
 		veya_actor.global_position = Vector3(0, 800, 0)
 		var veya_scout = load("res://scripts/hollow_sentry.gd").new()
 		world.add_child(veya_scout)
@@ -1556,6 +1559,7 @@ func _run() -> void:
 		veya.set("_support_cooldown", 0.0)
 		veya.call("_process", 0.1)
 		veya_ok = veya_ok and float(veya_scout.get("_slow_remaining")) > 0.0 and float(veya.get("_support_cooldown")) > 0.0
+		_log("INFO", "Veya support check=%s slow=%.2f cooldown=%.2f" % [str(veya_ok), float(veya_scout.get("_slow_remaining")), float(veya.get("_support_cooldown"))])
 		Game.guard_story["harbor_stage"] = 3
 		Game.set_neri_following(true)
 		veya_scout.set("_state", "warning")
@@ -1563,6 +1567,7 @@ func _run() -> void:
 		veya.set("_support_cooldown", 0.0)
 		veya.call("_process", 0.1)
 		veya_ok = veya_ok and str(veya_scout.get("_state")) == "rest" and float(veya_scout.get("_timer")) >= 1.2
+		_log("INFO", "Veya synergy check=%s state=%s timer=%.2f" % [str(veya_ok), str(veya_scout.get("_state")), float(veya_scout.get("_timer"))])
 		veya_scout.queue_free()
 		veya_ok = veya_ok and Game.set_veya_following(false) and not veya.visible and veya_root.has_node("Resident_00")
 	else:
