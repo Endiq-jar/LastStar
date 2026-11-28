@@ -2337,7 +2337,7 @@ func _run() -> void:
 					Game._on_party_down()
 					var checkpoint_pos: Vector3 = finale.get("_checkpoint")
 					finale_ok = finale_ok and Game.resonance_source == "last_seal" and Game.hollow_resonance == 3000.0
-		finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and hollow_player.global_position.distance_to(checkpoint_pos) < 0.1 and int(finale.get("sector")) == 1
+					finale_ok = finale_ok and bool(finale.get("inside")) and Game.in_final_dungeon and hollow_player.global_position.distance_to(checkpoint_pos) < 0.1 and int(finale.get("sector")) == 1
 			var keeper := finale.get("boss") as Node3D
 			if keeper != null:
 				finale_ok = finale_ok and bool(keeper.get("is_keeper")) and is_equal_approx(float(keeper.get("max_hp")), 67500000.0)
