@@ -223,6 +223,11 @@ jobs:
           tail -25 /tmp/structure.log | while IFS= read -r line; do
             echo "::notice::$line"
           done
+          # Culling and cost numbers, surfaced as their own annotations: they
+          # are measurements, and the annotation channel is the only part of a
+          # step log that is reliably readable from a review context.
+          grep -E "^PROBE_INFO: (ENTITY_CULL|PERF census)" /tmp/structure.log | head -4 \
+            | while IFS= read -r line; do echo "::notice title=measurement::$line"; done || true
           grep -E "^PROBE_" /tmp/structure.log || {
             # The probe scene itself failed to load or compile. Surface the
             # reason here instead of "produced no result", which says nothing
@@ -236,6 +241,14 @@ jobs:
           if grep -qE "^PROBE_RESULT: PASS" /tmp/structure.log; then
             echo "Structural checks passed."
           else
+            # Preserve runtime exceptions and the last completed checks in
+            # annotations even if the watchdog emitted a PROBE_RESULT.
+            grep -E "SCRIPT ERROR|Parse Error|Invalid (access|call|set)|at:.*res://" /tmp/structure.log | tail -30 | while IFS= read -r line; do
+              echo "::error title=Probe runtime::$line"
+            done || true
+            grep -E "^PROBE_INFO" /tmp/structure.log | tail -10 | while IFS= read -r line; do
+              echo "::notice title=Last completed probe::$line"
+            done || true
             grep -E "^PROBE_FAIL" /tmp/structure.log | while IFS= read -r line; do
               echo "::error::$line"
             done
@@ -287,8 +300,8 @@ jobs:
               sleep $((attempt * 5))
             done
             if [ "$OK" -ne 1 ]; then
-              echo "::warning::no GL stack for the pixel probe - no frame this run"
-              exit 0
+              echo "::warning::no GL stack for the pixel probe - visual verification did not run"
+              exit 1
             fi
           fi
           mkdir -p /tmp/probe
@@ -298,15 +311,15 @@ jobs:
           # validate a renderer our players never run.
           set +e
           timeout -k 10 240 xvfb-run -a --server-args="-screen 0 1280x720x24" \
-            /opt/godot/godot --path . --rendering-method gl_compatibility \
+            /opt/godot/godot --path . --audio-driver Dummy --rendering-method gl_compatibility \
             --rendering-driver opengl3 --resolution 1280x720 \
             res://tests/render_probe.tscn -- --out=/tmp/probe \
             > /tmp/probe.log 2>&1
           CODE=$?
           set -e
           if [ "$CODE" -eq 124 ]; then
-            # A timeout is an infrastructure limit on a software-GL runner, so
-            # the VISUAL assertion is skipped - but only that.
+            # A timeout leaves visual verification incomplete. The step reports
+            # failure without blocking APK export (continue-on-error above).
             #
             # This used to `exit 0` unconditionally, which threw away everything
             # the probe had already established before it stalled. On run
@@ -321,7 +334,7 @@ jobs:
               echo "::error::probe reported failures before timing out"
               exit 1
             fi
-            exit 0
+            exit 1
           fi
 
           grep -E "^PROBE_" /tmp/probe.log | while IFS= read -r line; do
@@ -347,7 +360,7 @@ jobs:
             # an infrastructure limit, not a game bug - warn, do not fail.
             echo "::warning::render probe could not start on this runner"
             tail -20 /tmp/probe.log
-            exit 0
+            exit 1
           fi
           if grep -q "PROBE_RESULT: FAIL" /tmp/probe.log; then
             # The game's own errors during the probe run are the useful part:
@@ -360,7 +373,12 @@ jobs:
               echo "::error title=in-game::$line"
             done
             tail -25 /tmp/probe.log
-            echo "::error::Render probe FAILED - the 3D view is not drawing (see the render-probe artifact)"
+            echo "::error::Render probe FAILED - see the individual PROBE_FAIL messages and render-probe artifact"
+            exit 1
+          fi
+          if [ "$CODE" -ne 0 ] || ! grep -qE '^PROBE_RESULT: PASS' /tmp/probe.log; then
+            echo "::error::Render probe did not complete successfully (exit $CODE); visual verification is incomplete."
+            tail -25 /tmp/probe.log
             exit 1
           fi
           echo "Render probe passed."
@@ -401,7 +419,7 @@ jobs:
           # Annotations are capped at ~24 per check run, so only the lines that
           # actually diagnose something are emitted. The full log is uploaded as
           # an artifact for anything else.
-          grep -E "PROBE_(FAIL|WARN)|alt view|side view|TOON_MAT|PLAYER_TREE|PLAYER_MESHES|PART |MESH_Y|character is|player chest" \
+          grep -E "PROBE_(FAIL|WARN)|ENTITY_CULL|alt view|side view|TOON_MAT|PLAYER_TREE|PLAYER_MESHES|PART |MESH_Y|character is|player chest" \
             /tmp/probe.log | head -14 \
             | while IFS= read -r line; do echo "::notice title=probe::$line"; done
           grep -E "PROBE_INFO: (size=|alt view)" /tmp/probe.log | \
@@ -439,6 +457,11 @@ jobs:
           cp /tmp/probe/world.png /tmp/shots_out/world.png 2>/dev/null || true
           cp /tmp/probe/world_alt.png /tmp/shots_out/world_alt.png 2>/dev/null || true
           cp /tmp/probe/world_wide.png /tmp/shots_out/world_wide.png 2>/dev/null || true
+          cp /tmp/probe/title.png /tmp/shots_out/title.png 2>/dev/null || true
+          cp /tmp/probe/pause.png /tmp/shots_out/pause.png 2>/dev/null || true
+          cp /tmp/probe/adventure.png /tmp/shots_out/adventure.png 2>/dev/null || true
+          # Publish all UI states captured by the probe, including scrolled pages.
+          cp /tmp/probe/home_*.png /tmp/probe/game_*.png /tmp/probe/spell_*.png /tmp/probe/performance.png /tmp/probe/touch_controls_simulated.png /tmp/probe/victory.png /tmp/probe/equipped_backpack.png /tmp/probe/settlement_*.png /tmp/shots_out/ 2>/dev/null || true
           cp /tmp/probe/world_side.png /tmp/shots_out/world_side.png 2>/dev/null || true
           cp /tmp/probe/player.png /tmp/shots_out/player.png 2>/dev/null || true
           cp /tmp/probe/player_flat.png /tmp/shots_out/player_flat.png 2>/dev/null || true

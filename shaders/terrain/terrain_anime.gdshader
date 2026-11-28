@@ -14,16 +14,11 @@ render_mode cull_back, diffuse_lambert, specular_toon, depth_draw_opaque;
 // wet, reflective bands near the waterline. Tuned for mobile (3 samples).
 
 uniform sampler2D meadow_tex : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D path_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D rock_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D sand_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 
-// Hue-shifted to true green (~120 degrees) to match the grass field. The meadow
-// used a yellow-green tint and the rendered frame's dominant hue bin confirmed
-// it: the terrain and the blades were both leaning straw, and moving only the
-// blades would have put a green carpet on a yellow hillside.
-uniform vec4 meadow_tint : source_color = vec4(0.205, 0.340, 0.180, 1.0);
-uniform vec4 meadow_deep : source_color = vec4(0.105, 0.205, 0.118, 1.0);
 // Slightly warm grey. A neutral 0.42 grey under a cool sky turns every cliff the
 // same slate blue and the mountains lose all separation from the sky behind them.
 uniform vec4 rock_tint : source_color = vec4(0.40, 0.38, 0.36, 1.0);
@@ -42,6 +37,19 @@ uniform float band_softness : hint_range(0.0, 0.3) = 0.055;
 // Distance (metres) over which albedo starts to mute toward atmospheric haze.
 uniform float haze_begin : hint_range(0.0, 600.0) = 120.0;
 uniform float haze_end : hint_range(0.0, 900.0) = 700.0;
+
+// x/z centre and radius, supplied from biome_regions.gd. No extra texture fetches.
+uniform vec3 region_snow = vec3(-800.0, -930.0, 360.0);
+uniform vec3 region_savanna = vec3(1020.0, -740.0, 410.0);
+uniform vec3 region_taiga = vec3(-1450.0, -650.0, 360.0);
+uniform vec3 region_tidal = vec3(760.0, 480.0, 300.0);
+uniform vec3 region_fantasy = vec3(-720.0, 280.0, 340.0);
+
+float region_weight(vec2 p, vec3 region) {
+	vec2 delta = p - region.xy;
+	float radius2 = region.z * region.z;
+	return 1.0 - smoothstep(radius2 * 0.49, radius2, dot(delta, delta));
+}
 
 varying vec3 v_world;
 varying vec3 v_world_normal;
@@ -78,19 +86,9 @@ void fragment() {
 	// texture only adds a faint brush grain on top.
 	float dry = smoothstep(0.55, 1.0, patch);
 
-	// Detail from the painted textures, scaled to a painterly size rather than
-	// a photographic one. tri() picks the best projection per surface so cliffs
-	// do not stretch the meadow.
-	//
-	// Only the *luminance* of these is used, never their colour, and it is
-	// centred on 1.0 so it modulates rather than tints. Multiplying the albedo
-	// by the raw texture was the main source of the neon: the painted greens are
-	// blue-poor (blue channel around 0.16), so squaring them into an already
-	// blue-poor meadow albedo drove blue near zero and left a pure, saturated
-	// green with nothing to hold it back. Luminance detail keeps the texture's
-	// brushwork - the variation in value that reads as painted - without
-	// touching the hue the lighting depends on.
-	vec3 meadow_detail = tri(meadow_tex, v_world, wn, uv_scale);
+	// The meadow is a flat #7FBF5A texture, so one sample is enough; the
+	// other terrain textures retain triplanar projection on cliffs.
+	vec3 meadow_detail = texture(meadow_tex, v_world.xz * uv_scale).rgb;
 	vec3 rock_detail = tri(rock_tex, v_world, wn, uv_scale * 0.62);
 	vec3 sand_detail = tri(sand_tex, v_world, wn, uv_scale * 1.25);
 	// A second, much finer sample at a different scale. One texture at one scale
@@ -98,28 +96,12 @@ void fragment() {
 	// flat colour: there is nothing between the macro patch (hundreds of metres)
 	// and the base tint. Blending two scales of the same paint gives the
 	// mid-frequency breakup a painted hillside has.
-	vec3 meadow_fine = tri(meadow_tex, v_world, wn, uv_scale * 4.7);
-	float meadow_fl = dot(meadow_fine, vec3(0.2126, 0.7152, 0.0722));
-
-	// A third scale, sampled from the UV grid rather than triplanar because it is
-	// only ever seen on the ground. At 0.62 m this is the size of a patch of
-	// longer grass, and it is the scale the camera actually looks at from 4 m -
-	// without it the ground immediately under the player is one unbroken fill no
-	// matter how much larger-scale paint is layered above it.
-	vec3 near_detail = texture(meadow_tex, v_world.xz * 1.6).rgb;
-	float near_l = dot(near_detail, vec3(0.2126, 0.7152, 0.0722));
-	float meadow_l = dot(meadow_detail, vec3(0.2126, 0.7152, 0.0722));
 	float rock_l = dot(rock_detail, vec3(0.2126, 0.7152, 0.0722));
 	float sand_l = dot(sand_detail, vec3(0.2126, 0.7152, 0.0722));
 
-	// Meadow: two greens, broken up by the soft macro patches, modulated by the
-	// painted detail (kept subtle so the flat anime bands still dominate).
-	vec3 grass = mix(meadow_deep.rgb, meadow_tint.rgb, 0.35 + patch * 0.65);
-	grass *= mix(1.0, meadow_l * 1.9, 0.50);
-	grass *= mix(1.0, meadow_fl * 1.7, 0.30);
-	// Weighted by distance: the fine grain is only visible up close, and applying
-	// it at range would just be noise under the haze.
-	grass *= mix(1.0, near_l * 1.7, 0.52 * (1.0 - smoothstep(18.0, 70.0, length(VERTEX))));
+	// Use the meadow texture's actual colour rather than discarding its hue.
+	// Lighting, terrain variation, and fog still affect the final screen colour.
+	vec3 grass = meadow_detail * mix(0.72, 1.0, patch);
 	// A little golden meadow mixed in, the way open-world grass reads. Kept
 	// low: push this and the hillsides turn acid yellow-green.
 	// The dry blend is nearly as weak as it can be while still breaking up the
@@ -141,6 +123,13 @@ void fragment() {
 	// large open area from going dead.
 	float brush = smoothstep(0.40, 0.62, texture(macro_tex, v_world.xz * 0.028).r);
 	grass *= mix(0.88, 1.10, brush);
+
+	// Winding yellow-soil trail; matches TerrainGenerator.is_path(). It is
+	// blended into the ground before shoreline, cliff and snow layers.
+	float path_distance = abs(v_world.x - (18.0 + 10.0 * sin(v_world.z * 0.012)));
+	float path_mask = 1.0 - smoothstep(3.0, 4.2, path_distance);
+	vec3 path_col = texture(path_tex, v_world.xz * 0.13).rgb;
+	grass = mix(grass, path_col, path_mask);
 
 	// Rock: warm grey, cooler in shadowed bands.
 	vec3 rock_col = rock_tint.rgb * mix(0.66, 1.0, patch);
@@ -172,6 +161,20 @@ void fragment() {
 	float snow = smoothstep(snow_height - 14.0, snow_height + 20.0, h);
 	snow *= 1.0 - smoothstep(0.42, 0.62, slope);
 	col = mix(col, vec3(0.615, 0.645, 0.715), snow * 0.74);
+
+	// Broad regional palettes, mixed over the existing terrain without changing
+	// any elevation, collision or saved locations. They are absent at spawn.
+	float level_ground = 1.0 - smoothstep(0.35, 0.60, slope);
+	float snow_region = region_weight(v_world.xz, region_snow);
+	float savanna_region = region_weight(v_world.xz, region_savanna);
+	float taiga_region = region_weight(v_world.xz, region_taiga);
+	float tidal_region = region_weight(v_world.xz, region_tidal);
+	float fantasy_region = region_weight(v_world.xz, region_fantasy);
+	col = mix(col, vec3(0.68, 0.74, 0.80) * mix(0.85, 1.0, patch), snow_region * level_ground * 0.92);
+	col = mix(col, vec3(0.48, 0.38, 0.19) * mix(0.80, 1.08, patch), savanna_region * level_ground * 0.84);
+	col = mix(col, vec3(0.20, 0.31, 0.25) * mix(0.78, 1.08, patch), taiga_region * level_ground * 0.75);
+	col = mix(col, vec3(0.52, 0.48, 0.35) * mix(0.80, 1.06, patch), tidal_region * level_ground * 0.82);
+	col = mix(col, vec3(0.34, 0.29, 0.48) * mix(0.82, 1.12, patch), fantasy_region * level_ground * 0.75);
 
 	// Wet band near the shore: darker + glossier.
 	float wet = 1.0 - smoothstep(water_level, water_level + wet_band, h);

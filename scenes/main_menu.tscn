@@ -53,7 +53,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-color = Color(0.02, 0.05, 0.09, 0.18)
+color = Color(0.035, 0.03, 0.10, 0.10)
 
 [node name="LeftPanel" type="MarginContainer" parent="."]
 layout_mode = 1
@@ -76,18 +76,18 @@ theme_override_constants/separation = 12
 
 [node name="Title" type="Label" parent="LeftPanel/Panel/VBox"]
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.93, 0.72, 1)
+theme_override_colors/font_color = Color(0.96, 0.95, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.55)
 theme_override_constants/shadow_offset_x = 3
 theme_override_constants/shadow_offset_y = 3
 theme_override_font_sizes/font_size = 62
-text = "LastStar"
+text = "✦ LastStar"
 
 [node name="Tagline" type="Label" parent="LeftPanel/Panel/VBox"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.78, 0.94, 1, 1)
+theme_override_colors/font_color = Color(0.77, 0.76, 1, 1)
 theme_override_font_sizes/font_size = 17
-text = "An open-world elemental adventure"
+text = "A  CELESTIAL  ADVENTURE"
 autowrap_mode = 2
 
 [node name="Blurb" type="Label" parent="LeftPanel/Panel/VBox"]
@@ -99,7 +99,7 @@ autowrap_mode = 2
 
 [node name="PartyLabel" type="Label" parent="LeftPanel/Panel/VBox"]
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.88, 0.6, 0.9)
+theme_override_colors/font_color = Color(0.73, 0.73, 0.94, 0.9)
 theme_override_font_sizes/font_size = 13
 text = "TRAVELLING PARTY"
 
@@ -121,7 +121,7 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_btn")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_btn")
 theme_override_styles/focus = SubResource("StyleBoxFlat_btn")
 theme_override_font_sizes/font_size = 22
-text = "Begin the Journey"
+text = "✦     Begin the Journey"
 
 [node name="QualityButton" type="Button" parent="LeftPanel/Panel/VBox"]
 unique_name_in_owner = true
@@ -135,7 +135,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 40)
 layout_mode = 2
 theme_override_font_sizes/font_size = 15
-text = "Quit"
+text = "Quit Game"
 
 [node name="Footer" type="Label" parent="LeftPanel/Panel/VBox"]
 layout_mode = 2

@@ -1,0 +1,1267 @@
+extends Control
+## Offline adventure screens. No real-money purchases or network accounts.
+
+signal closed
+const UI := preload("res://scripts/ui_style.gd")
+const TABS := ["Character", "Inventory", "Quests", "Wish", "Level Up", "Shop", "Profile", "Settings", "Story", "Wardrobe", "Dialogue", "Finale", "Epilogue"]
+const HOME_TABS := ["Wardrobe", "Profile", "Settings", "Shop"]
+const GAME_TABS := ["Inventory", "Character", "Quests", "Wish", "Level Up", "Story"]
+var home_mode := false
+var dialogue_site_id := ""
+var shop_site_id := ""
+var dialogue_resident_index := 0
+const SETTLEMENTS := preload("res://scripts/settlement_data.gd")
+
+var _body: VBoxContainer
+var _tab_buttons: Dictionary = {}
+var _header: Label
+var _balance: Label
+var _tab := "Character"
+var _status := ""
+var _selected_item := ""
+var _show_weapons := false
+var _sort_alphabetical := false
+var _binding_action := ""
+var _close_button: Button
+var _wander_slot := 0
+var _research_first := 0
+var _research_second := 1
+var _research_shape := 0
+var _research_reach := 0
+var _research_intensity := 0
+const ITEM_ICONS := {
+	"Potion": preload("res://icons/items/potion.svg"),
+	"Moonstone": preload("res://icons/items/moonstone.svg"),
+	"Starflower": preload("res://icons/items/starflower.svg"),
+	"Sunshard": preload("res://icons/items/sunshard.svg"),
+	"Stormglass": preload("res://icons/items/stormglass.svg"),
+}
+
+
+func _ready() -> void:
+	name = "AdventureMenu"
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	visible = false
+	_build()
+	Game.collection_changed.connect(_refresh)
+
+
+func _build() -> void:
+	var dim := ColorRect.new()
+	dim.color = Color(0.025, 0.02, 0.09, 0.86)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(dim)
+	var panel := PanelContainer.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	panel.offset_left = 24
+	panel.offset_top = 20
+	panel.offset_right = -24
+	panel.offset_bottom = -20
+	panel.add_theme_stylebox_override("panel", UI.panel(18.0, 0.97))
+	add_child(panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 10)
+	panel.add_child(layout)
+	var bar := HBoxContainer.new()
+	layout.add_child(bar)
+	_header = Label.new()
+	_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_header.add_theme_font_size_override("font_size", 25)
+	_header.add_theme_color_override("font_color", UI.TEXT)
+	bar.add_child(_header)
+	var ane_icon := TextureRect.new()
+	ane_icon.texture = preload("res://icons/items/ane.svg")
+	ane_icon.custom_minimum_size = Vector2(25, 25)
+	ane_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ane_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	bar.add_child(ane_icon)
+	_balance = Label.new()
+	_balance.add_theme_font_size_override("font_size", 16)
+	_balance.add_theme_color_override("font_color", UI.ACCENT)
+	bar.add_child(_balance)
+	var close := Button.new()
+	close.text = ""
+	close.tooltip_text = "Close"
+	UI.icon(close, "Close")
+	close.custom_minimum_size = Vector2(48, 42)
+	UI.button(close)
+	close.pressed.connect(close_menu)
+	bar.add_child(close)
+	_close_button = close
+	# Persistent navigation rail mirrors the reference while keeping every
+	# existing tab and the scrollable content area intact.
+	var content := HBoxContainer.new()
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 16)
+	layout.add_child(content)
+	var tabs: Array = HOME_TABS if home_mode else GAME_TABS
+	var rail := VBoxContainer.new()
+	rail.custom_minimum_size.x = 160
+	rail.add_theme_constant_override("separation", 5)
+	content.add_child(rail)
+	for page in tabs:
+		var tab := Button.new()
+		tab.name = page.replace(" ", "") + "Tab"
+		tab.text = page
+		tab.custom_minimum_size = Vector2(0, 44)
+		tab.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		tab.add_theme_font_size_override("font_size", 15)
+		UI.icon(tab, page)
+		UI.button(tab)
+		tab.pressed.connect(_select.bind(page))
+		rail.add_child(tab)
+		_tab_buttons[page] = tab
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content.add_child(scroll)
+	_body = VBoxContainer.new()
+	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_body.add_theme_constant_override("separation", 10)
+	scroll.add_child(_body)
+
+func open_menu(tab: String = "Character") -> void:
+	if not TABS.has(tab):
+		tab = "Character"
+	_tab = tab
+	_status = ""
+	visible = true
+	if not home_mode:
+		Game.set_paused(true)
+	_refresh()
+	_close_button.grab_focus()
+
+
+func open_settlement_shop(site_id: String) -> void:
+	if Game.SETTLEMENT_SHOPS.by_id(site_id).is_empty(): return
+	shop_site_id = site_id
+	open_menu("Shop")
+
+
+func close_menu() -> void:
+	shop_site_id = ""
+	_binding_action = ""
+	visible = false
+	if not home_mode:
+		Game.set_paused(false)
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	closed.emit()
+
+
+func _select(tab: String) -> void:
+	if tab != "Shop": shop_site_id = ""
+	_tab = tab
+	_status = ""
+	_refresh()
+
+
+func _line(text: String, font_size: int = 17, color: Color = UI.TEXT) -> void:
+	var label := Label.new()
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	_body.add_child(label)
+
+
+func _action(text: String, callback: Callable, enabled: bool = true) -> void:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(0, 44)
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.disabled = not enabled
+	UI.button(button)
+	UI.icon(button, _action_icon(text))
+	button.pressed.connect(callback)
+	_body.add_child(button)
+
+
+func _action_icon(text: String) -> String:
+	var lower := text.to_lower()
+	if lower.contains("potion"): return "Potion"
+	if lower.contains("weapon") or lower.contains("blade") or lower.contains("sword"): return "Weapon"
+	if lower.contains("outfit") or lower.contains("traveller") or lower.contains("hairpin"): return "Clothing"
+	if lower.contains("backpack"): return "Backpack"
+	if lower.contains("quest") or lower.contains("blueprint") or lower.contains("spell"): return "Quests"
+	if _tab == "Settings": return "Settings"
+	if _tab == "Shop": return "Shop"
+	if _tab == "Wardrobe": return "Wardrobe"
+	if _tab == "Character": return "Character"
+	if _tab == "Inventory": return "Inventory"
+	return "Wish" if _tab == "Wish" else "Story"
+
+
+func _refresh() -> void:
+	if _body == null or not visible:
+		return
+	for child in _body.get_children():
+		_body.remove_child(child)
+		child.queue_free()
+	for page in _tab_buttons:
+		UI.button(_tab_buttons[page], page == _tab)
+	_header.text = "✦  %s" % _tab.to_upper()
+	_balance.text = "✧ %d starlight    ◇ %d Ane     " % [Game.starlight, Game.coins]
+	match _tab:
+		"Character": _character()
+		"Inventory": _inventory()
+		"Quests": _quests()
+		"Wish": _wish()
+		"Level Up": _level_up()
+		"Shop": _shop()
+		"Profile": _profile()
+		"Settings": _settings()
+		"Story": _story()
+		"Wardrobe": _wardrobe()
+		"Dialogue": _dialogue()
+		"Finale": _finale_dialogue()
+		"Epilogue": _epilogue()
+	if _status != "":
+		_line(_status, 16, UI.ACCENT)
+
+
+func _character() -> void:
+	var current := Game.character()
+	_line("%s  ·  %s" % [current["name"], current["title"]], 27, UI.ACCENT)
+	_line("%s   |   Level %d / 10   |   %s" % [current["element"], Game.character_levels[Game.party_index], current["weapon"]])
+	_line("HP %.0f / %.0f     ATK %.1f     Energy %.0f / %.0f" % [Game.current_hp(), Game.max_hp(), Game.attack_power(), Game.energy, Game.MAX_ENERGY])
+	_line("Skill: %s     Burst: %s" % [current["skill_name"], current["burst_name"]])
+	_line("TRAVELLING PARTY", 14, UI.ACCENT)
+	for i in range(Game.PARTY.size()):
+		var data: Dictionary = Game.PARTY[i]
+		_action("%s   ·   %s   ·   Level %d%s" % [data["name"], data["element"], Game.character_levels[i], "   (active)" if i == Game.party_index else ""], _switch.bind(i))
+
+
+func _switch(index: int) -> void:
+	Game.switch_character(index)
+	_refresh()
+
+
+func _inventory() -> void:
+	_line("QUEST EQUIPMENT & BLUEPRINTS", 20, UI.ACCENT)
+	_line("Weapons are stored separately from backpack slots. They use the sword user's melee attacks; other characters keep their own weapons.")
+	_action("Weapons · %d / %d owned · %s" % [Game.owned_weapons.size(), Game.WEAPONS.COUNT, "Hide" if _show_weapons else "Show"], _toggle_weapons)
+	if _show_weapons:
+		_action("Default weapon%s" % (" · Equipped" if Game.equipped_weapon == "" else ""), _equip_reward_weapon.bind(""), Game.equipped_weapon != "")
+		for number in range(Game.WEAPONS.COUNT):
+			var id: String = Game.WEAPONS.id_for_index(number)
+			if Game.owned_weapons.has(id):
+				_action("%s · +%d%% attack%s" % [Game.WEAPONS.name_for_id(id), roundi(Game.WEAPONS.bonus(id) * 100.0), " · Equipped" if Game.equipped_weapon == id else " · Equip"], _equip_reward_weapon.bind(id), Game.equipped_weapon != id)
+	_line("ARMOR", 18, UI.ACCENT)
+	if Game.owned_wayfarer_armor:
+		_action("Wayfarer armor · 10% damage reduction · %s" % ("Unequip" if Game.equipped_wayfarer_armor else "Equip"), _toggle_armor)
+	else:
+		_line("Wayfarer armor: complete a mason's side quest. Armor is a stat item, not a character model.")
+	if Game.owned_blueprints.has(Game.BLUEPRINT_ID):
+		var known: bool = Game.wander != null and Game.wander.known(Game.BLUEPRINT_ID)
+		_action("Wind / Fire blueprint · %s" % ("Learned" if known else "Learn spell"), _learn_blueprint, Game.wander != null and not known)
+	var used: int = Game.inventory_used()
+	var capacity: int = Game.inventory_capacity()
+	_line("INVENTORY   %d / %d SLOTS" % [used, capacity], 22, UI.ACCENT)
+	_line("Select an icon to use or drop an item. Each item occupies one slot.")
+	if used > capacity:
+		_line("Your existing collection exceeds capacity. No items were lost.", 16, UI.ACCENT)
+	_action("Sort: %s  ·  tap to change" % ("Name" if _sort_alphabetical else "Type"), _toggle_sort)
+	var entries: Array[String] = []
+	for i in range(Game.potions):
+		entries.append("Potion")
+	for item in Game.WISH_ITEMS:
+		for i in range(maxi(0, int(Game.collectibles.get(item, 0)))):
+			entries.append(str(item))
+	if _sort_alphabetical:
+		entries.sort()
+	if not entries.has(_selected_item):
+		_selected_item = ""
+	var grid := GridContainer.new()
+	grid.columns = 5
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	_body.add_child(grid)
+	for i in range(maxi(capacity, used)):
+		var slot := Button.new()
+		slot.custom_minimum_size = Vector2(80, 64)
+		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		UI.button(slot)
+		if i < entries.size():
+			var item: String = entries[i]
+			slot.icon = ITEM_ICONS[item]
+			slot.expand_icon = true
+			slot.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			slot.tooltip_text = item
+			slot.pressed.connect(_select_item.bind(item))
+		else:
+			slot.disabled = true
+			slot.add_theme_stylebox_override("disabled", UI.panel(8.0, 0.55))
+			slot.tooltip_text = "Empty slot"
+		grid.add_child(slot)
+	if _selected_item != "":
+		_line("Selected: %s" % _selected_item, 17, UI.ACCENT)
+		if _selected_item == "Potion":
+			_action("Use healing potion", _use_potion, Game.current_hp() < Game.max_hp())
+		_action("Drop one %s into the world" % _selected_item, _drop_selected, get_tree().get_first_node_in_group("player") != null)
+
+
+func _toggle_sort() -> void:
+	_sort_alphabetical = not _sort_alphabetical
+	_refresh()
+
+
+func _select_item(item: String) -> void:
+	_selected_item = item
+	_refresh()
+
+
+func _drop_selected() -> void:
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null or _selected_item == "":
+		return
+	var position := player.global_position + player.global_basis.z * 3.0
+	var world := player.get_parent()
+	var terrain := world.get_node_or_null("Terrain")
+	if terrain != null:
+		position.y = float(terrain.call("get_height_at", position.x, position.z)) + 0.5
+	var id: String = Game.drop_item(_selected_item, position)
+	if id != "" and world.has_method("spawn_dropped_item"):
+		world.call("spawn_dropped_item", id)
+		_status = "Dropped nearby. Walk over it to pick it up."
+	else:
+		_status = "Unable to drop item."
+	_refresh()
+
+
+func _use_potion() -> void:
+	_status = "Potion used." if Game.use_potion() else "No potion needed or available."
+	_refresh()
+
+
+func _quests() -> void:
+	_line("STAR GUARD JOURNAL", 23, UI.ACCENT)
+	var story := Game.guard_story
+	if not bool(story.get("seal_accepted", false)):
+		_line("Main · A Light Remembered: speak with Star Guard Ilyra in Ashvale.")
+	elif bool(story.get("seal_done", false)):
+		_line("Main · A Light Remembered: completed. Reward: Stone Bulwark.")
+	else:
+		_line("Main · A Light Remembered: recover a star sigil (%d / 1), then return to Ilyra." % mini(Game.sigils_collected, 1))
+	if bool(story.get("hollow_accepted", false)):
+		_line("Side · Hollow Signs: %s" % ("completed. Reward: Arc Lance." if bool(story.get("hollow_done", false)) else "defeat three slimes (%d / 3), then return to Ilyra." % mini(Game.slimes_defeated, 3)))
+	if bool(story.get("memory_accepted", false)):
+		var memory_status := "Completed · choice: %s" % str(story.get("memory_choice", "")) if bool(story.get("memory_done", false)) else ("Return the fragment to Ilyra" if bool(story.get("memory_found", false)) else "Defeat the Warden, then recover the fragment from the chest")
+		_line("Main · A Memory in the Hollow: %s" % memory_status)
+	var ilyra_objective: String = Game.ilyra_arc_objective()
+	if not ilyra_objective.is_empty(): _line("Companion · The Names We Carry: " + ilyra_objective)
+	var orchard_objective: String = Game.orchard_story_objective()
+	if not orchard_objective.is_empty(): _line("Side · What the Roots Remember: " + orchard_objective)
+	var caravan_objective: String = Game.caravan_story_objective()
+	if not caravan_objective.is_empty(): _line("Side · The Last Caravan: " + caravan_objective)
+	var watch_objective: String = Game.watch_story_objective()
+	if not watch_objective.is_empty(): _line("Side · A Watch for Everyone: " + watch_objective)
+	var wander_objective: String = Game.wander_story_objective()
+	if not wander_objective.is_empty(): _line("Side · The Wander That Waited: " + wander_objective)
+	var harbor_objective: String = Game.harbor_story_objective()
+	if not harbor_objective.is_empty(): _line("Side · A Bell Between Shores: " + harbor_objective)
+	_line("STORY PATH", 18, UI.ACCENT)
+	_line("1. Complete Ilyra's A Light Remembered; accept and resolve A Memory in the Hollow. 2. In each settlement, complete the named leader's main quest for a written dungeon guide. 3. Clear the original 100 Hollows, then enter the Last Seal in Aetheris.")
+	_line("First tier: %d / 20 named memory Hollows cleared. The next 20 regional expeditions unlock afterwards; their enemies have 20× health and damage, and trials deal 20× damage. Many attacks are lethal in one hit." % Game.first_tier_clear_count())
+	_line("Second tier: %d / 20 cleared. The following 20 are 25× stronger again (500× the first tier). These values have not been balanced for a normal playthrough." % Game.second_tier_clear_count())
+	_line("Third tier: %d / 20 cleared. The next 20 are 15× stronger again (7,500× the first tier)." % Game.third_tier_clear_count())
+	_line("Fourth tier: %d / 20 cleared. The next 20 are 2× stronger again (15,000× the first tier)." % Game.fourth_tier_clear_count())
+	_line("Hollow resonance: completing each group of 20 grants an offensive multiplier in the next appropriate tier: 10×, 200×, 2,000× and 3,000×. It does not apply outdoors or reduce enemy damage. The Last Seal uses the final attunement. These values still need playtesting.")
+	_line("Total Hollows cleared: %d / 105. Original Hollows cleared for the finale: %d / 100. Side quests grant equipment and spell blueprints." % [Game.dungeon_count(), Game.original_hollow_clear_count()])
+	if bool(story.get("keeper_defeated", false)):
+		_line("Epilogue · Seven Witnesses: %d / 7 lights offered at the Last Seal. Return to its heart to hear the recorded promises; this is optional and does not change rewards." % Game.renewal_count())
+	_line("THE MAIN JOURNEY · 25 MEMORIES", 18, UI.ACCENT)
+	_line("The journal suggests a reading order, not a required route. Memories found early are already credited. Complete each settlement leader's main quest for written directions.")
+	for act in Game.journey_acts():
+		var definition: Dictionary = act["definition"]
+		if not bool(act["unlocked"]):
+			_line("Later chapter · %d / %d memories already recovered" % [act["done"], act["total"]])
+			continue
+		_line("%s · %d / %d" % [definition["title"], act["done"], act["total"]], 17, UI.ACCENT)
+		_line(str(definition["intro"]))
+		for quest in definition["quests"]:
+			var id := str(quest["id"])
+			var status := "Recovered" if Game.story_memory_owned(id) else "Investigate"
+			_line("%s · %s" % [status, quest["brief"]])
+		if int(act["done"]) == int(act["total"]): _line(str(definition["conclusion"]))
+	var homecoming: String = Game.homecoming_objective()
+	if not homecoming.is_empty(): _line("Epilogue · The Promise Carried Home: " + homecoming)
+	_line("ASHVALE HOLLOW", 18, UI.ACCENT)
+	_line("Cleared · reward claimed" if Game.ashvale_hollow_cleared else "Accept Ilyra's A Memory in the Hollow, then find the entrance near Ashvale. Dodge the Warden's warning circles.")
+	_line("MEMORY VAULT", 18, UI.ACCENT)
+	_line("Cleared · Verdant Bloom recovered" if bool(Game.dungeon_clears.get("memory_vault", false)) else "Find the Memory Vault near Lunareth. Defeat its scouts and the two-phase sentinel to learn Verdant Bloom.")
+	_line("SUNCREST ROOST", 18, UI.ACCENT)
+	_line("Cleared · Scorched Promise recovered" if bool(Game.dungeon_clears.get("suncrest_roost", false)) else "Find the Roost near Suncrest. Defeat its guardians and dragon for a memory, 200 Ane and 60 starlight.")
+	_line("MEMORIES OF THE FIRST SILENCE · %d / %d" % [Game.story_memory_count(), Game.STORY_MEMORY_GOAL], 18, UI.ACCENT)
+	for memory in Game.all_story_memories():
+		if Game.story_memory_owned(str(memory["id"])):
+			_line("%s — %s" % [memory["name"], memory["lore"]])
+			var account: String = Game.story_account(str(memory["id"]))
+			if not account.is_empty(): _line(account)
+		else:
+			var hint := str(SETTLEMENTS.SITES[int(memory["site"])]["name"]) if memory.has("site") else str(memory["id"]).replace("_", " ").capitalize()
+			var reward_id := str(Game.MEMORY_SPELLS.get(str(memory["id"]), ""))
+			var reward_hint := " · spell discovery" if not reward_id.is_empty() else ""
+			if memory.has("site") and Game.region_chart_unlocked(str(SETTLEMENTS.SITES[int(memory["site"])]["id"])):
+				_line("%s · %s%s" % [memory["name"], _dungeon_direction(str(memory["id"]), int(memory["site"])), reward_hint])
+			else:
+				_line("Undiscovered memory · near %s%s" % [hint, reward_hint])
+	_line("CONNECTIONS · %d / %d" % [Game.story_connections().size(), Game.STORY_CHRONICLE.CONNECTIONS.size()], 18, UI.ACCENT)
+	_line("Recover related memories to connect their accounts. They can be found in any order.")
+	for connection in Game.story_connections():
+		_line("%s — %s" % [connection["title"], connection["text"]])
+	_line("Find two memory Hollows near each listed settlement. Their arenas share a common Hollow design.")
+	_line("REGIONAL HOLLOWS · %d / %d" % [Game.optional_dungeon_count(), Game.OPTIONAL_DUNGEONS.COUNT], 18, UI.ACCENT)
+	_line("Complete each settlement leader's main quest to earn its written dungeon guide. These encounters reuse Hollow arenas and enemy families; rewards are claimed once.")
+	for optional_site in range(SETTLEMENTS.SITES.size()):
+		var optional_done := 0
+		var optional_total := 0
+		for optional_index in range(Game.OPTIONAL_DUNGEONS.COUNT):
+			var optional_entry: Dictionary = Game.OPTIONAL_DUNGEONS.entry(optional_index)
+			if int(optional_entry["site"]) == optional_site:
+				optional_total += 1
+				if bool(Game.dungeon_clears.get(optional_entry["id"], false)): optional_done += 1
+		var guide_site: Dictionary = SETTLEMENTS.SITES[optional_site]
+		if Game.region_chart_unlocked(str(guide_site["id"])):
+			_line("%s · guide earned · %d / %d regional Hollows cleared" % [guide_site["name"], optional_done, optional_total])
+			for optional_index in range(Game.OPTIONAL_DUNGEONS.COUNT):
+				var guide_entry: Dictionary = Game.OPTIONAL_DUNGEONS.entry(optional_index)
+				if int(guide_entry["site"]) == optional_site:
+					var guide_id := str(guide_entry["id"])
+					var guide_tier: int = Game.hollow_tier(guide_id)
+					var tier_label := " · Tier %d (%d×)" % [guide_tier, int(Game.hollow_power_multiplier(guide_id))] if guide_tier > 1 else ""
+					_line("%s%s · %s · %s" % [guide_entry["name"], tier_label, "cleared" if bool(Game.dungeon_clears.get(guide_id, false)) else "uncleared", _dungeon_direction(guide_id, optional_site)])
+		else:
+			_line("%s · guide locked: complete %s's main quest" % [guide_site["name"], guide_site["npc"]])
+	_line("THE LAST SEAL", 18, UI.ACCENT)
+	if bool(Game.guard_story.get("keeper_defeated", false)):
+		_line(Game.story_ending())
+	else:
+		_line("Aetheris · The underground gate requires Ilyra's memory quest and the original 100 Hollow victories (the five new Hollows are optional).")
+	_line("SETTLEMENT QUESTS", 18, UI.ACCENT)
+	var any_quest := false
+	for site in SETTLEMENTS.SITES:
+		for index in range(SETTLEMENTS.RESIDENT_COUNT):
+			var resident := SETTLEMENTS.resident(site["id"], index)
+			for kind in ["main", "side"]:
+				var state: String = Game.settlement_quest_status(site["id"], kind, index)
+				if state == "available":
+					continue
+				any_quest = true
+				var detail := "Find nearby" if state == "active" else ("Return to resident" if state == "found" else "Complete")
+				_line("%s · %s · %s · %s: %s" % [site["name"], resident["name"], kind.capitalize(), Game.settlement_quest_title(str(site["id"]), kind, index), detail])
+	if not any_quest:
+		_line("Speak with residents in settlements to discover local quests.")
+	_line("REGION NOTES", 18, UI.ACCENT)
+	_line("Frostmere's snowy ground · Suncrest's savanna · the taiga west of Frostmere · Tidefall's tidal flats · Glassheaven's crystal-touched fantasy region. The written guides show nearby Hollows; the world has no graphical map.")
+	_line("TRAVEL NOTES", 18, UI.ACCENT)
+	_line("Approximate straight-line directions from your position. Explore on foot; there is no map or fast travel.")
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	var manager: Node = player.get_parent().get_node_or_null("Settlements") if player != null else null
+	if manager != null:
+		var sites: Array = manager.get("_sites")
+		for site in sites:
+			var delta: Vector2 = site["resolved"] - Vector2(player.global_position.x, player.global_position.z)
+			var direction := "Here" if delta.length() < 30.0 else ("%s %s" % ["North" if delta.y < 0 else "South", "East" if delta.x > 0 else "West"])
+			_line("%s · %s · %dm" % [site["name"], direction, int(delta.length())])
+	_line("THE VALLEY REMEMBERS", 23, UI.ACCENT)
+	_line("Recover star sigils: %d / %d" % [Game.sigils_collected, Game.TOTAL_SIGILS])
+	_line("Clear wandering slimes: %d / 6" % mini(Game.slimes_defeated, 6))
+	_line("Activate a waypoint: %s" % ("Complete" if Game.waypoints_activated > 0 else "In progress"))
+	_line("Current objective", 14, UI.ACCENT)
+	_line(Game.quest_text)
+	_line("Sigils, slimes, and new waypoints award offline currency as you play.")
+
+
+func _wish() -> void:
+	_line("STARFALL WISH", 26, UI.ACCENT)
+	_line("Spend 30 earned starlight for one random collectible. Every item has an equal chance; duplicates are kept. No real money or online purchases.")
+	_line("Possible treasures: %s" % ", ".join(PackedStringArray(Game.WISH_ITEMS)))
+	_action("✦  Make one wish   ·   30 starlight", _make_wish, Game.starlight >= 30 and Game.inventory_used() < Game.inventory_capacity())
+
+
+func _make_wish() -> void:
+	var result := Game.make_wish()
+	_status = "You received %s!" % result if result != "" else "Not enough starlight."
+	_refresh()
+
+
+func _level_up() -> void:
+	_line("CHARACTER PROGRESSION", 23, UI.ACCENT)
+	_line("Levels increase attack power by 12% each. Maximum level: 10.")
+	for i in range(Game.PARTY.size()):
+		var level: int = Game.character_levels[i]
+		var cost := level * 50
+		var suffix := "MAX LEVEL" if level >= 10 else "%d Ane" % cost
+		_action("%s   ·   Lv. %d   →   %s" % [Game.PARTY[i]["name"], level, suffix], _upgrade.bind(i), level < 10 and Game.coins >= cost)
+
+
+func _upgrade(index: int) -> void:
+	_status = "%s levelled up!" % Game.PARTY[index]["name"] if Game.upgrade_character(index) else "Not enough Ane or already at max level."
+	_refresh()
+
+
+func _shop() -> void:
+	var local_shop: Dictionary = Game.SETTLEMENT_SHOPS.by_id(shop_site_id)
+	if local_shop.is_empty():
+		_line("THE WANDERER'S SHOP", 23, UI.ACCENT)
+	else:
+		_line(str(local_shop["name"]).to_upper(), 23, UI.ACCENT)
+		_line("%s: Welcome to %s. Browse our local stock or trade treasures you already carry." % [local_shop["merchant"], SETTLEMENTS.by_id(shop_site_id)["name"]])
+		var local_item := str(local_shop["item"])
+		_action("Buy %s · %d Ane" % [local_item, Game.SETTLEMENT_SHOPS.BUY_PRICE], _buy_local_collectible, Game.coins >= Game.SETTLEMENT_SHOPS.BUY_PRICE and Game.inventory_used() < Game.inventory_capacity())
+		_line("Sell treasures · %d Ane each" % Game.SETTLEMENT_SHOPS.SELL_PRICE, 16, UI.ACCENT)
+		for item in Game.WISH_ITEMS:
+			var count := int(Game.collectibles.get(item, 0))
+			_action("Sell %s · owned %d" % [item, count], _sell_local_collectible.bind(item), count > 0)
+		_line("TRAVELLER SUPPLIES", 18, UI.ACCENT)
+	_line("Offline supplies only. Ane are earned by playing.")
+	_action("Healing potion   ·   25 Ane", _buy_potion, Game.coins >= 25 and Game.inventory_used() < Game.inventory_capacity())
+	_line("Potions require an empty inventory slot.")
+	_action("Moon hairpin · %s" % ("Owned" if Game.owned_cosmetics.has("moon_pin") else "100 Ane"), _buy_moon_pin, not Game.owned_cosmetics.has("moon_pin") and Game.coins >= 100)
+	_action("Sunrise traveller outfit · %s" % ("Owned" if Game.owned_outfits.has(4) else "150 Ane"), _buy_sunrise_outfit, not Game.owned_outfits.has(4) and Game.coins >= 150)
+	for i in range(1, Game.BACKPACK_NAMES.size()):
+		var owned: bool = Game.owned_backpacks.has(i)
+		_action("%s  ·  +%d slots  ·  %s" % [Game.BACKPACK_NAMES[i], Game.BACKPACK_BONUS[i], "Owned" if owned else "%d Ane" % Game.BACKPACK_PRICES[i]], _buy_backpack.bind(i), not owned and Game.coins >= Game.BACKPACK_PRICES[i])
+
+
+func _buy_local_collectible() -> void:
+	_status = "Treasure added to your inventory." if Game.buy_settlement_collectible(shop_site_id) else "Not enough Ane or inventory is full."
+	_refresh()
+
+
+func _sell_local_collectible(item: String) -> void:
+	_status = "Sold %s for %d Ane." % [item, Game.SETTLEMENT_SHOPS.SELL_PRICE] if Game.sell_settlement_collectible(shop_site_id, item) else "That treasure is not in your inventory."
+	_refresh()
+
+
+func _wardrobe() -> void:
+	_line("OUTFIT COLOUR", 23, UI.ACCENT)
+	for i in Game.owned_outfits:
+		_action("%s%s" % [Game.OUTFIT_NAMES[i], "  ·  Equipped" if i == Game.outfit_style else ""], _set_outfit.bind(i), i != Game.outfit_style)
+	_line("HAIR ACCESSORIES", 23, UI.ACCENT)
+	_action("No hairpin%s" % (" · Equipped" if Game.equipped_cosmetic == "" else ""), _equip_reward_cosmetic.bind(""), Game.equipped_cosmetic != "")
+	for id in Game.owned_cosmetics:
+		if Game.COSMETIC_NAMES.has(id):
+			_action("%s%s" % [Game.COSMETIC_NAMES[id], " · Equipped" if Game.equipped_cosmetic == id else " · Equip"], _equip_reward_cosmetic.bind(id), Game.equipped_cosmetic != id)
+	_line("BACKPACKS", 23, UI.ACCENT)
+	_line("Equipping a backpack increases inventory capacity. Buy backpacks in the home shop.")
+	for i in Game.owned_backpacks:
+		var equipped: bool = i == Game.equipped_backpack
+		var fits: bool = Game.inventory_used() <= 10 + Game.BACKPACK_BONUS[i]
+		var suffix := "Equipped" if equipped else ("Equip" if fits else "Too many items")
+		_action("%s  ·  %d slots  ·  %s" % [Game.BACKPACK_NAMES[i], 10 + Game.BACKPACK_BONUS[i], suffix], _equip_backpack.bind(i), not equipped and fits)
+
+
+func _set_outfit(index: int) -> void:
+	Game.set_outfit_style(index)
+	_status = "Outfit colour changed."
+	_refresh()
+
+
+func _equip_backpack(index: int) -> void:
+	_status = "Backpack equipped." if Game.equip_backpack(index) else "Inventory does not fit."
+	_refresh()
+
+
+func _buy_backpack(index: int) -> void:
+	_status = "Backpack purchased. Equip it in Wardrobe." if Game.buy_backpack(index) else "Unable to buy backpack."
+	_refresh()
+
+
+func _buy_potion() -> void:
+	_status = "Potion added to your inventory." if Game.buy_potion() else "Not enough Ane."
+	_refresh()
+
+
+func _profile() -> void:
+	_line("THE TRAVELLER", 26, UI.ACCENT)
+	_line("Active character: %s  ·  Level %d" % [Game.character()["name"], Game.character_levels[Game.party_index]])
+	_line("This expedition: %d sigils  ·  %d slimes  ·  %d waypoints" % [Game.sigils_collected, Game.slimes_defeated, Game.waypoints_activated])
+	_line("Offline collection: %d wishes  ·  %d different treasures" % [Game.wish_count, Game.collectibles.size()])
+	_line("Ane, starlight, levels, potions and treasures are saved on this device. Story objectives and waypoints are saved on this device.")
+
+
+func _settings() -> void:
+	_line("GRAPHICS", 23, UI.ACCENT)
+	_line("Current quality: %s" % Game.quality_name())
+	_action("Change graphics quality", _change_quality)
+	_line("AUDIO", 23, UI.ACCENT)
+	for bus in ["Master", "Ambience", "SFX"]:
+		var index := AudioServer.get_bus_index(bus)
+		if index >= 0:
+			var value := 0.0 if AudioServer.is_bus_mute(index) else db_to_linear(AudioServer.get_bus_volume_db(index))
+			_slider(bus, value, 0.0, 1.0, _set_bus.bind(bus))
+	_line("CONTROLS", 23, UI.ACCENT)
+	_slider("Camera sensitivity", Game.camera_sensitivity, 0.25, 2.0, Game.set_sensitivity)
+	_line("Controller: left stick move · right stick look · A jump · B dodge · X attack · Y skill · shoulders sprint/burst · D-pad up talk, down heavy, right switch, left spell 1 · triggers spells 2–3 · stick clicks spells 4–5 · Start pause · Back journal.")
+	_line("Keyboard: 1–5 cast Wander slots. Select an action below, then press a key. Escape cancels. Touch controls remain available.")
+	if _binding_action != "":
+		_line("Press a key for %s (Escape cancels)" % _binding_action.replace("_", " "), 17, UI.ACCENT)
+	for action in Game.REBIND_ACTIONS:
+		_action("%s   ·   %s" % [action.replace("_", " ").capitalize(), OS.get_keycode_string(Game.key_for_action(action))], _begin_binding.bind(action))
+	_action("Restore default keys", _reset_bindings)
+
+
+func _slider(title: String, value: float, minimum: float, maximum: float, callback: Callable) -> void:
+	var row := HBoxContainer.new()
+	_body.add_child(row)
+	var label := Label.new()
+	label.text = title
+	label.custom_minimum_size = Vector2(190, 0)
+	row.add_child(label)
+	var slider := HSlider.new()
+	slider.min_value = minimum
+	slider.max_value = maximum
+	slider.step = 0.05
+	slider.value = value
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.custom_minimum_size.y = 36
+	slider.value_changed.connect(callback)
+	row.add_child(slider)
+
+
+func _set_bus(value: float, bus: String) -> void:
+	Game.set_bus_level(bus, value)
+
+
+func _begin_binding(action: String) -> void:
+	_binding_action = action
+	_refresh()
+
+
+func _reset_bindings() -> void:
+	_binding_action = ""
+	Game.reset_keys()
+	_status = "Default keys restored."
+	_refresh()
+
+
+func _input(event: InputEvent) -> void:
+	if not visible or _binding_action == "" or not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+	if key == KEY_ESCAPE:
+		_status = "Key binding cancelled."
+	elif Game.rebind_action(_binding_action, key):
+		_status = "Key binding saved."
+	else:
+		_status = "Key unavailable or already assigned."
+	_binding_action = ""
+	get_viewport().set_input_as_handled()
+	_refresh()
+
+
+func _change_quality() -> void:
+	Game.cycle_quality()
+	var node := get_parent()
+	while node != null:
+		if node.has_method("apply_quality"):
+			node.call("apply_quality")
+			break
+		node = node.get_parent()
+	_refresh()
+
+
+func _dialogue() -> void:
+	if dialogue_site_id != "":
+		_settlement_dialogue()
+		return
+	_line("STAR GUARD ILYRA", 25, UI.ACCENT)
+	var story := Game.guard_story
+	if bool(story.get("keeper_defeated", false)):
+		_line("THE PROMISE CARRIED HOME", 18, UI.ACCENT)
+		if bool(story.get("homecoming_done", false)):
+			_line("Ilyra: The lamps are lit, and no one has to tend them alone. Whatever comes next, we will remember together.")
+		elif str(story.get("keeper_resolution", "")).is_empty():
+			_line("Ilyra: The Keeper's memory still waits at the Last Seal. Decide what to do with their testimony, then come home.")
+		elif Game.renewal_count() < Game.STORY_CHRONICLE.RENEWAL_VOICES.size():
+			_line("Ilyra: The witnesses left seven promises at the Seal. Hear them when you are ready, then come back to me.")
+		elif not Game.homecoming_in_ashvale():
+			_line("Ilyra: We have heard every promise. Let us return to Ashvale and tell the families what we found.")
+		else:
+			_line("Ilyra: I came to you with a missing patrol and a lamp going dark. We found more than answers. We found people willing to share the work of keeping the light.")
+			if str(story.get("keeper_resolution", "")) == "witness": _line("Ilyra: The Keeper's voice can stand beside the witnesses, but it will never speak for them.")
+			else: _line("Ilyra: The Keeper's privacy is theirs; the witnesses' stories remain their own. Neither has to erase the other.")
+			_action("Carry the promise home · complete the epilogue", _finish_homecoming)
+
+	if not bool(story.get("seal_accepted", false)):
+		_line("Last night an Ashvale lamp went out. This morning its keeper could not remember who lit it. The same thing happened to my patrol's names. If the light is taking memories with it, we are running out of time.")
+		_line("A star sigil may tell us why the Seven Seals are weakening. What brings you here, traveller?")
+		_action("I want to protect the valley.", _accept_guard.bind("seal", "duty"))
+		_action("I want to understand what happened.", _accept_guard.bind("seal", "curiosity"))
+	else:
+		var answer := str(story.get("answer", ""))
+		_line("I remember your promise to protect this place." if answer == "duty" else "You wanted answers. The First Silence left more questions than records.")
+		if bool(story.get("seal_done", false)):
+			_line("The sigil is safe. Your Wander now holds the Stone Bulwark spell.")
+		elif Game.guard_can_complete("seal"):
+			_line("You found a sigil! Let me copy the defensive pattern into your Wander.")
+			_action("Complete A Light Remembered · learn Stone Bulwark", _complete_guard.bind("seal"))
+		else:
+			_line("Please recover a star sigil and bring its light back here.")
+		if not bool(story.get("hollow_accepted", false)):
+			_line("The Hollow creatures have also begun gathering outside the shore.")
+			_action("Offer to help · begin Hollow Signs", _accept_guard.bind("hollow", ""))
+		elif bool(story.get("hollow_done", false)):
+			_line("The shore is safer, thanks to you. Remember what you learned of Arc Lance.")
+		elif Game.guard_can_complete("hollow"):
+			_line("You drove them back. I found an arcane pattern for your Wander.")
+			_action("Complete Hollow Signs · learn Arc Lance", _complete_guard.bind("hollow"))
+		else:
+			_line("Please defeat three slimes. Progress: %d / 3." % mini(Game.slimes_defeated, 3))
+		if bool(story.get("seal_done", false)):
+			_line("My Gift can mend wounds, but I could not save the patrol that vanished into the Hollow. I still carry their unanswered report.")
+			if bool(story.get("ilyra_following", false)):
+				_line("Ilyra accompanies you and heals you during nearby fights when your health is low.")
+				if bool(story.get("neri_following", false)): _line("Ilyra: Neri's warning gives me time to raise a ward. We can watch each other's backs.")
+				_action("Ask Ilyra to return to Ashvale", _set_ilyra_following.bind(false))
+			else:
+				_action("Ask Ilyra to travel with you", _set_ilyra_following.bind(true))
+			if not bool(story.get("memory_accepted", false)):
+				_line("The patrol described a memory fragment beyond the Ashvale Hollow's guardian. Could you recover it?")
+				_action("Begin A Memory in the Hollow", _accept_hollow_memory)
+			elif bool(story.get("memory_done", false)):
+				if story.get("memory_choice", "") == "share":
+					_line("The patrol's families know the truth. Thank you for trusting me with it. Our bond strengthens my healing Gift.")
+				else:
+					_line("We kept the fragment safe for the scholars. I still hope the families can hear its story someday.")
+				_line("THE NAMES WE CARRY", 18, UI.ACCENT)
+				match int(story.get("ilyra_arc_stage", 0)):
+					0:
+						_line("Ilyra: I trained to mend wounds. I never learned what to say to a family when the Guard will not let me give them a name. Will you help me find the missing patrol record?")
+						_action("Help Ilyra · begin The Names We Carry", _begin_ilyra_arc)
+					1:
+						_line("Ilyra: The patrol memorial stands west of Ashvale's center. Read it and tell me what the Guard left out.")
+					2:
+						_line("Ilyra: The memorial has no names. Captain Ren in Elaris Capital may know why the order was sealed. Earn his trust through his main quest, then ask him.")
+					3:
+						if not Game.story_memory_owned("memory_vault"):
+							_line("Ilyra: Ren kept a copy. The Memory Vault near Lunareth holds the matching record. Recover it, then return to me.")
+						else:
+							_line("Ilyra: The names match. Ren hid the record because the order was wrong; I stayed silent because I was afraid the families would blame me. They deserved a choice, not my silence.")
+							_line("Ilyra asks how to return the names. Both choices strengthen her healing Gift and grant 60 starlight; the choice changes her later account.")
+							_action("Read the names at the memorial", _finish_ilyra_arc.bind("names"))
+							_action("Bring private letters to the families", _finish_ilyra_arc.bind("letters"))
+					5:
+						_line("Ilyra: Let us read the names at the memorial together. The families may add what the Guard forgot.")
+					6:
+						_line("Ilyra: Mira knows the families. Ask her to help us deliver their letters privately.")
+					4:
+						if str(story.get("ilyra_arc_choice", "")) == "names":
+							_line("Ilyra: We read every name at the memorial. The families corrected our record where it was wrong. I will keep a place for their voices.")
+						else:
+							_line("Ilyra: We carried the letters to the families first. They can decide which memories to share. For once, the Guard will listen before it records.")
+				if bool(story.get("keeper_defeated", false)):
+					var resolution := str(story.get("keeper_resolution", ""))
+					if resolution == "witness": _line("Ilyra: Their testimony is in the record, but it does not erase the people they silenced. That is where we begin again.")
+					elif resolution == "private": _line("Ilyra: We can respect one person's privacy without hiding what happened to everyone else. I will make sure of it.")
+					else: _line("Ilyra: The Keeper's memory is still at the Last Seal. We can return when you are ready to decide.")
+				elif Game.story_memory_owned("memory_24") and Game.story_memory_owned("memory_25"):
+					_line("Ilyra: The builders left a way to repair the Seals, not destroy them. No one has to carry the light alone. When the way to Aetheris is open, we bring the witnesses with us.")
+				elif Game.story_memory_owned("memory_23"):
+					_line("Ilyra: The missing voices were not just lost. Someone decided which parts of the truth we were allowed to keep. We have to reach the Last Seal with more than one answer.")
+				elif Game.story_memory_owned("memory_17"):
+					_line("Ilyra: The Keeper was a guard once. I understand wanting to protect everyone. I am afraid of what happens when fear makes that choice for them.")
+				elif Game.story_memory_owned("memory_vault"):
+					_line("Ilyra: The Vault calls the Seals shields. Then why were the names of the people who raised them erased?")
+			elif bool(story.get("memory_found", false)):
+				_line("The fragment remembers the patrol sealing a breach, not abandoning their post. What should we do with it?")
+				_action("Share the truth with the families · learn Sun Spear", _resolve_hollow_memory.bind("share"))
+				_action("Preserve it for research · learn Tide Step", _resolve_hollow_memory.bind("study"))
+			else:
+				_line("Defeat the Warden in Ashvale Hollow, then interact with the chest to recover the fragment. You can leave and try again.")
+
+
+func _epilogue() -> void:
+	_line("THE LAST STAR", 30, UI.ACCENT)
+	if not bool(Game.guard_story.get("homecoming_done", false)):
+		_line("The promise has not yet been carried home.")
+		return
+	_line("When the world lost its light, one star remembered. It was never meant to shine alone.", 20)
+	_line(Game.story_ending())
+	_line("THE PROMISE CONTINUES", 22, UI.ACCENT)
+	_line("Elaris is still yours to explore. Your companions, unfinished quests and cleared Hollows remain available.")
+	_action("Return to the journey", close_menu)
+
+
+func _finale_dialogue() -> void:
+	_line("THE KEEPER'S MEMORY", 25, UI.ACCENT)
+	if not bool(Game.guard_story.get("keeper_defeated", false)):
+		_line("The Seal is still held. There is no decision to make yet.")
+		return
+	var resolution := str(Game.guard_story.get("keeper_resolution", ""))
+	if not resolution.is_empty():
+		_line(Game.story_ending())
+		return
+	_line("The Keeper is defeated, but their memory remains in the Seal. The witnesses' accounts are already safe; this choice concerns the Keeper's own testimony.")
+	_line("Ilyra: We came here because one person decided what everyone else could remember. Whatever we choose, we must not let that happen again.")
+	_action("Include the Keeper's testimony in the public record", _resolve_keeper_memory.bind("witness"))
+	_action("Keep the Keeper's memory private; preserve the witnesses' accounts", _resolve_keeper_memory.bind("private"))
+	_line("You can leave and decide later. This choice changes the epilogue and conversations; it does not change rewards or access.")
+
+
+func _resolve_keeper_memory(choice: String) -> void:
+	_status = "The decision is recorded." if Game.resolve_keeper_memory(choice) else "The decision is unavailable or already recorded."
+	_refresh()
+
+
+func _dungeon_direction(id: String, site_index: int) -> String:
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null: return "near the settlement"
+	var world := player.get_parent()
+	var stream := world.get_node_or_null("StoryDungeons")
+	var settlements := world.get_node_or_null("Settlements")
+	if stream == null or settlements == null: return "near the settlement"
+	var sites: Array = settlements.get("_sites")
+	if site_index < 0 or site_index >= sites.size(): return "near the settlement"
+	var center: Vector2 = sites[site_index]["resolved"]
+	var locations: Array = stream.get("_extra_locations") + stream.get("_locations")
+	for location in locations:
+		if str(location["id"]) != id: continue
+		var offset: Vector2 = location["pos"] - center
+		var north_south := "south" if offset.y > 15 else ("north" if offset.y < -15 else "")
+		var east_west := "east" if offset.x > 15 else ("west" if offset.x < -15 else "")
+		return "about %d m %s%s of the settlement" % [roundi(offset.length()), north_south, east_west]
+	return "near the settlement"
+
+
+func _settlement_dialogue() -> void:
+	var site := SETTLEMENTS.by_id(dialogue_site_id)
+	if site.is_empty():
+		_line("This resident is unavailable.")
+		return
+	var resident := SETTLEMENTS.resident(dialogue_site_id, dialogue_resident_index)
+	if resident.is_empty():
+		_line("This resident is unavailable.")
+		return
+	_line("%s  ·  %s" % [resident["name"], site["name"]], 25, UI.ACCENT)
+	_line("%s — %s" % [resident["role"], site["lore"]])
+	if dialogue_resident_index == 0:
+		var leader_status: String = Game.settlement_quest_status(dialogue_site_id, "main", 0)
+		var local_hook: String = str(Game.STORY_CHRONICLE.REGION_HOOKS.get(dialogue_site_id, ""))
+		var payoff: Array = Game.STORY_CHRONICLE.REGIONAL_PAYOFFS.get(dialogue_site_id, [])
+		if leader_status in ["available", "active"] and not local_hook.is_empty(): _line(local_hook)
+		if leader_status == "found" and payoff.size() == 2: _line(str(payoff[0]))
+		if leader_status == "done" and payoff.size() == 2: _line(str(payoff[1]))
+		if dialogue_site_id == "ravenhold" and Game.story_memory_owned("memory_20"):
+			if bool(Game.guard_story.get("bellwarden_done", false)):
+				_line("Tamsin: The bell belonged to the defender who stayed behind at the gate. I have added their account to our watch roll. From now on, a patrol reports the rear guard's return as well as the road ahead.")
+			else:
+				_line("Tamsin: The fortress account mentions a cracked bell behind the last wall. We never learned who kept it ringing after the refugees passed. There may be more to find deep inside that Hollow.")
+		if dialogue_site_id == "orchard":
+			match int(Game.guard_story.get("orchard_story_stage", 0)):
+				0:
+					if leader_status == "done":
+						_line("Orin: Our oldest tree has a young cutting. Some neighbours want to send it away; others fear losing the last thing our grandparents sheltered beneath. Three marks around the Orchard hold different accounts. Will you listen before we decide?")
+						_action("Help Orin · What the Roots Remember", _begin_orchard_story)
+				1: _line("Orin: The three root marks are west, northeast and southwest of the settlement center. Listen to all three; their order does not matter.")
+				2: _line("Orin: Prism can help distinguish memory from wish. Recover the Orchard's Roots and Seed of Light and ask them in Glassheaven.")
+				3:
+					_line("Orin: The roots protected children, and the gardeners shared cuttings without destroying the old tree. We can send a cutting and care instructions to Glassheaven, or shelter it here and let visitors help tend it. What should we do first?")
+					_action("Share a cutting with Glassheaven · learn Rootward", _finish_orchard_story.bind("share"))
+					_action("Shelter the cutting here · learn Rootward", _finish_orchard_story.bind("shelter"))
+				4: _line("Orin: Glassheaven has a cutting and the knowledge to tend it. The old roots are still protected." if str(Game.guard_story.get("orchard_story_choice", "")) == "share" else "Orin: Visitors help tend the sheltered cutting here, and the old roots remain undisturbed.")
+		if dialogue_site_id == "glassheaven":
+			if int(Game.guard_story.get("orchard_story_stage", 0)) == 2:
+				if leader_status == "done" and Game.story_memory_owned("memory_18") and Game.story_memory_owned("memory_19"):
+					_line("Prism: The marks agree with the two memories: the children sheltered under living roots, and careful cuttings carried their light elsewhere. There is no instruction forcing Orin to give the tree away. The keepers may choose.")
+					_action("Bring Prism's interpretation to Orin", _interpret_orchard_story)
+				else: _line("Prism: Complete my main quest and recover both Orchard memories. Then we can check the marks against the evidence.")
+			elif int(Game.guard_story.get("orchard_story_stage", 0)) == 4:
+				_line("Prism: We tend the shared cutting beside the village and record what it needs for the next keeper." if str(Game.guard_story.get("orchard_story_choice", "")) == "share" else "Prism: The cutting remains in the Orchard. I will visit and learn from its keepers instead of asking them to uproot it.")
+		if dialogue_site_id == "suncrest":
+			match int(Game.guard_story.get("caravan_stage", 0)):
+				0:
+					if leader_status == "done":
+						_line("Zara: A caravan carrying medicine missed its report from the mountain pass. Its guides took a family who could not pay, and I fear my merchants will blame them for the delay. Find the travellers before we decide what happened.")
+						_action("Help Zara · The Last Caravan", _begin_caravan_story)
+				1, 2: _line("Zara: Bryn knows the mountain routes. Ask in Frostmere and bring everyone home if you can.")
+				3:
+					if (int(Game.guard_story.get("caravan_witnesses", 0)) & 1) != 0: _line("Zara: Tala says a stocked shelter would have made their stop safer. I will listen to the people who actually guide the route.")
+					if (int(Game.guard_story.get("caravan_witnesses", 0)) & 2) != 0: _line("Zara: Esen offered to guide the next family. They are a neighbour, not cargo; the caravan council will hear them.")
+					_line("Zara: The travellers are safe. They sheltered rather than abandon the family, but the pass remains dangerous. We can stock free shelters along the route, or train paired guides with space for people who cannot pay. Which should we promise first?")
+					_action("Stock shared shelters · earn Caravan hairpin", _finish_caravan_story.bind("shelters"))
+					_action("Train paired guides · earn Caravan hairpin", _finish_caravan_story.bind("guides"))
+				4:
+					_line("Zara: The shelters are stocked for anyone on the road. The merchants agreed to publish what they contribute." if str(Game.guard_story.get("caravan_choice", "")) == "shelters" else "Zara: Bryn's paired guides travel with every caravan now. No one is turned away for lack of a fare.")
+		if dialogue_site_id == "frostmere" and int(Game.guard_story.get("caravan_stage", 0)) == 1:
+			if leader_status == "done":
+				_line("Bryn: I saw the caravan take shelter east of the village. Hollow scouts followed their tracks; the family stayed with the guides. Please clear the route while I prepare a welcome here.")
+				_action("Follow Bryn's directions", _trace_caravan)
+			else: _line("Bryn: Recover my trail record first, and I can trace the caravan safely.")
+		if dialogue_site_id == "frostmere" and int(Game.guard_story.get("caravan_stage", 0)) == 4:
+			_line("Bryn: The shelters are open to mountain travellers as well as merchants." if str(Game.guard_story.get("caravan_choice", "")) == "shelters" else "Bryn: My guides share the route in pairs, and the caravan carries neighbours without a fare.")
+		if dialogue_site_id == "frostmere":
+			match int(Game.guard_story.get("watch_stage", 0)):
+				0:
+					if leader_status == "done":
+						_line("Bryn: My brother stayed at the rear of the old pass while the rest of us fled. I kept telling myself one brave guide was enough. Now scouts are approaching Frostmere, and I will not leave another guide alone. Will you stand the watch with us?")
+						_action("Help Bryn · A Watch for Everyone", _begin_watch_story)
+				1:
+					_line("Bryn: Signal the watch north of the village center, then drive off both attackers. If you have to retreat, the watch can be signalled again.")
+				2:
+					_line("Bryn: We held because the watch warned us together. My brother never got a chance to return. Help me decide what we practise next: shared patrols on the pass, or evacuation drills with a guide for every family.")
+					_action("Organise shared patrols · learn Watchfire", _finish_watch_story.bind("patrol"))
+					_action("Practise guided evacuations · learn Watchfire", _finish_watch_story.bind("evacuation"))
+				3:
+					_line("Bryn: The pass patrols now travel in pairs and report to the village. No one has to hold the rear alone." if str(Game.guard_story.get("watch_choice", "")) == "patrol" else "Bryn: Every family knows where to meet a guide. We practise leaving together, not just holding the wall.")
+		if dialogue_site_id == "lunareth":
+			match int(Game.guard_story.get("wander_story_stage", 0)):
+				0:
+					if leader_status == "done":
+						_line("Veya: A Wander was lost on the Evergloom road, carrying messages entrusted to it by several people. I will not copy them without learning what their owners wanted. Will you find it?")
+						_action("Help Veya · The Wander That Waited", _begin_wander_story)
+				1:
+					_line("Veya: The Wander's Mark and the Twilight Witness may explain its writing. Find those memories and ask Rook in Evergloom; they know the abandoned road.")
+				2:
+					_line("Veya: Rook found its trail. Search east of Evergloom's center and bring the Wander back without copying its pages.")
+				3:
+					_line("Veya: Its owners asked to choose who heard them. We can preserve the message publicly with their names withheld, or take it to their families first. Both routes protect their choice.")
+					_action("Archive the anonymous message", _finish_wander_story.bind("public"))
+					_action("Take the message to the families first", _finish_wander_story.bind("families"))
+				4:
+					_line("Veya: The anonymous message is in the archive; the families decide whether their names follow." if str(Game.guard_story.get("wander_story_choice", "")) == "public" else "Veya: The families have the message. They will decide whether it belongs in the archive.")
+					_line("Veya: I once corrected a colleague's account until it matched mine. They stopped bringing me their questions. The lost Wander reminded me why listening must come before certainty.")
+					_line("Veya: My Gift can slow nearby scouts. When Neri travels with us, her warning helps me interrupt one of their attacks. Large guardians resist the effect.")
+					if bool(Game.guard_story.get("veya_following", false)):
+						if bool(Game.guard_story.get("neri_following", false)): _line("Veya: Neri hears danger before I can read its pattern. She gives me the moment I need to answer it.")
+						_action("Ask Veya to return to Lunareth", _set_veya_following.bind(false))
+					else:
+						_action("Invite Veya to travel with you", _set_veya_following.bind(true))
+		if dialogue_site_id == "evergloom" and int(Game.guard_story.get("wander_story_stage", 0)) == 1:
+			if leader_status == "done" and Game.story_memory_owned("memory_09") and Game.story_memory_owned("memory_22"):
+				_line("Rook: The survey shows a courier sheltered east of here. The Wander's mark matches the witness's copy. The courier hid the book rather than let the voices be erased.")
+				_action("Follow Rook's trail", _trace_lost_wander)
+			else:
+				_line("Rook: Complete my survey and recover the Wander's Mark and the Twilight Witness. With both records I can trace the courier's route.")
+		if dialogue_site_id == "tidefall":
+			match int(Game.guard_story.get("harbor_stage", 0)):
+				0:
+					if leader_status == "done":
+						_line("Neri: The old warning bell rang too late for some crews. I want a signal every harbour can hear, but I won't ask them to trust another order they cannot question. Will you help?")
+						_action("Help Neri · A Bell Between Shores", _begin_harbor_story)
+				1:
+					_line("Neri: Recover the drowned bell's account and the voices in Glassheaven's prism. Prism can help us decide how to carry a warning without losing anyone's voice.")
+				2:
+					if str(Game.guard_story.get("harbor_choice", "")) == "shared":
+						_line("Neri: A bell on each boat means any crew can warn the others. It will take training to prevent false alarms, but no one harbour can silence the rest.")
+					else:
+						_line("Neri: A harbour station can check each warning before sounding it. We will publish the signals and keep a second watch so a single keeper cannot suppress them.")
+					_line("Neri: Prism taught me how to hold a little light in reserve. Ilyra showed me how to brace against a wave. Let us teach the pattern to your Wander.")
+					_action("Finish the warning plan · learn Harbor Light", _finish_harbor_story)
+				3:
+					_line("Neri: The crews are practising warnings from boat to boat. They can all raise the alarm." if str(Game.guard_story.get("harbor_choice", "")) == "shared" else "Neri: The harbour station keeps an open warning log, and two watches check each signal. The crews can challenge us if we get it wrong.")
+					_line("Neri: My Gift can replenish your Light in combat. If Ilyra is travelling with us, we can also raise a small ward together.")
+					if bool(Game.guard_story.get("neri_following", false)):
+						if bool(Game.guard_story.get("ilyra_following", false)):
+							_line("Neri: Ilyra taught me to brace before the wave. I taught her how the crews pass a warning from boat to boat. Together we have time to protect each other.")
+						if bool(Game.guard_story.get("veya_following", false)): _line("Neri: I call the warning, Veya catches the rhythm. We can break a scout's attack before it reaches the crew.")
+						_action("Ask Neri to return to Tidefall", _set_neri_following.bind(false))
+					else:
+						_action("Invite Neri to travel with you", _set_neri_following.bind(true))
+		if dialogue_site_id == "glassheaven" and int(Game.guard_story.get("harbor_stage", 0)) == 1:
+			if leader_status != "done" or not Game.story_memory_owned("memory_11") or not Game.story_memory_owned("memory_12"):
+				_line("Prism: Finish my main quest, then bring the accounts from the Drowned Bell near Tidefall and the Prism of Voices near here. We need both before designing the warning.")
+			else:
+				_line("Prism: The bell gave people time, but its warning came late. The crystal kept many voices, but someone had to listen. Neri could give every boat a signal, or use a staffed harbour station to check the warnings.")
+				_line("Prism: Neither is perfect. Choose the plan to take back to Neri; both teach Harbor Light.")
+				_action("Give each crew a warning signal", _choose_harbor_story.bind("shared"))
+				_action("Build a public harbour warning station", _choose_harbor_story.bind("station"))
+		if dialogue_site_id == "ashvale" and int(Game.guard_story.get("ilyra_arc_stage", 0)) == 6:
+			_line("Mira: I will help Ilyra carry the letters. Each family can decide what to keep and what to share. Thank you for bringing their loved ones home in words.")
+			_action("Deliver the letters with Mira and Ilyra", _deliver_ilyra_letters)
+		if dialogue_site_id == "capital" and int(Game.guard_story.get("ilyra_arc_stage", 0)) == 2:
+			if leader_status == "done":
+				_line("Ren: The patrol record was sealed under my command. I believed hiding a failed order would spare their families. The copy in Lunareth's Memory Vault can tell Ilyra what I would not.")
+				_action("Ask Ren for the patrol record", _hear_ilyra_guard_record)
+			else:
+				_line("Ren: Recover my Seal report first. I need to know I can trust you with the patrol's sealed order.")
+		if leader_status != "done": _line("Complete my main quest to receive a written guide to this region's Hollows.")
+		elif bool(Game.guard_story.get("keeper_defeated", false)):
+			var epilogue: String = str(Game.STORY_CHRONICLE.REGIONAL_EPILOGUES.get(dialogue_site_id, ""))
+			if not epilogue.is_empty(): _line(epilogue)
+			var resolution := str(Game.guard_story.get("keeper_resolution", ""))
+			if resolution == "witness": _line("The Keeper's testimony will stand beside ours, not replace it.")
+			elif resolution == "private": _line("We will share our own histories, even while the Keeper's memory remains private.")
+	for kind in ["main", "side"]:
+		var status: String = Game.settlement_quest_status(dialogue_site_id, kind, dialogue_resident_index)
+		var title := "Main" if kind == "main" else "Side"
+		var item: String = str(resident[kind])
+		var side_story: Dictionary = Game.REGIONAL_SIDE_STORIES.STORIES.get(dialogue_site_id, {}) if kind == "side" and dialogue_resident_index == 0 else {}
+		if not side_story.is_empty():
+			_line("SIDE · " + str(side_story["title"]), 17, UI.ACCENT)
+			_line(str(side_story.get(status, "")))
+			if status == "available":
+				_line("Look for the labelled %s near the settlement. Reward: %s." % [item, Game.settlement_reward_text(kind, dialogue_resident_index, dialogue_site_id)])
+				_action("Accept side quest · " + str(side_story["title"]), _accept_settlement.bind(kind))
+			elif status == "found":
+				_action("Return %s · reward %s" % [item, Game.settlement_reward_text(kind, dialogue_resident_index, dialogue_site_id)], _complete_settlement.bind(kind))
+			elif status == "done" and bool(Game.guard_story.get("keeper_defeated", false)):
+				_line(str(side_story["after"]))
+			continue
+		match status:
+			"available":
+				_line("%s quest: Could you find my %s? Look for my labelled glowing item near this settlement. Reward: %s." % [title, item, Game.settlement_reward_text(kind, dialogue_resident_index, dialogue_site_id)])
+				_action("Accept %s quest · %s" % [title.to_lower(), item], _accept_settlement.bind(kind))
+			"active":
+				_line("%s quest: Find my labelled %s near the settlement and bring it back." % [title, item])
+			"found":
+				_action("Return %s · reward %s" % [item, Game.settlement_reward_text(kind, dialogue_resident_index, dialogue_site_id)], _complete_settlement.bind(kind))
+			"done":
+				_line("%s quest: Thank you for returning the %s." % [title, item])
+
+
+func _accept_settlement(kind: String) -> void:
+	_status = "Quest accepted. Look for the glowing item near the settlement." if Game.accept_settlement_quest(dialogue_site_id, kind, dialogue_resident_index) else "Quest already accepted."
+	_refresh()
+
+
+func _complete_settlement(kind: String) -> void:
+	_status = "Quest complete. Reward collected." if Game.complete_settlement_quest(dialogue_site_id, kind, dialogue_resident_index) else "Find the item first."
+	_refresh()
+
+
+func _accept_guard(quest: String, answer: String) -> void:
+	_status = "Quest added to your journal." if Game.guard_accept(quest, answer) else "Quest already accepted."
+	_refresh()
+
+
+func _complete_guard(quest: String) -> void:
+	_status = "Quest complete. Assign the new spell in the spellbook." if Game.guard_complete(quest) else "Objective not yet complete."
+	_refresh()
+
+
+func _story() -> void:
+	_line("THE VALLEY REMEMBERS", 25, UI.ACCENT)
+	_line("The valley's scattered stars have fallen quiet. Sora and her companions travel between the waypoints to bring their light home.")
+	_line("✦  Recover twelve sigils and discover the landmarks of the valley.")
+	_line("Long ago, the First Silence nearly extinguished Elaris. Seven Seals guard the world, but Hollows have begun to open and memories of the past are scattered.")
+	_line("Visit Star Guard Ilyra in Ashvale. A recovered sigil leads to a memory in the Hollow, and a choice about who should hear its story.")
+	_line("Seek the memories in Ashvale Hollow, the Memory Vault and Suncrest Roost. Recover all 25 memories and clear the other 75 Hollows to open the Last Seal.")
+	if bool(Game.guard_story.get("keeper_defeated", false)):
+		_line(Game.story_ending())
+		if bool(Game.guard_story.get("homecoming_done", false)): _action("Read the completed epilogue", _select.bind("Epilogue"))
+	if Game.wander != null:
+		_line("WANDER RESEARCH", 18, UI.ACCENT)
+		if not bool(Game.guard_story.get("seal_done", false)):
+			_line("Complete Ilyra's A Light Remembered quest to unlock spell research.")
+		else:
+			_line("Combine two elements and adjust shape, range and power. Each recipe costs 10 starlight. Water, Ice and Earth unlock through memories near Tidefall, Frostmere and The Deep.")
+			_action("First element: %s" % Wander.RESEARCH_ELEMENTS[_research_first], _cycle_research.bind("first"))
+			_action("Second element: %s" % Wander.RESEARCH_ELEMENTS[_research_second], _cycle_research.bind("second"))
+			_action("Shape: %s" % ("Pulse around you" if _research_shape else "Focused ahead"), _cycle_research.bind("shape"))
+			_action("Reach: %s" % ("Long" if _research_reach else "Close"), _cycle_research.bind("reach"))
+			_action("Power: %s" % ("Strong" if _research_intensity else "Efficient"), _cycle_research.bind("intensity"))
+			var recipe := Wander.research_id(_research_first, _research_second, _research_shape, _research_reach, _research_intensity)
+			var preview: Dictionary = Game.wander.spell(recipe)
+			_line("%s · %.0f Light · %.0fm range · %.1f power" % [preview["name"], preview["cost"], preview["range"], preview["power"]])
+			var elements_ready: bool = Game.research_element_unlocked(_research_first) and Game.research_element_unlocked(_research_second)
+			if not elements_ready: _line("Recover the matching memory before researching this element.")
+			_action("Discover this spell · 10 starlight", _research_spell, elements_ready and Game.starlight >= 10 and not Game.wander.known(recipe))
+		_line("WANDER MASTERY & EQUIPMENT", 18, UI.ACCENT)
+		var equipped := Game.wander.equipped_at(_wander_slot)
+		var equipped_name: String = str(Game.wander.spell(equipped).get("name", "Empty"))
+		_action("Slot %d: %s · choose another slot" % [_wander_slot + 1, equipped_name], _cycle_wander_slot)
+		_action("Clear this spell slot", _equip_wander.bind(""), equipped != "")
+		for id in Game.wander.known_ids():
+			if Game.wander.known(id):
+				_action("%s · Level %d / 30 · equip in slot %d" % [Game.wander.spell(id)["name"], Game.wander.level_of(id), _wander_slot + 1], _equip_wander.bind(id))
+				if id == "frost_shard" or id == "gale_palm": _line(Game.wander.mastery_hint(id))
+
+
+func _cycle_research(field: String) -> void:
+	match field:
+		"first": _research_first = (_research_first + 1) % Wander.RESEARCH_ELEMENTS.size()
+		"second": _research_second = (_research_second + 1) % Wander.RESEARCH_ELEMENTS.size()
+		"shape": _research_shape = 1 - _research_shape
+		"reach": _research_reach = 1 - _research_reach
+		"intensity": _research_intensity = 1 - _research_intensity
+	_refresh()
+
+
+func _research_spell() -> void:
+	var id: String = Game.research_spell(_research_first, _research_second, _research_shape, _research_reach, _research_intensity)
+	_status = "Discovered %s. Assign it below." % Game.wander.spell(id)["name"] if id != "" else "Unable to discover this recipe."
+	_refresh()
+
+
+func _cycle_wander_slot() -> void:
+	_wander_slot = (_wander_slot + 1) % 5
+	_refresh()
+
+
+func _equip_wander(id: String) -> void:
+	if Game.wander != null and Game.wander.set_slot(_wander_slot, id):
+		_status = "Spell slot updated."
+	else:
+		_status = "Unable to equip spell."
+	_refresh()
+
+
+func _toggle_armor() -> void:
+	Game.equip_wayfarer_armor(not Game.equipped_wayfarer_armor)
+	_status = "Armor equipment updated."
+	_refresh()
+
+
+func _equip_reward_weapon(id: String) -> void:
+	_status = "Weapon equipped for sword users." if Game.equip_reward_weapon(id) else "Weapon unavailable."
+	_refresh()
+
+
+func _equip_reward_cosmetic(id: String) -> void:
+	_status = "Hair accessory changed." if Game.equip_reward_cosmetic(id) else "Accessory unavailable."
+	_refresh()
+
+
+func _learn_blueprint() -> void:
+	_status = "Spell learned. Assign it in Story or the spell wheel." if Game.learn_reward_blueprint(Game.BLUEPRINT_ID) else "Spell already learned or unavailable."
+	_refresh()
+
+
+func _buy_moon_pin() -> void:
+	_status = "Moon hairpin purchased. Equip it in Wardrobe." if Game.buy_reward_cosmetic("moon_pin") else "Unable to purchase."
+	_refresh()
+
+
+func _buy_sunrise_outfit() -> void:
+	_status = "Sunrise outfit purchased. Equip it in Wardrobe." if Game.buy_reward_outfit() else "Unable to purchase."
+	_refresh()
+
+
+func _toggle_weapons() -> void:
+	_show_weapons = not _show_weapons
+	_refresh()
+
+
+func _finish_homecoming() -> void:
+	if Game.finish_homecoming():
+		_status = "The promise is carried home. You received 150 starlight."
+		_tab = "Epilogue"
+	else:
+		_status = "Hear the witnesses, resolve the Keeper's memory and return to Ashvale first."
+	_refresh()
+
+
+func _begin_orchard_story() -> void:
+	_status = "What the Roots Remember added to your journal." if Game.begin_orchard_story() else "Complete Orin's main quest first."
+	_refresh()
+
+
+func _interpret_orchard_story() -> void:
+	_status = "Prism's interpretation is ready. Return to Orin." if Game.interpret_orchard_story() else "Hear all three marks and recover both memories first."
+	_refresh()
+
+
+func _finish_orchard_story(choice: String) -> void:
+	_status = "The cutting's future is chosen. Rootward is learned." if Game.finish_orchard_story(choice) else "Speak to Prism first."
+	_refresh()
+
+
+func _begin_caravan_story() -> void:
+	_status = "The Last Caravan added to your journal." if Game.begin_caravan_story() else "Complete Zara's main quest first."
+	_refresh()
+
+
+func _trace_caravan() -> void:
+	_status = "Search east of Frostmere's center." if Game.trace_caravan() else "Complete Bryn's main quest first."
+	_refresh()
+
+
+func _finish_caravan_story(choice: String) -> void:
+	_status = "The travellers' plan is recorded. The Caravan hairpin is in Wardrobe." if Game.finish_caravan_story(choice) else "Find the caravan first."
+	_refresh()
+
+
+func _begin_watch_story() -> void:
+	_status = "A Watch for Everyone added to your journal." if Game.begin_watch_story() else "Complete Bryn's main quest first."
+	_refresh()
+
+
+func _finish_watch_story(choice: String) -> void:
+	_status = "The watch plan is recorded. Watchfire is learned." if Game.finish_watch_story(choice) else "Defend the watch first."
+	_refresh()
+
+
+func _set_veya_following(following: bool) -> void:
+	_status = "Veya joins your journey." if following else "Veya returns to Lunareth."
+	if not Game.set_veya_following(following): _status = "Complete The Wander That Waited first."
+	_refresh()
+
+
+func _set_neri_following(following: bool) -> void:
+	_status = "Neri joins your journey." if following else "Neri returns to Tidefall."
+	if not Game.set_neri_following(following): _status = "Complete A Bell Between Shores first."
+	_refresh()
+
+
+func _begin_wander_story() -> void:
+	_status = "The Wander That Waited added to your journal." if Game.begin_wander_story() else "Complete Veya's main quest first."
+	_refresh()
+
+
+func _trace_lost_wander() -> void:
+	_status = "Rook traced the courier. Search east of Evergloom's center." if Game.trace_lost_wander() else "Recover both memories and complete Rook's main quest first."
+	_refresh()
+
+
+func _finish_wander_story(choice: String) -> void:
+	_status = "Message entrusted. Echo Resonance learned; assign it in the spellbook." if Game.finish_wander_story(choice) else "Recover the lost Wander first."
+	_refresh()
+
+
+func _begin_harbor_story() -> void:
+	_status = "A Bell Between Shores added to your journal." if Game.begin_harbor_story() else "Complete Neri's main quest first."
+	_refresh()
+
+
+func _choose_harbor_story(choice: String) -> void:
+	_status = "Warning plan recorded. Return to Neri." if Game.choose_harbor_story(choice) else "Recover both memories and complete Prism's main quest first."
+	_refresh()
+
+
+func _finish_harbor_story() -> void:
+	_status = "Harbor Light learned. Assign it in the spellbook." if Game.finish_harbor_story() else "The warning plan is not ready."
+	_refresh()
+
+
+func _begin_ilyra_arc() -> void:
+	_status = "The Names We Carry added to your journal." if Game.begin_ilyra_arc() else "Resolve Ilyra's Hollow memory first."
+	_refresh()
+
+
+func _hear_ilyra_guard_record() -> void:
+	_status = "Ren's account recorded. Find the matching record in the Memory Vault." if Game.hear_ilyra_guard_record() else "Complete Ren's main quest first."
+	_refresh()
+
+
+func _finish_ilyra_arc(choice: String) -> void:
+	_status = "Choice recorded. Complete the final step in Ashvale." if Game.finish_ilyra_arc(choice) else "Recover the Vault memory first."
+	_refresh()
+
+
+func _deliver_ilyra_letters() -> void:
+	_status = "The letters are delivered. Ilyra's Gift is strengthened; you received 60 starlight." if Game.complete_ilyra_arc() else "The letters are not ready."
+	_refresh()
+
+
+func _accept_hollow_memory() -> void:
+	_status = "A Memory in the Hollow added to your journal." if Game.accept_hollow_memory() else "Complete Ilyra's first quest first."
+	_refresh()
+
+
+func _resolve_hollow_memory(choice: String) -> void:
+	_status = "Memory resolved. Your new spell is available in Story and the spell wheel." if Game.resolve_hollow_memory(choice) else "The memory is not ready to resolve."
+	_refresh()
+
+
+func _set_ilyra_following(following: bool) -> void:
+	_status = "Ilyra joins your journey." if following else "Ilyra returns to Ashvale."
+	if not Game.set_ilyra_following(following):
+		_status = "Complete Ilyra's first quest first."
+	_refresh()

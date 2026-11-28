@@ -1,0 +1,363 @@
+extends Node3D
+## The descent is built only while entered. Each guarded gate locks until its
+## defenders are defeated; dying or leaving resets the current expedition.
+const DOOR := preload("res://assets/dungeon/wall_doorway.glb")
+const HORROR_DRESSING := preload("res://scripts/hollow_dressing.gd")
+const HOLLOW_STONE_SHADER := preload("res://shaders/hollow_stone.gdshader")
+const HOLLOW_STONE_TEXTURE := preload("res://assets/dungeon/hollow_stone.png")
+static var _stone_material: ShaderMaterial
+const TORCH := preload("res://assets/dungeon/torch_lit.gltf.glb")
+const SENTRY := preload("res://scripts/hollow_sentry.gd")
+const BOSS := preload("res://scripts/hollow_warden.gd")
+const SECTOR_LENGTH := 100.0
+const SECTORS := 10
+const DESCENT_PER_SECTOR := 8.0
+const START_DEPTH := -100.0
+var entrance := Vector3.ZERO
+var player: CharacterBody3D
+var return_point := Vector3.ZERO
+var inside := false
+var chamber: Node3D
+var boss: Node3D
+var sector := 0
+var _remaining := 0
+var _gates: Array[Node3D] = []
+var _story_echoes: Array[Node3D] = []
+var _resolution_marker: Node3D
+var _renewal_lights: Array[Node3D] = []
+var _exit: Vector3
+var _arena_exit: Vector3
+var _checkpoint: Vector3
+
+
+func setup(world: Node3D, actor: CharacterBody3D, center: Vector2) -> void:
+	player = actor
+	var p := center + Vector2(0, -42)
+	entrance = Vector3(p.x, float(world.call("_height", p.x, p.y)), p.y)
+	position = entrance
+	add_child(DOOR.instantiate())
+	var label := Label3D.new()
+	label.text = "THE LAST SEAL\nF / Talk · Original 100 Hollows required"
+	label.position.y = 4.5
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 48
+	label.pixel_size = 0.006
+	label.outline_size = 8
+	add_child(label)
+	Game.respawned.connect(_on_respawn)
+
+
+func try_interact(actor: Node3D) -> bool:
+	if inside:
+		for index in range(_renewal_lights.size()):
+			var light := _renewal_lights[index]
+			if is_instance_valid(light) and actor.global_position.distance_to(light.global_position) < 2.2:
+				if Game.offer_renewal_light(index):
+					_update_renewal_light(index)
+					var message: String = Game.STORY_CHRONICLE.RENEWAL_VOICES[index]
+					if Game.renewal_count() == Game.STORY_CHRONICLE.RENEWAL_VOICES.size(): message += " The seven lights steady the Seal together."
+					Game.toast.emit(message)
+				else:
+					Game.toast.emit("This witness has already offered their light.")
+				return true
+		if is_instance_valid(_resolution_marker) and actor.global_position.distance_to(_resolution_marker.global_position) < 3.5:
+			var menu := get_parent().get_node_or_null("HUD/Root/AdventureMenu")
+			if menu != null: menu.call("open_menu", "Finale")
+			else: Game.toast.emit("The Keeper's memory waits at the Seal.")
+			return true
+		for echo in _story_echoes:
+			if is_instance_valid(echo) and actor.global_position.distance_to(echo.global_position) < 3.5:
+				Game.toast.emit(str(echo.get_meta("story")))
+				return true
+		if actor.global_position.distance_to(_exit) < 4.0 or actor.global_position.distance_to(_arena_exit) < 4.0:
+			_leave()
+			return true
+	elif actor.global_position.distance_to(entrance) < 5.0:
+		if not Game.can_enter_finale():
+			Game.toast.emit("Resolve Ilyra's memory quest and clear the original 100 Hollows (%d / 100)." % Game.original_hollow_clear_count())
+		else:
+			_enter()
+		return true
+	return false
+
+
+func _enter() -> void:
+	if inside or not is_instance_valid(player): return
+	return_point = player.global_position
+	inside = true
+	var atmosphere_world := player.get_parent()
+	if atmosphere_world != null and atmosphere_world.has_method("begin_dungeon_atmosphere"): atmosphere_world.call("begin_dungeon_atmosphere", self, player)
+	Game.in_final_dungeon = true
+	Game.enter_hollow_resonance("last_seal")
+	sector = 0
+	_remaining = 0
+	_gates.clear()
+	_story_echoes.clear()
+	_renewal_lights.clear()
+	_resolution_marker = null
+	chamber = Node3D.new()
+	chamber.name = "LastSealDepths"
+	get_parent().add_child(chamber)
+	chamber.global_position = Vector3(entrance.x, START_DEPTH, entrance.z)
+	var dressing_locations: Array[Vector3] = []
+	for depth_index in range(SECTORS):
+		for fraction in [0.25, 0.75]:
+			dressing_locations.append(Vector3(-4.5 if fraction < 0.5 else 4.5, -DESCENT_PER_SECTOR * (float(depth_index) + fraction), -SECTOR_LENGTH * (float(depth_index) + fraction)))
+	HORROR_DRESSING.add_to(chamber, dressing_locations)
+	var angle := -atan2(DESCENT_PER_SECTOR, SECTOR_LENGTH)
+	var length := sqrt(SECTOR_LENGTH * SECTOR_LENGTH + DESCENT_PER_SECTOR * DESCENT_PER_SECTOR)
+	for i in range(SECTORS):
+		var mid := Vector3(0, -DESCENT_PER_SECTOR * (float(i) + 0.5), -SECTOR_LENGTH * (float(i) + 0.5))
+		_block(chamber, mid + Vector3(0, -0.5, 0), Vector3(12, 1, length + 0.1), Color(0.22, 0.20, 0.29), angle)
+		_block(chamber, mid + Vector3(-6, 2.5, 0), Vector3(0.6, 6, length + 0.1), Color(0.18, 0.16, 0.23), angle)
+		_block(chamber, mid + Vector3(6, 2.5, 0), Vector3(0.6, 6, length + 0.1), Color(0.18, 0.16, 0.23), angle)
+		_block(chamber, mid + Vector3(0, 5.5, 0), Vector3(12, 0.6, length + 0.1), Color(0.16, 0.14, 0.21), angle)
+		var gate_z := -SECTOR_LENGTH * (float(i) + 1.0) + 4.0
+		var gate_y := -DESCENT_PER_SECTOR * (float(i) + 0.96)
+		var gate := _block(chamber, Vector3(0, gate_y + 2.4, gate_z), Vector3(11.5, 5, 0.65), Color(0.45, 0.18, 0.30))
+		gate.name = "GuardGate%d" % i
+		_gates.append(gate)
+		for z_offset in [25.0, 75.0]:
+			var torch := TORCH.instantiate() as Node3D
+			torch.position = Vector3(5.3, -DESCENT_PER_SECTOR * (float(i) + z_offset / SECTOR_LENGTH) + 1.2, -SECTOR_LENGTH * i - z_offset)
+			torch.rotation.y = -PI / 2
+			chamber.add_child(torch)
+	# Optional echoes give the Keeper and the witnesses a voice on the descent.
+	# They never lock progress, rewards or a returning player's route.
+	for index in range(Game.STORY_CHRONICLE.FINAL_ECHOES.size()):
+		var echo := Node3D.new()
+		echo.name = "LastSealEcho%d" % (index + 1)
+		var depth := 50.0 + float(index) * 300.0
+		echo.position = Vector3(-4, -DESCENT_PER_SECTOR * depth / SECTOR_LENGTH, -depth)
+		echo.set_meta("story", Game.STORY_CHRONICLE.FINAL_ECHOES[index])
+		chamber.add_child(echo)
+		var echo_label := Label3D.new()
+		echo_label.text = "F / Talk · Listen to an echo"
+		echo_label.position.y = 1.8
+		echo_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		echo_label.font_size = 32
+		echo_label.pixel_size = 0.004
+		echo.add_child(echo_label)
+		_story_echoes.append(echo)
+	# Closed arena is a continuation of the descending kilometre corridor.
+	_block(chamber, Vector3(0, -80.5, -1010), Vector3(20, 1, 20), Color(0.24, 0.20, 0.29))
+	_block(chamber, Vector3(-10, -77, -1010), Vector3(0.5, 7, 20), Color(0.18, 0.16, 0.23))
+	_block(chamber, Vector3(10, -77, -1010), Vector3(0.5, 7, 20), Color(0.18, 0.16, 0.23))
+	_block(chamber, Vector3(0, -77, -1020), Vector3(20, 7, 0.5), Color(0.18, 0.16, 0.23))
+	_block(chamber, Vector3(0, -73.5, -1010), Vector3(20, 0.5, 20), Color(0.16, 0.14, 0.21))
+	_exit = chamber.to_global(Vector3(0, 0, -3))
+	_arena_exit = chamber.to_global(Vector3(7, -80, -1015))
+	_marker("F / Talk · Leave the depths", Vector3(0, 2, -3))
+	_marker("F / Talk · Return to Aetheris", Vector3(7, -78, -1015))
+	_checkpoint = chamber.to_global(Vector3(0, 1.6, -3))
+	player.global_position = _checkpoint
+	player.velocity = Vector3.ZERO
+	if bool(Game.guard_story.get("keeper_defeated", false)):
+		for gate in _gates: gate.queue_free()
+		_spawn_resolution_marker()
+		_spawn_renewal_lights()
+		Game.toast.emit("The Keeper is defeated. Seven witnesses can renew the Seal together.")
+	else:
+		_spawn_guardians()
+		Game.toast.emit("The Last Seal: defeat each pair of guardians to open the way down.")
+
+
+func _spawn_guardians() -> void:
+	if not inside or sector >= SECTORS: return
+	_remaining = 2
+	for x in [-2.5, 2.5]:
+		var scout := SENTRY.new()
+		scout.set("_power_multiplier", 15000.0)
+		scout.is_orc = sector % 2 == 1
+		scout.position = Vector3(x, -DESCENT_PER_SECTOR * (float(sector) + 0.65) + 0.2, -SECTOR_LENGTH * (float(sector) + 0.65))
+		chamber.add_child(scout)
+		scout.defeated.connect(_guardian_defeated)
+
+
+func _guardian_defeated() -> void:
+	if not inside or _remaining <= 0: return
+	_remaining -= 1
+	if _remaining != 0: return
+	if is_instance_valid(_gates[sector]): _gates[sector].queue_free()
+	sector += 1
+	# A checkpoint after each gate makes the long descent fair without changing
+	# the player's overworld waypoint or persisting a half-finished expedition.
+	_checkpoint = chamber.to_global(Vector3(0, -DESCENT_PER_SECTOR * sector + 1.6, -SECTOR_LENGTH * sector + 1.0))
+	if sector == SECTORS:
+		_spawn_keeper()
+	else:
+		_spawn_guardians()
+		Game.toast.emit("Gate opened · depth %d / %d" % [sector * 100, SECTORS * 100])
+
+
+func _spawn_keeper() -> void:
+	boss = BOSS.new()
+	boss.set("_power_multiplier", 15000.0)
+	boss.set("is_keeper", true)
+	boss.position = Vector3(0, -79.8, -1013)
+	chamber.add_child(boss)
+	boss.connect("defeated", _keeper_defeated)
+	Game.toast.emit(str(Game.STORY_CHRONICLE.KEEPER_PHASES[0]))
+
+
+func _keeper_defeated() -> void:
+	if not bool(Game.guard_story.get("keeper_defeated", false)):
+		Game.guard_story["keeper_defeated"] = true
+		Game.coins += 1000
+		Game.starlight += 200
+		Game.save_collection()
+		Game.collection_changed.emit()
+	_spawn_resolution_marker()
+	_spawn_renewal_lights()
+	Game.toast.emit("The Keeper falls. Seven witnesses offer their light. The Keeper's memory awaits your decision.")
+
+
+func _spawn_resolution_marker() -> void:
+	if not is_instance_valid(chamber) or is_instance_valid(_resolution_marker) or not str(Game.guard_story.get("keeper_resolution", "")).is_empty(): return
+	_resolution_marker = Node3D.new()
+	_resolution_marker.name = "KeeperMemory"
+	_resolution_marker.position = Vector3(0, -80.0, -1010)
+	chamber.add_child(_resolution_marker)
+	var visual := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.32
+	sphere.height = 0.64
+	visual.mesh = sphere
+	visual.position.y = 1.0
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(0.8, 0.76, 1.0)
+	visual.material_override = material
+	_resolution_marker.add_child(visual)
+	var label := Label3D.new()
+	label.text = "F / Talk · The Keeper's memory"
+	label.position.y = 2.0
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 36
+	label.pixel_size = 0.004
+	label.outline_size = 6
+	_resolution_marker.add_child(label)
+
+
+func _spawn_renewal_lights() -> void:
+	if not is_instance_valid(chamber) or not _renewal_lights.is_empty(): return
+	var names := ["Mira", "Ren", "Veya", "Neri", "Prism", "Delve", "Seren"]
+	for index in range(names.size()):
+		var angle := TAU * float(index) / float(names.size())
+		var light := Node3D.new()
+		light.name = "RenewalLight%d" % index
+		light.position = Vector3(sin(angle) * 5.5, -80, -1010 + cos(angle) * 5.5)
+		chamber.add_child(light)
+		var visual := MeshInstance3D.new()
+		var sphere := SphereMesh.new()
+		sphere.radius = 0.3
+		sphere.height = 0.6
+		sphere.radial_segments = 8
+		sphere.rings = 4
+		visual.mesh = sphere
+		visual.position.y = 1.0
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		visual.material_override = material
+		light.add_child(visual)
+		var label := Label3D.new()
+		label.text = "F / Talk · " + names[index]
+		label.position.y = 1.8
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.font_size = 28
+		label.pixel_size = 0.003
+		label.outline_size = 6
+		light.add_child(label)
+		_renewal_lights.append(light)
+		_update_renewal_light(index)
+
+
+func _update_renewal_light(index: int) -> void:
+	if index < 0 or index >= _renewal_lights.size(): return
+	var light := _renewal_lights[index]
+	var active := (Game.renewal_mask() & (1 << index)) != 0
+	var material := (light.get_child(0) as MeshInstance3D).material_override as StandardMaterial3D
+	material.albedo_color = Color(1.0, 0.84, 0.42) if active else Color(0.28, 0.31, 0.4)
+	var label := light.get_child(1) as Label3D
+	label.text = "Light offered" if active else "F / Talk · Offer witness light"
+
+
+func _marker(text: String, at: Vector3) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.position = at
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 32
+	label.pixel_size = 0.004
+	label.outline_size = 6
+	chamber.add_child(label)
+
+
+func _block(parent: Node3D, at: Vector3, size: Vector3, color: Color, angle: float = 0.0) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.position = at
+	body.rotation.x = angle
+	body.collision_layer = 1
+	body.collision_mask = 0
+	parent.add_child(body)
+	var visual := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	visual.mesh = mesh
+	if is_equal_approx(size.x, 11.5):
+		# Guard gates retain their distinct red visual language.
+		var gate_material := StandardMaterial3D.new()
+		gate_material.albedo_color = color
+		gate_material.roughness = 1.0
+		visual.material_override = gate_material
+	else:
+		if _stone_material == null:
+			_stone_material = ShaderMaterial.new()
+			_stone_material.shader = HOLLOW_STONE_SHADER
+			_stone_material.set_shader_parameter("stone_texture", HOLLOW_STONE_TEXTURE)
+		visual.material_override = _stone_material
+	body.add_child(visual)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	body.add_child(shape)
+	return body
+
+
+func _leave() -> void:
+	if not inside: return
+	var atmosphere_world := player.get_parent() if is_instance_valid(player) else null
+	if atmosphere_world != null and atmosphere_world.has_method("end_dungeon_atmosphere"): atmosphere_world.call("end_dungeon_atmosphere", self)
+	inside = false
+	Game.in_final_dungeon = false
+	Game.leave_hollow_resonance("last_seal")
+	player.global_position = return_point + Vector3(0, 0.3, 0)
+	player.velocity = Vector3.ZERO
+	if is_instance_valid(chamber): chamber.queue_free()
+	chamber = null
+	boss = null
+	_gates.clear()
+	_story_echoes.clear()
+	_renewal_lights.clear()
+	_resolution_marker = null
+	Game.toast.emit("You returned from the Last Seal.")
+
+
+func _on_respawn() -> void:
+	if not inside or not is_instance_valid(chamber) or not is_instance_valid(player): return
+	# Player's normal respawn runs first; return to the last opened gate after it.
+	Game.in_final_dungeon = true
+	player.global_position = _checkpoint
+	player.velocity = Vector3.ZERO
+	if is_instance_valid(boss) and not boss.is_queued_for_deletion():
+		boss.call("reset_encounter")
+	Game.toast.emit("Returned to the last open gate. The Keeper recovers between attempts.")
+
+
+func _exit_tree() -> void:
+	if inside:
+		var atmosphere_world := player.get_parent() if is_instance_valid(player) else null
+		if atmosphere_world != null and atmosphere_world.has_method("end_dungeon_atmosphere"): atmosphere_world.call("end_dungeon_atmosphere", self)
+		Game.in_final_dungeon = false
+		Game.leave_hollow_resonance("last_seal")
