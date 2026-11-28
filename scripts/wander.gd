@@ -148,6 +148,12 @@ const CATALOGUE := {
 		"cooldown": 12.0, "power": 0.0, "radius": 0.0, "range": 0.0,
 		"desc": "Recover stamina for dodging and sprinting.", "starter": false,
 	},
+	"harbor_light": {
+		"name": "Harbor Light", "category": "Defensive", "element": 3,
+		"color": Color(0.48, 0.86, 0.94), "icon": "aqua", "cost": 22.0,
+		"cooldown": 15.0, "power": 0.0, "radius": 0.0, "range": 0.0,
+		"desc": "Raise a small shield and restore stamina; mastery improves both.", "starter": false,
+	},
 	"dusk_seal": {
 		"name": "Dusk Seal", "category": "Arcane", "element": 2,
 		"color": Color(0.72, 0.55, 0.95), "icon": "arcane", "cost": 26.0,

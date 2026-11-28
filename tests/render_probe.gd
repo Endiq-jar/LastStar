@@ -1313,6 +1313,68 @@ func _run() -> void:
 	Game.collection_changed.emit()
 	_log("INFO" if arc_ok else "FAIL", "Ilyra companion quest, memorial, choices and persistence=%s" % str(arc_ok))
 
+	# Cross-region side story: prerequisites, both plans, one-time spell reward,
+	# persistent decision, actual dialogue routes and spell mechanics.
+	var harbor_story_before: Dictionary = Game.guard_story.duplicate(true)
+	var harbor_clears_before: Dictionary = Game.dungeon_clears.duplicate(true)
+	var harbor_quests_before: Dictionary = Game.settlement_quests.duplicate(true)
+	var harbor_levels_before: Dictionary = Game.wander.levels.duplicate(true)
+	var harbor_stamina_before: float = Game.stamina
+	var harbor_shield_before: float = Game.shield_points
+	Game.guard_story = {}
+	Game.dungeon_clears = {}
+	Game.settlement_quests = {}
+	Game.wander.levels.erase("harbor_light")
+	var harbor_ok := not Game.begin_harbor_story() and not Game.finish_harbor_story()
+	Game.settlement_quests["tidefall:main"] = "done"
+	harbor_ok = harbor_ok and Game.begin_harbor_story() and not Game.begin_harbor_story()
+	Game.dungeon_clears["memory_11"] = true
+	Game.dungeon_clears["memory_12"] = true
+	harbor_ok = harbor_ok and not Game.choose_harbor_story("shared")
+	Game.settlement_quests["glassheaven:main"] = "done"
+	harbor_ok = harbor_ok and not Game.choose_harbor_story("invalid") and Game.choose_harbor_story("shared")
+	Game.save_collection()
+	Game.guard_story = {}
+	Game.load_collection()
+	harbor_ok = harbor_ok and int(Game.guard_story.get("harbor_stage", 0)) == 2 and str(Game.guard_story.get("harbor_choice", "")) == "shared"
+	harbor_ok = harbor_ok and Game.finish_harbor_story() and not Game.finish_harbor_story() and Game.wander.known("harbor_light")
+	Game.save_collection()
+	Game.guard_story = {}
+	Game.load_collection()
+	harbor_ok = harbor_ok and int(Game.guard_story.get("harbor_stage", 0)) == 3 and Game.wander_levels.has("harbor_light")
+	var harbor_actor := world.get_node_or_null("Player") as Node3D
+	if harbor_actor != null:
+		Game.stamina = 0.0
+		Game.shield_points = 0.0
+		harbor_actor.call("_on_spell_cast", "harbor_light", Game.wander.spell("harbor_light"))
+		harbor_ok = harbor_ok and Game.stamina > 0.0 and Game.shield_points > 0.0
+	else:
+		harbor_ok = false
+	Game.guard_story["harbor_stage"] = 1
+	harbor_ok = harbor_ok and Game.choose_harbor_story("station") and str(Game.guard_story.get("harbor_choice", "")) == "station"
+	if menu != null:
+		menu.set("dialogue_site_id", "tidefall")
+		menu.set("dialogue_resident_index", 0)
+		menu.call("open_menu", "Dialogue")
+		var harbor_body := menu.get("_body") as VBoxContainer
+		var station_found := false
+		for harbor_child in harbor_body.get_children():
+			if harbor_child is Label and "harbour station" in harbor_child.text: station_found = true
+		harbor_ok = harbor_ok and station_found
+		menu.call("close_menu")
+		menu.set("dialogue_site_id", "")
+	else:
+		harbor_ok = false
+	Game.guard_story = harbor_story_before
+	Game.dungeon_clears = harbor_clears_before
+	Game.settlement_quests = harbor_quests_before
+	Game.wander.levels = harbor_levels_before
+	Game.stamina = harbor_stamina_before
+	Game.shield_points = harbor_shield_before
+	Game.save_wander()
+	Game.collection_changed.emit()
+	_log("INFO" if harbor_ok else "FAIL", "cross-region harbor quest, choices, spell and persistence=%s" % str(harbor_ok))
+
 	# Fixed tiers scale regional encounters and the Keeper without a setting.
 	var tier_ok := is_equal_approx(Game.hollow_power_multiplier("memory_04"), 1.0) and is_equal_approx(Game.hollow_power_multiplier("optional_000"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_019"), 20.0) and is_equal_approx(Game.hollow_power_multiplier("optional_020"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_039"), 500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_040"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_059"), 7500.0) and is_equal_approx(Game.hollow_power_multiplier("optional_060"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_079"), 15000.0) and is_equal_approx(Game.hollow_power_multiplier("optional_080"), 1.0)
 	var challenge_fixture := Node3D.new()

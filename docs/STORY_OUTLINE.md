@@ -218,3 +218,14 @@ brief remains unfinished.
 Each settlement leader also has a distinct post-Keeper conversation describing
 what their community does with the recovered history. These are dialogue
 conclusions, not new settlement events or additional side-quest chains.
+
+## A Bell Between Shores
+
+After Neri's existing Tidefall leader quest, players can help design a warning
+system. The Drowned Bell and Prism of Voices memories provide evidence, and
+Prism's completed leader quest opens a conversation in Glassheaven. Players
+choose distributed boat signals or a public harbour station, then return to
+Neri to learn Harbor Light, a defensive shield-and-stamina spell. The plan
+changes Neri's later dialogue. Existing clears count and quest stage and choice
+persist; this does not alter Hollow gates. This is one authored optional quest,
+not a replacement for the brief's complete side-quest and companion scope.

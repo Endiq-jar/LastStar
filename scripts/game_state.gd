@@ -924,6 +924,43 @@ func ilyra_arc_objective() -> String:
 	return ""
 
 
+# A cross-region side story, stored alongside the existing story choices. The
+# memory prerequisites count earlier victories and do not change Hollow gates.
+func begin_harbor_story() -> bool:
+	if int(guard_story.get("harbor_stage", 0)) != 0 or not region_chart_unlocked("tidefall"): return false
+	guard_story["harbor_stage"] = 1
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func choose_harbor_story(choice: String) -> bool:
+	if int(guard_story.get("harbor_stage", 0)) != 1 or not ["shared", "station"].has(choice): return false
+	if not story_memory_owned("memory_11") or not story_memory_owned("memory_12") or not region_chart_unlocked("glassheaven"): return false
+	guard_story["harbor_stage"] = 2
+	guard_story["harbor_choice"] = choice
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func finish_harbor_story() -> bool:
+	if int(guard_story.get("harbor_stage", 0)) != 2 or wander == null: return false
+	guard_story["harbor_stage"] = 3
+	wander.learn("harbor_light")
+	save_wander()
+	collection_changed.emit()
+	return true
+
+
+func harbor_story_objective() -> String:
+	match int(guard_story.get("harbor_stage", 0)):
+		1: return "Recover The Drowned Bell near Tidefall and A Prism of Voices near Glassheaven, then complete Prism's main quest and speak to Prism."
+		2: return "Return to Neri in Tidefall with the warning plan."
+		3: return "Completed · Harbor Light learned."
+	return ""
+
+
 func set_ilyra_following(following: bool) -> bool:
 	if not bool(guard_story.get("seal_done", false)):
 		return false

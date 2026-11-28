@@ -344,6 +344,8 @@ func _quests() -> void:
 		_line("Main · A Memory in the Hollow: %s" % memory_status)
 	var ilyra_objective: String = Game.ilyra_arc_objective()
 	if not ilyra_objective.is_empty(): _line("Companion · The Names We Carry: " + ilyra_objective)
+	var harbor_objective: String = Game.harbor_story_objective()
+	if not harbor_objective.is_empty(): _line("Side · A Bell Between Shores: " + harbor_objective)
 	_line("STORY PATH", 18, UI.ACCENT)
 	_line("1. Complete Ilyra's A Light Remembered; accept and resolve A Memory in the Hollow. 2. In each settlement, complete the named leader's main quest for a written dungeon guide. 3. Clear the original 100 Hollows, then enter the Last Seal in Aetheris.")
 	_line("First tier: %d / 20 named memory Hollows cleared. The next 20 regional expeditions unlock afterwards; their enemies have 20× health and damage, and trials deal 20× damage. Many attacks are lethal in one hit." % Game.first_tier_clear_count())
@@ -758,6 +760,31 @@ func _settlement_dialogue() -> void:
 		if leader_status in ["available", "active"] and not local_hook.is_empty(): _line(local_hook)
 		if leader_status == "found" and payoff.size() == 2: _line(str(payoff[0]))
 		if leader_status == "done" and payoff.size() == 2: _line(str(payoff[1]))
+		if dialogue_site_id == "tidefall":
+			match int(Game.guard_story.get("harbor_stage", 0)):
+				0:
+					if leader_status == "done":
+						_line("Neri: The old warning bell rang too late for some crews. I want a signal every harbour can hear, but I won't ask them to trust another order they cannot question. Will you help?")
+						_action("Help Neri · A Bell Between Shores", _begin_harbor_story)
+				1:
+					_line("Neri: Recover the drowned bell's account and the voices in Glassheaven's prism. Prism can help us decide how to carry a warning without losing anyone's voice.")
+				2:
+					if str(Game.guard_story.get("harbor_choice", "")) == "shared":
+						_line("Neri: A bell on each boat means any crew can warn the others. It will take training to prevent false alarms, but no one harbour can silence the rest.")
+					else:
+						_line("Neri: A harbour station can check each warning before sounding it. We will publish the signals and keep a second watch so a single keeper cannot suppress them.")
+					_line("Neri: Prism taught me how to hold a little light in reserve. Ilyra showed me how to brace against a wave. Let us teach the pattern to your Wander.")
+					_action("Finish the warning plan · learn Harbor Light", _finish_harbor_story)
+				3:
+					_line("Neri: The crews are practising warnings from boat to boat. They can all raise the alarm." if str(Game.guard_story.get("harbor_choice", "")) == "shared" else "Neri: The harbour station keeps an open warning log, and two watches check each signal. The crews can challenge us if we get it wrong.")
+		if dialogue_site_id == "glassheaven" and int(Game.guard_story.get("harbor_stage", 0)) == 1:
+			if leader_status != "done" or not Game.story_memory_owned("memory_11") or not Game.story_memory_owned("memory_12"):
+				_line("Prism: Finish my main quest, then bring the accounts from the Drowned Bell near Tidefall and the Prism of Voices near here. We need both before designing the warning.")
+			else:
+				_line("Prism: The bell gave people time, but its warning came late. The crystal kept many voices, but someone had to listen. Neri could give every boat a signal, or use a staffed harbour station to check the warnings.")
+				_line("Prism: Neither is perfect. Choose the plan to take back to Neri; both teach Harbor Light.")
+				_action("Give each crew a warning signal", _choose_harbor_story.bind("shared"))
+				_action("Build a public harbour warning station", _choose_harbor_story.bind("station"))
 		if dialogue_site_id == "ashvale" and int(Game.guard_story.get("ilyra_arc_stage", 0)) == 6:
 			_line("Mira: I will help Ilyra carry the letters. Each family can decide what to keep and what to share. Thank you for bringing their loved ones home in words.")
 			_action("Deliver the letters with Mira and Ilyra", _deliver_ilyra_letters)
@@ -909,6 +936,21 @@ func _buy_sunrise_outfit() -> void:
 
 func _toggle_weapons() -> void:
 	_show_weapons = not _show_weapons
+	_refresh()
+
+
+func _begin_harbor_story() -> void:
+	_status = "A Bell Between Shores added to your journal." if Game.begin_harbor_story() else "Complete Neri's main quest first."
+	_refresh()
+
+
+func _choose_harbor_story(choice: String) -> void:
+	_status = "Warning plan recorded. Return to Neri." if Game.choose_harbor_story(choice) else "Recover both memories and complete Prism's main quest first."
+	_refresh()
+
+
+func _finish_harbor_story() -> void:
+	_status = "Harbor Light learned. Assign it in the spellbook." if Game.finish_harbor_story() else "The warning plan is not ready."
 	_refresh()
 
 

@@ -927,6 +927,12 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 		Game.toast.emit("Stone Bulwark: %.0f shield" % Game.shield_points)
 		return
 
+	if id == "harbor_light":
+		Game.shield_points = maxf(Game.shield_points, 65.0 * mastery)
+		Game.stamina = minf(Game.MAX_STAMINA, Game.stamina + 20.0 * mastery)
+		Game.stats_changed.emit()
+		Game.toast.emit("Harbor Light: shield and stamina restored")
+		return
 	if id == "tide_remedy":
 		var healed := Game.max_hp() * 0.18 * mastery
 		Game.heal(healed)
