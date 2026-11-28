@@ -1542,7 +1542,7 @@ func _run() -> void:
 		veya_ok = veya_ok and veya.global_position.distance_to(veya_actor.global_position) < 4.0
 		_log("INFO", "Veya recruitment check=%s visibility=%s distance=%.2f" % [str(veya_ok), str(veya.visible), veya.global_position.distance_to(veya_actor.global_position)])
 		var veya_hud := world.get_node("HUD")
-		veya_ok = veya_ok and str(veya_hud.call("_npc_name", veya)) == "Veya"
+		veya_ok = veya_ok and str(veya_hud.call("_npc_name", veya)) == "Scholar Veya"
 		veya_hud.call("_open_npc_dialogue", veya)
 		veya_ok = veya_ok and menu.visible and str(menu.get("dialogue_site_id")) == "lunareth"
 		_log("INFO", "Veya dialogue check=%s site=%s" % [str(veya_ok), str(menu.get("dialogue_site_id"))])
