@@ -28,6 +28,7 @@ const PATROL_MEMORIAL := preload("res://scripts/patrol_memorial.gd")
 const LOST_WANDER := preload("res://scripts/lost_wander.gd")
 const VILLAGE_DEFENSE := preload("res://scripts/village_defense.gd")
 const STRANDED_CARAVAN := preload("res://scripts/stranded_caravan.gd")
+const CARAVAN_SURVIVOR := preload("res://scripts/caravan_survivor.gd")
 const STONE_SHADER := preload("res://shaders/village_stone.gdshader")
 const VILLAGE_GROUND_SIZE := DATA.PAVING_HALF_SIZE * 2.0
 static var _ground_mesh: PlaneMesh
@@ -221,6 +222,22 @@ func _sync_items_for_site(site: Dictionary, root: Node3D) -> void:
 		elif not caravan_needed and caravan != null:
 			root.remove_child(caravan)
 			caravan.queue_free()
+		# Survivors stay where they took shelter until the player reports to Zara.
+		# Loading an old stage-3 save also restores them without migrating it.
+		for survivor_index in range(2):
+			var survivor_name := "CaravanSurvivor%d" % survivor_index
+			var survivor := root.get_node_or_null(survivor_name)
+			var survivors_needed := int(Game.guard_story.get("caravan_stage", 0)) == 3
+			if survivors_needed and survivor == null:
+				var survivor_pos: Vector2 = center + Vector2(38.0 + float(survivor_index) * 3.0, 8.0)
+				var person := CARAVAN_SURVIVOR.new()
+				person.name = survivor_name
+				person.survivor_index = survivor_index
+				person.position = Vector3(survivor_pos.x, float(_world.call("_height", survivor_pos.x, survivor_pos.y)), survivor_pos.y)
+				root.add_child(person)
+			elif not survivors_needed and survivor != null:
+				root.remove_child(survivor)
+				survivor.queue_free()
 		var watch := root.get_node_or_null("VillageWatch")
 		var needed := int(Game.guard_story.get("watch_stage", 0)) == 1
 		if needed and watch == null:

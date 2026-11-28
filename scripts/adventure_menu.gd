@@ -823,6 +823,8 @@ func _settlement_dialogue() -> void:
 						_action("Help Zara · The Last Caravan", _begin_caravan_story)
 				1, 2: _line("Zara: Bryn knows the mountain routes. Ask in Frostmere and bring everyone home if you can.")
 				3:
+					if (int(Game.guard_story.get("caravan_witnesses", 0)) & 1) != 0: _line("Zara: Tala says a stocked shelter would have made their stop safer. I will listen to the people who actually guide the route.")
+					if (int(Game.guard_story.get("caravan_witnesses", 0)) & 2) != 0: _line("Zara: Esen offered to guide the next family. They are a neighbour, not cargo; the caravan council will hear them.")
 					_line("Zara: The travellers are safe. They sheltered rather than abandon the family, but the pass remains dangerous. We can stock free shelters along the route, or train paired guides with space for people who cannot pay. Which should we promise first?")
 					_action("Stock shared shelters · earn Caravan hairpin", _finish_caravan_story.bind("shelters"))
 					_action("Train paired guides · earn Caravan hairpin", _finish_caravan_story.bind("guides"))

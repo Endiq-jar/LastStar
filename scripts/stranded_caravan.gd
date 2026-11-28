@@ -64,7 +64,7 @@ func _attacker_defeated() -> void:
 		return
 	_active = false
 	if Game.rescue_caravan():
-		Game.toast.emit("The caravan can reach Frostmere. Tell Zara in Suncrest what happened.")
+		Game.toast.emit("Tala and Esen are safe. Speak to them here or tell Zara in Suncrest what happened.")
 
 
 func _reset_wave() -> void:

@@ -1166,6 +1166,17 @@ func rescue_caravan() -> bool:
 	return true
 
 
+func hear_caravan_survivor(index: int) -> bool:
+	if int(guard_story.get("caravan_stage", 0)) != 3 or index < 0 or index > 1: return false
+	var previous := int(guard_story.get("caravan_witnesses", 0)) & 3
+	var next := previous | (1 << index)
+	if next == previous: return false
+	guard_story["caravan_witnesses"] = next
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
 func finish_caravan_story(choice: String) -> bool:
 	if int(guard_story.get("caravan_stage", 0)) != 3 or not ["shelters", "guides"].has(choice): return false
 	guard_story["caravan_stage"] = 4

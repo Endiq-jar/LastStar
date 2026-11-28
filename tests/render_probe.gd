@@ -1709,12 +1709,41 @@ func _run() -> void:
 			caravan_ok = caravan_ok and caravan_retry.size() == 2
 			for foe in caravan_retry: foe.call("take_hit", 10000.0, 0, Vector3.ZERO)
 			caravan_ok = caravan_ok and int(Game.guard_story.get("caravan_stage", 0)) == 3 and not caravan_root.has_node("StrandedCaravan")
+			# The rescued people are actual streamed interactables, not only a
+			# completion message. Both accounts persist and reach Zara's dialogue.
+			for survivor_index in range(2):
+				var caravan_survivor := caravan_root.get_node_or_null("CaravanSurvivor%d" % survivor_index) as Node3D
+				if caravan_survivor == null:
+					caravan_ok = false
+					continue
+				caravan_actor.global_position = caravan_survivor.global_position + Vector3(0, 0.2, 0)
+				caravan_ok = bool(caravan_survivor.call("try_interact", caravan_actor)) and caravan_ok
+				caravan_ok = bool(caravan_survivor.call("try_interact", caravan_actor)) and caravan_ok
+			caravan_ok = caravan_ok and int(Game.guard_story.get("caravan_witnesses", 0)) == 3 and not Game.hear_caravan_survivor(2)
+			if menu != null:
+				menu.set("dialogue_site_id", "suncrest")
+				menu.set("dialogue_resident_index", 0)
+				menu.call("open_menu", "Dialogue")
+				var witnesses_body := menu.get("_body") as VBoxContainer
+				var tala_found := false
+				var esen_found := false
+				for child in witnesses_body.get_children():
+					if child is Label and "Tala says" in child.text: tala_found = true
+					if child is Label and "Esen offered" in child.text: esen_found = true
+				caravan_ok = caravan_ok and tala_found and esen_found
+				menu.call("close_menu")
+				menu.set("dialogue_site_id", "")
+			else: caravan_ok = false
 		else: caravan_ok = false
 	else: caravan_ok = false
 	Game.guard_story = {}
 	Game.load_collection()
-	caravan_ok = caravan_ok and int(Game.guard_story.get("caravan_stage", 0)) == 3 and not Game.finish_caravan_story("invalid")
+	caravan_ok = caravan_ok and int(Game.guard_story.get("caravan_stage", 0)) == 3 and int(Game.guard_story.get("caravan_witnesses", 0)) == 3 and not Game.finish_caravan_story("invalid")
 	caravan_ok = caravan_ok and Game.finish_caravan_story("shelters") and not Game.finish_caravan_story("shelters") and Game.owned_cosmetics.has("caravan_pin")
+	if settlement_manager != null:
+		var after_caravan_loaded: Dictionary = settlement_manager.get("_loaded")
+		var after_caravan_root := after_caravan_loaded.get("frostmere") as Node3D
+		caravan_ok = caravan_ok and after_caravan_root != null and not after_caravan_root.has_node("CaravanSurvivor0") and not after_caravan_root.has_node("CaravanSurvivor1")
 	caravan_ok = caravan_ok and Game.equip_reward_cosmetic("caravan_pin")
 	Game.guard_story["keeper_defeated"] = true
 	var caravan_shelters_ending: String = Game.story_ending()
@@ -1747,7 +1776,7 @@ func _run() -> void:
 	Game.save_collection()
 	Game.collection_changed.emit()
 	if settlement_manager != null: settlement_manager.call("_update_stream")
-	_log("INFO" if caravan_ok else "FAIL", "Caravan rescue, retry, choices, cosmetic and save=%s" % str(caravan_ok))
+	_log("INFO" if caravan_ok else "FAIL", "Caravan rescue, survivors, retry, choices, cosmetic and save=%s" % str(caravan_ok))
 
 	# Earned tier resonance is offensive only, derived from the existing clear
 	# flags, capped to the current encounter and reset when leaving.
