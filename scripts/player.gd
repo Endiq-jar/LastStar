@@ -927,6 +927,15 @@ func _on_spell_cast(id: String, data: Dictionary) -> void:
 		Game.toast.emit("Stone Bulwark: %.0f shield" % Game.shield_points)
 		return
 
+	if id == "rootward":
+		Game.shield_points = maxf(Game.shield_points, 50.0 * mastery)
+		Game.stats_changed.emit()
+		for foe in get_tree().get_nodes_in_group("enemy"):
+			if foe is Node3D and is_instance_valid(foe) and not foe.is_queued_for_deletion() and foe.global_position.distance_to(global_position) < radius and foe.has_method("apply_slow") and _spell_has_line_of_sight(origin, foe):
+				foe.call("apply_slow", 2.0)
+		Game.toast.emit("Rootward: shield raised and nearby scouts slowed")
+		return
+
 	if id == "watchfire":
 		Game.heal(Game.max_hp() * 0.08 * mastery)
 		Game.shield_points = maxf(Game.shield_points, 60.0 * mastery)

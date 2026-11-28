@@ -28,6 +28,8 @@ const PATROL_MEMORIAL := preload("res://scripts/patrol_memorial.gd")
 const LOST_WANDER := preload("res://scripts/lost_wander.gd")
 const VILLAGE_DEFENSE := preload("res://scripts/village_defense.gd")
 const STRANDED_CARAVAN := preload("res://scripts/stranded_caravan.gd")
+const ORCHARD_ECHO := preload("res://scripts/orchard_echo.gd")
+const ORCHARD_LEGACY := preload("res://scripts/orchard_legacy.gd")
 const CARAVAN_SURVIVOR := preload("res://scripts/caravan_survivor.gd")
 const STONE_SHADER := preload("res://shaders/village_stone.gdshader")
 const STONE_TEXTURE := preload("res://assets/village/stone_paving.png")
@@ -210,6 +212,37 @@ func _sync_items_for_site(site: Dictionary, root: Node3D) -> void:
 		elif not needed and wander != null:
 			root.remove_child(wander)
 			wander.queue_free()
+
+	if id == "orchard":
+		var root_offsets := [Vector2(-38, -4), Vector2(35, -20), Vector2(-24, 38)]
+		for echo_index in range(3):
+			var echo_name := "OrchardEcho%d" % echo_index
+			var echo := root.get_node_or_null(echo_name)
+			var needed := int(Game.guard_story.get("orchard_story_stage", 0)) == 1 and (int(Game.guard_story.get("orchard_echoes", 0)) & (1 << echo_index)) == 0
+			if needed and echo == null:
+				var pos: Vector2 = center + root_offsets[echo_index]
+				var marker := ORCHARD_ECHO.new()
+				marker.name = echo_name
+				marker.echo_index = echo_index
+				marker.position = Vector3(pos.x, float(_world.call("_height", pos.x, pos.y)), pos.y)
+				root.add_child(marker)
+			elif not needed and echo != null:
+				root.remove_child(echo)
+				echo.queue_free()
+	if id in ["orchard", "glassheaven"]:
+		var legacy := root.get_node_or_null("OrchardLegacy")
+		var expected_site := "glassheaven" if str(Game.guard_story.get("orchard_story_choice", "")) == "share" else "orchard"
+		var legacy_needed := int(Game.guard_story.get("orchard_story_stage", 0)) == 4 and id == expected_site
+		if legacy_needed and legacy == null:
+			var pos: Vector2 = center + Vector2(34, 12)
+			var marker := ORCHARD_LEGACY.new()
+			marker.name = "OrchardLegacy"
+			marker.shared = id == "glassheaven"
+			marker.position = Vector3(pos.x, float(_world.call("_height", pos.x, pos.y)), pos.y)
+			root.add_child(marker)
+		elif not legacy_needed and legacy != null:
+			root.remove_child(legacy)
+			legacy.queue_free()
 
 	if id == "frostmere":
 		var caravan := root.get_node_or_null("StrandedCaravan")

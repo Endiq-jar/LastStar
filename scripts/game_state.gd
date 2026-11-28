@@ -241,6 +241,10 @@ func story_ending() -> String:
 		match str(guard_story.get("caravan_choice", "")):
 			"shelters": conclusion += " Zara's caravan network keeps shared shelters stocked along the pass, open to travellers whether or not they can pay."
 			"guides": conclusion += " Zara and Bryn arrange paired guides between settlements, with a place in each caravan for travellers who cannot pay."
+	if int(guard_story.get("orchard_story_stage", 0)) == 4:
+		match str(guard_story.get("orchard_story_choice", "")):
+			"share": conclusion += " Orin shares Orchard cuttings with Glassheaven, along with the knowledge to tend them without damaging the old roots."
+			"shelter": conclusion += " Orin shelters a young cutting in the Orchard, where visitors help care for it and learn its history."
 	if int(guard_story.get("watch_stage", 0)) == 3:
 		if str(guard_story.get("watch_choice", "")) == "patrol":
 			conclusion += " Frostmere's watch shares patrols across the pass, so no guide is left alone."
@@ -1137,6 +1141,62 @@ func wander_story_objective() -> String:
 		2: return "Examine the lost Wander east of Evergloom's center."
 		3: return "Bring the lost Wander to Veya in Lunareth."
 		4: return "Completed · Echo Resonance learned."
+	return ""
+
+
+# The Orchard witnesses can be heard in any order, including across reloads.
+# The investigation has no effect on the original memory or Hollow gates.
+func begin_orchard_story() -> bool:
+	if int(guard_story.get("orchard_story_stage", 0)) != 0 or not region_chart_unlocked("orchard"): return false
+	guard_story["orchard_story_stage"] = 1
+	guard_story["orchard_echoes"] = 0
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func hear_orchard_echo(index: int) -> bool:
+	if int(guard_story.get("orchard_story_stage", 0)) != 1 or index < 0 or index > 2: return false
+	var mask := int(guard_story.get("orchard_echoes", 0)) & 7
+	var bit := 1 << index
+	if (mask & bit) != 0: return false
+	mask |= bit
+	guard_story["orchard_echoes"] = mask
+	if mask == 7: guard_story["orchard_story_stage"] = 2
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func interpret_orchard_story() -> bool:
+	if int(guard_story.get("orchard_story_stage", 0)) != 2 or not region_chart_unlocked("glassheaven") or not story_memory_owned("memory_18") or not story_memory_owned("memory_19"): return false
+	guard_story["orchard_story_stage"] = 3
+	save_collection()
+	collection_changed.emit()
+	return true
+
+
+func finish_orchard_story(choice: String) -> bool:
+	if int(guard_story.get("orchard_story_stage", 0)) != 3 or not ["share", "shelter"].has(choice) or wander == null: return false
+	guard_story["orchard_story_stage"] = 4
+	guard_story["orchard_story_choice"] = choice
+	wander.learn("rootward")
+	save_wander()
+	collection_changed.emit()
+	return true
+
+
+func orchard_story_objective() -> String:
+	match int(guard_story.get("orchard_story_stage", 0)):
+		1:
+			var mask := int(guard_story.get("orchard_echoes", 0)) & 7
+			var count := 0
+			for index in range(3):
+				if (mask & (1 << index)) != 0: count += 1
+			return "Hear the three root marks around the Orchard settlement (%d / 3)." % count
+		2: return "Recover The Orchard's Roots and The Seed of Light, complete Prism's Glassheaven main quest, and ask Prism to interpret the marks."
+		3: return "Return to Orin in the Orchard and choose how to protect the young cutting."
+		4: return "Completed · Rootward learned."
 	return ""
 
 

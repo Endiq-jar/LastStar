@@ -335,3 +335,16 @@ traveller Esen appear at the shelter and can be spoken to; Zara acknowledges
 each account when heard. These are simple static resident-style models, not
 bespoke art or escort AI. Speaking to them is optional, including for older
 saves already waiting to report to Zara.
+
+## What the Roots Remember
+
+Orin asks the player to hear three root marks around the Orchard in any order.
+Prism can interpret their accounts once the player has recovered the Orchard's
+Roots and Seed of Light and completed Prism's existing main quest. Orin then
+asks whether to share a cutting with Glassheaven or shelter it in the Orchard.
+The resulting sapling is an inspectable, streamed world object in the chosen
+settlement; both leaders and the ending acknowledge the decision. Both choices
+teach Rootward, a shield that briefly slows nearby scouts in sight. Quest flags
+are additive, preserve existing Hollow IDs, and save partial investigation
+progress. The small quest objects are procedural and are not bespoke character
+models or a new dungeon encounter.

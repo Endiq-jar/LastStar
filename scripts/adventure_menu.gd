@@ -345,6 +345,8 @@ func _quests() -> void:
 		_line("Main · A Memory in the Hollow: %s" % memory_status)
 	var ilyra_objective: String = Game.ilyra_arc_objective()
 	if not ilyra_objective.is_empty(): _line("Companion · The Names We Carry: " + ilyra_objective)
+	var orchard_objective: String = Game.orchard_story_objective()
+	if not orchard_objective.is_empty(): _line("Side · What the Roots Remember: " + orchard_objective)
 	var caravan_objective: String = Game.caravan_story_objective()
 	if not caravan_objective.is_empty(): _line("Side · The Last Caravan: " + caravan_objective)
 	var watch_objective: String = Game.watch_story_objective()
@@ -815,6 +817,27 @@ func _settlement_dialogue() -> void:
 		if leader_status in ["available", "active"] and not local_hook.is_empty(): _line(local_hook)
 		if leader_status == "found" and payoff.size() == 2: _line(str(payoff[0]))
 		if leader_status == "done" and payoff.size() == 2: _line(str(payoff[1]))
+		if dialogue_site_id == "orchard":
+			match int(Game.guard_story.get("orchard_story_stage", 0)):
+				0:
+					if leader_status == "done":
+						_line("Orin: Our oldest tree has a young cutting. Some neighbours want to send it away; others fear losing the last thing our grandparents sheltered beneath. Three marks around the Orchard hold different accounts. Will you listen before we decide?")
+						_action("Help Orin · What the Roots Remember", _begin_orchard_story)
+				1: _line("Orin: The three root marks are west, northeast and southwest of the settlement center. Listen to all three; their order does not matter.")
+				2: _line("Orin: Prism can help distinguish memory from wish. Recover the Orchard's Roots and Seed of Light and ask them in Glassheaven.")
+				3:
+					_line("Orin: The roots protected children, and the gardeners shared cuttings without destroying the old tree. We can send a cutting and care instructions to Glassheaven, or shelter it here and let visitors help tend it. What should we do first?")
+					_action("Share a cutting with Glassheaven · learn Rootward", _finish_orchard_story.bind("share"))
+					_action("Shelter the cutting here · learn Rootward", _finish_orchard_story.bind("shelter"))
+				4: _line("Orin: Glassheaven has a cutting and the knowledge to tend it. The old roots are still protected." if str(Game.guard_story.get("orchard_story_choice", "")) == "share" else "Orin: Visitors help tend the sheltered cutting here, and the old roots remain undisturbed.")
+		if dialogue_site_id == "glassheaven":
+			if int(Game.guard_story.get("orchard_story_stage", 0)) == 2:
+				if leader_status == "done" and Game.story_memory_owned("memory_18") and Game.story_memory_owned("memory_19"):
+					_line("Prism: The marks agree with the two memories: the children sheltered under living roots, and careful cuttings carried their light elsewhere. There is no instruction forcing Orin to give the tree away. The keepers may choose.")
+					_action("Bring Prism's interpretation to Orin", _interpret_orchard_story)
+				else: _line("Prism: Complete my main quest and recover both Orchard memories. Then we can check the marks against the evidence.")
+			elif int(Game.guard_story.get("orchard_story_stage", 0)) == 4:
+				_line("Prism: We tend the shared cutting beside the village and record what it needs for the next keeper." if str(Game.guard_story.get("orchard_story_choice", "")) == "share" else "Prism: The cutting remains in the Orchard. I will visit and learn from its keepers instead of asking them to uproot it.")
 		if dialogue_site_id == "suncrest":
 			match int(Game.guard_story.get("caravan_stage", 0)):
 				0:
@@ -1086,6 +1109,21 @@ func _finish_homecoming() -> void:
 		_tab = "Epilogue"
 	else:
 		_status = "Hear the witnesses, resolve the Keeper's memory and return to Ashvale first."
+	_refresh()
+
+
+func _begin_orchard_story() -> void:
+	_status = "What the Roots Remember added to your journal." if Game.begin_orchard_story() else "Complete Orin's main quest first."
+	_refresh()
+
+
+func _interpret_orchard_story() -> void:
+	_status = "Prism's interpretation is ready. Return to Orin." if Game.interpret_orchard_story() else "Hear all three marks and recover both memories first."
+	_refresh()
+
+
+func _finish_orchard_story(choice: String) -> void:
+	_status = "The cutting's future is chosen. Rootward is learned." if Game.finish_orchard_story(choice) else "Speak to Prism first."
 	_refresh()
 
 

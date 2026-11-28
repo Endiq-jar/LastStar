@@ -1781,6 +1781,99 @@ func _run() -> void:
 	if settlement_manager != null: settlement_manager.call("_update_stream")
 	_log("INFO" if caravan_ok else "FAIL", "Caravan rescue, survivors, retry, choices, cosmetic and save=%s" % str(caravan_ok))
 
+	# Three streamed Orchard witnesses can be heard out of order and survive
+	# reloads. The decision creates a real inspectable cutting at one site.
+	var orchard_story_before: Dictionary = Game.guard_story.duplicate(true)
+	var orchard_quests_before: Dictionary = Game.settlement_quests.duplicate(true)
+	var orchard_clears_before: Dictionary = Game.dungeon_clears.duplicate(true)
+	var orchard_levels_before: Dictionary = Game.wander.levels.duplicate(true)
+	var orchard_shield_before: float = Game.shield_points
+	var orchard_actor := world.get_node_or_null("Player") as CharacterBody3D
+	var orchard_position_before := orchard_actor.global_position
+	Game.guard_story = {}
+	Game.settlement_quests = {}
+	Game.dungeon_clears = {}
+	Game.wander.levels.erase("rootward")
+	var orchard_ok := not Game.begin_orchard_story() and not Game.interpret_orchard_story() and not Game.finish_orchard_story("share")
+	Game.settlement_quests["orchard:main"] = "done"
+	orchard_ok = orchard_ok and Game.begin_orchard_story() and not Game.begin_orchard_story() and not Game.hear_orchard_echo(3)
+	if settlement_manager != null:
+		var orchard_sites: Array = settlement_manager.get("_sites")
+		var orchard_center: Vector2 = orchard_sites[7]["resolved"]
+		orchard_actor.global_position = Vector3(orchard_center.x, float(world.call("_height", orchard_center.x, orchard_center.y)) + 0.2, orchard_center.y)
+		settlement_manager.call("_update_stream")
+		var orchard_loaded: Dictionary = settlement_manager.get("_loaded")
+		var orchard_root := orchard_loaded.get("orchard") as Node3D
+		if orchard_root != null:
+			for root_index in [2, 0, 1]:
+				var root_mark := orchard_root.get_node_or_null("OrchardEcho%d" % root_index) as Node3D
+				if root_mark == null:
+					orchard_ok = false
+					continue
+				orchard_actor.global_position = root_mark.global_position + Vector3(0, 0.2, 0)
+				orchard_ok = bool(root_mark.call("try_interact", orchard_actor)) and orchard_ok
+				orchard_ok = orchard_ok and not orchard_root.has_node("OrchardEcho%d" % root_index)
+				if root_index == 2:
+					Game.guard_story = {}
+					Game.load_collection()
+					orchard_ok = orchard_ok and int(Game.guard_story.get("orchard_echoes", 0)) == 4 and not Game.hear_orchard_echo(2)
+					Game.collection_changed.emit()
+			else: orchard_ok = false
+		orchard_ok = orchard_ok and int(Game.guard_story.get("orchard_story_stage", 0)) == 2 and not Game.interpret_orchard_story()
+		Game.settlement_quests["glassheaven:main"] = "done"
+		Game.dungeon_clears["memory_18"] = true
+		orchard_ok = orchard_ok and not Game.interpret_orchard_story()
+		Game.dungeon_clears["memory_19"] = true
+		orchard_ok = orchard_ok and Game.interpret_orchard_story() and not Game.interpret_orchard_story() and not Game.finish_orchard_story("invalid")
+		Game.guard_story["keeper_defeated"] = true
+		orchard_ok = orchard_ok and Game.finish_orchard_story("share") and not Game.finish_orchard_story("share") and Game.wander.known("rootward")
+		var shared_root_ending: String = Game.story_ending()
+		var glass_center: Vector2 = orchard_sites[4]["resolved"]
+		orchard_actor.global_position = Vector3(glass_center.x, float(world.call("_height", glass_center.x, glass_center.y)) + 0.2, glass_center.y)
+		settlement_manager.call("_update_stream")
+		var glass_loaded: Dictionary = settlement_manager.get("_loaded")
+		var glass_root := glass_loaded.get("glassheaven") as Node3D
+		var shared_cutting := glass_root.get_node_or_null("OrchardLegacy") as Node3D if glass_root != null else null
+		if shared_cutting != null:
+			orchard_actor.global_position = shared_cutting.global_position + Vector3(0, 0.2, 0)
+			orchard_ok = bool(shared_cutting.call("try_interact", orchard_actor)) and orchard_ok and bool(shared_cutting.get("shared"))
+		else: orchard_ok = false
+		Game.guard_story["orchard_story_stage"] = 3
+		orchard_ok = orchard_ok and Game.finish_orchard_story("shelter") and Game.story_ending() != shared_root_ending
+		Game.guard_story = {}
+		Game.load_collection()
+		orchard_ok = orchard_ok and str(Game.guard_story.get("orchard_story_choice", "")) == "shelter" and Game.wander_levels.has("rootward")
+		orchard_actor.global_position = Vector3(orchard_center.x, float(world.call("_height", orchard_center.x, orchard_center.y)) + 0.2, orchard_center.y)
+		settlement_manager.call("_update_stream")
+		orchard_loaded = settlement_manager.get("_loaded")
+		orchard_root = orchard_loaded.get("orchard") as Node3D
+		var sheltered_cutting := orchard_root.get_node_or_null("OrchardLegacy") as Node3D if orchard_root != null else null
+		if sheltered_cutting != null:
+			orchard_actor.global_position = sheltered_cutting.global_position + Vector3(0, 0.2, 0)
+			orchard_ok = bool(sheltered_cutting.call("try_interact", orchard_actor)) and orchard_ok and not bool(sheltered_cutting.get("shared"))
+		else: orchard_ok = false
+	else: orchard_ok = false
+	# Exercise the actual reward effect on a live scout with clear sight.
+	orchard_actor.global_position = Vector3(0, 800, 0)
+	var root_scout = load("res://scripts/hollow_sentry.gd").new()
+	world.add_child(root_scout)
+	root_scout.global_position = Vector3(2, 800, 0)
+	await get_tree().physics_frame
+	Game.shield_points = 0.0
+	orchard_actor.call("_on_spell_cast", "rootward", Game.wander.spell("rootward"))
+	orchard_ok = orchard_ok and Game.shield_points >= 50.0 and float(root_scout.get("_slow_remaining")) > 0.0
+	root_scout.queue_free()
+	orchard_actor.global_position = orchard_position_before
+	Game.guard_story = orchard_story_before
+	Game.settlement_quests = orchard_quests_before
+	Game.dungeon_clears = orchard_clears_before
+	Game.wander.levels = orchard_levels_before
+	Game.shield_points = orchard_shield_before
+	Game.save_wander()
+	Game.collection_changed.emit()
+	if settlement_manager != null: settlement_manager.call("_update_stream")
+	_log("INFO" if orchard_ok else "FAIL", "Orchard echoes, choice, cutting, Rootward and save=%s" % str(orchard_ok))
+
 	# Earned tier resonance is offensive only, derived from the existing clear
 	# flags, capped to the current encounter and reset when leaving.
 	var resonance_clears: Dictionary = Game.dungeon_clears.duplicate(true)

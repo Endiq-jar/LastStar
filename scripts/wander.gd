@@ -148,6 +148,12 @@ const CATALOGUE := {
 		"cooldown": 12.0, "power": 0.0, "radius": 0.0, "range": 0.0,
 		"desc": "Recover stamina for dodging and sprinting.", "starter": false,
 	},
+	"rootward": {
+		"name": "Rootward", "category": "Defensive", "element": 0,
+		"color": Color(0.48, 0.88, 0.48), "icon": "verdant", "cost": 23.0,
+		"cooldown": 14.0, "power": 0.0, "radius": 5.0, "range": 0.0,
+		"desc": "Raise a small shield and briefly slow nearby scouts in sight. Bosses resist the slow.", "starter": false,
+	},
 	"watchfire": {
 		"name": "Watchfire", "category": "Defensive", "element": 1,
 		"color": Color(1.0, 0.68, 0.35), "icon": "ember", "cost": 24.0,
