@@ -1818,7 +1818,7 @@ func _run() -> void:
 					Game.load_collection()
 					orchard_ok = orchard_ok and int(Game.guard_story.get("orchard_echoes", 0)) == 4 and not Game.hear_orchard_echo(2)
 					Game.collection_changed.emit()
-			else: orchard_ok = false
+		else: orchard_ok = false
 		orchard_ok = orchard_ok and int(Game.guard_story.get("orchard_story_stage", 0)) == 2 and not Game.interpret_orchard_story()
 		Game.settlement_quests["glassheaven:main"] = "done"
 		Game.dungeon_clears["memory_18"] = true
